@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARES — Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Caveat', cursive; overflow: hidden; }
+::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const C = {
+  bg: '#f8f7f2', bgPanel: '#f2f1eb', bgActive: '#e8e7e0',
+  border: '#2a2a2a', borderLight: '#c8c7c0',
+  text: '#1a1a1a', muted: '#777',
+  scout: '#3d7a5c', reader: '#2e6b8a', repro: '#8a6b30',
+  experiment: '#6b3a8a', analyst: '#8a3040', proposal: '#2a8a7a',
+};
+
+const hatch = {
+  background: 'repeating-linear-gradient(135deg, #d8d7d0 0, #d8d7d0 1px, transparent 0, transparent 7px)',
+};
+
+// ── PRIMITIVES ──────────────────────────────────────────────────────────────
+
+function Pill({ label, color = C.scout, status = 'idle', small }) {
+  const dotColor = status === 'running' ? color : status === 'done' ? C.scout : '#ccc';
+  const dot = status === 'running' ? '⬤' : status === 'done' ? '✓' : '○';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      border: `1.5px solid ${color}`, borderRadius: 3,
+      padding: small ? '1px 6px' : '2px 8px',
+      fontSize: small ? 12 : 13, color: '#333', background: '#fff', whiteSpace: 'nowrap',
+    }}>
+      <span style={{ color: dotColor, fontSize: 8 }}>{dot}</span>{label}
+    </span>
+  );
+}
+
+function SketchBox({ width, height, label, style }) {
+  return (
+    <div style={{
+      width, height, border: '1.5px dashed #b0afa8',
+      ...hatch, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: '#999', fontSize: 12, fontFamily: 'Space Mono, monospace',
+      borderRadius: 3, flexShrink: 0, ...style,
+    }}>
+      {label}
+    </div>
+  );
+}
+
+function Chk({ done, label }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 7 }}>
+      <div style={{
+        width: 16, height: 16, border: `1.5px solid ${C.border}`,
+        borderRadius: 2, flexShrink: 0, marginTop: 3,
+        background: done ? C.border : 'transparent',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9,
+      }}>{done ? '✓' : ''}</div>
+      <span style={{ fontSize: 15, lineHeight: 1.35, color: done ? C.muted : C.text }}>{label}</span>
+    </div>
+  );
+}
+
+function Tag({ label, bg = '#e8e7e0' }) {
+  return <span style={{ background: bg, border: '1px solid #ccc', borderRadius: 3, padding: '1px 7px', fontSize: 12, color: '#555' }}>{label}</span>;
+}
+
+// ── SCREEN CONTENTS ─────────────────────────────────────────────────────────
+
+function HomeScreen() {
+  const projects = [
+    { name: 'RAG Reranker Cost Reduction', papers: 12, phase: 'Reproducing', pct: 55, agent: 'Reproduction' },
+    { name: 'LLM Reasoning Benchmarks', papers: 8, phase: 'Analyzing', pct: 80, agent: 'Analyst' },
+    { name: 'Local Inference Optimization', papers: 5, phase: 'Reading', pct: 25, agent: 'Reader' },
+  ];
+  const phaseColor = { Reading: '#d4eaf5', Reproducing: '#fdf0d4', Analyzing: '#e8f5d4' };
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700 }}>Research Projects</h2>
+        <button style={{ border: `1.5px solid ${C.border}`, background: '#fff', padding: '5px 16px', fontSize: 15, cursor: 'pointer', borderRadius: 3, fontFamily: 'Caveat, cursive' }}>+ New Project</button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+        {projects.map((p, i) => (
+          <div key={i} style={{ border: `1.5px solid ${i === 0 ? C.border : C.borderLight}`, borderRadius: 4, padding: '13px 16px', background: '#fff', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 5 }}>{p.name}</div>
+                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                  <Tag label={`${p.papers} papers`} />
+                  <Tag label={p.phase} bg={phaseColor[p.phase]} />
+                  <Tag label={`Last: ${p.agent} Agent`} bg="#fff" />
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', minWidth: 110 }}>
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 5 }}>progress</div>
+                <div style={{ width: 110, height: 7, background: '#e8e7e0', borderRadius: 3, border: '1px solid #ccc', overflow: 'hidden' }}>
+                  <div style={{ width: `${p.pct}%`, height: '100%', background: C.border, borderRadius: 3 }} />
+                </div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{p.pct}%</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ border: `1.5px solid ${C.borderLight}`, borderRadius: 4, padding: '13px 16px', background: C.bgPanel }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.muted, marginBottom: 10 }}>Agent Activity</div>
+        {[
+          [C.scout, 'Scout Agent', 'RAG Reranker 주제에서 논문 3편 추가 발견', '2m ago'],
+          [C.reader, 'Reader Agent', '"FlashRAG" 논문 요약 완료 — 재현 체크포인트 추출됨', '18m ago'],
+          [C.repro, 'Reproduction Agent', 'Adaptive Skipping 재현 계획서 생성 완료', '1h ago'],
+        ].map(([color, agent, msg, time], i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, fontSize: 14 }}>
+            <span style={{ color, fontSize: 9 }}>⬤</span>
+            <b>{agent}</b>
+            <span style={{ color: C.muted, flex: 1 }}>{msg}</span>
+            <span style={{ color: '#aaa', fontSize: 12, whiteSpace: 'nowrap' }}>{time}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScoutScreen() {
+  const papers = [
+    { title: 'Reducing Reranker Costs in RAG via Adaptive Skipping', auth: 'Kim et al.', venue: 'ACL 2024', rel: 98, active: true },
+    { title: 'Efficient RAG with Lightweight Rerankers', auth: 'Chen et al.', venue: 'EMNLP 2024', rel: 91 },
+    { title: 'FlashRAG: A Modular Framework for RAG Research', auth: 'Jin et al.', venue: 'arXiv 2024', rel: 87 },
+    { title: 'Is Reranking Really Necessary for RAG?', auth: 'Park et al.', venue: 'ACL 2024', rel: 78 },
+    { title: 'RAGLAB: Research-Oriented Unified Framework', auth: 'Zhang et al.', venue: 'arXiv 2024', rel: 72 },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 16, height: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 4, padding: '8px 12px', display: 'flex', gap: 8, background: '#fff', marginBottom: 10 }}>
+          <span style={{ color: C.muted }}>🔍</span>
+          <span style={{ color: '#aaa', fontSize: 15 }}>RAG reranker cost를 줄이는 방법...</span>
+        </div>
+        <div style={{ display: 'flex', gap: 7, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          {['arXiv', 'ACL Anthology', 'NeurIPS'].map(v => <Tag key={v} label={v} />)}
+          <Pill label="Scout Agent" color={C.scout} status="running" small />
+          <span style={{ fontSize: 12, color: C.muted }}>12개 수집 중...</span>
+        </div>
+        {papers.map((p, i) => (
+          <div key={i} style={{
+            border: `1.5px solid ${p.active ? C.scout : C.borderLight}`, borderRadius: 4,
+            padding: '10px 14px', background: p.active ? '#f0f7f4' : '#fff', marginBottom: 8, cursor: 'pointer',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{p.title}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, color: C.muted }}>{p.auth} · {p.venue}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.scout }}>관련도 {p.rel}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ width: 250, border: `1.5px solid ${C.borderLight}`, borderRadius: 4, padding: '14px', background: C.bgPanel, display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>논문 미리보기</div>
+        <SketchBox width="100%" height={110} label="abstract 요약" />
+        <div style={{ fontSize: 14 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>핵심 기여</div>
+          <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>
+            • Adaptive skip mechanism<br />
+            • 40% reranker cost 절감<br />
+            • BEIR benchmark SOTA
+          </div>
+        </div>
+        <div style={{ borderTop: '1px solid #ddd', paddingTop: 10, fontSize: 13 }}>
+          <div style={{ color: C.muted, marginBottom: 5 }}>코드 저장소</div>
+          <Tag label="github.com/kim-lab/ara" bg="#e8f5ee" />
+        </div>
+        <button style={{ marginTop: 'auto', border: `1.5px solid ${C.reader}`, background: '#fff', padding: '8px', fontSize: 15, cursor: 'pointer', borderRadius: 3, color: C.reader, fontFamily: 'Caveat, cursive' }}>
+          Reader Agent에 전달 →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReadScreen() {
+  return (
+    <div style={{ display: 'flex', gap: 16, height: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 5 }}>Reducing Reranker Costs in RAG via Adaptive Skipping</div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            <Tag label="Kim et al." /><Tag label="ACL 2024" />
+            <Pill label="Reader Agent" color={C.reader} status="done" small />
+          </div>
+        </div>
+        {[['Abstract', 50, false], ['Problem Definition', 50, false], ['Method', 80, true], ['Experiments', 60, false], ['Limitations', 40, false]].map(([s, h, hi], i) => (
+          <div key={i} style={{ borderLeft: `3px solid ${hi ? C.reader : '#ddd'}`, paddingLeft: 12, marginBottom: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: hi ? C.reader : C.text, marginBottom: 4 }}>{s}</div>
+            <SketchBox width="100%" height={h} label={`${s} 내용`} />
+          </div>
+        ))}
+        <div style={{ border: `1.5px dashed ${C.repro}`, borderRadius: 4, padding: '13px', background: '#fdf9f0' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.repro, marginBottom: 8 }}>🔧 재현 핵심 정보</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {['데이터셋: BEIR 18 tasks', '모델: DPR + BM25', 'Batch size: 64', 'Skip threshold: 0.6'].map((item, i) => (
+              <div key={i} style={{ border: '1px solid #ddd', borderRadius: 3, padding: '7px 10px', background: '#fff', fontSize: 13 }}>{item}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div style={{ width: 250, display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
+        <div style={{ border: `1.5px solid ${C.reader}`, borderRadius: 4, padding: '13px', background: '#f0f5f9', flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.reader, marginBottom: 10 }}>Reader Agent 노트</div>
+          <div style={{ fontSize: 14, lineHeight: 1.65, color: '#333' }}>
+            <b>핵심 기여</b><br />
+            <span style={{ color: C.muted }}>모든 쿼리에 reranker 적용 → 신뢰도 기반 skip으로 40% 비용 절감</span>
+            <br /><br />
+            <b>vs 기존 연구 차별점</b><br />
+            <span style={{ color: C.muted }}>threshold skip 방식은 유사하나, cascade 구조 신규 도입</span>
+            <br /><br />
+            <b>재현 주의사항</b><br />
+            <span style={{ color: C.muted }}>• threshold 값이 데이터셋마다 다름<br />• BEIR 전체 재현 ≈ 4 GPU days</span>
+          </div>
+        </div>
+        <div style={{ border: `1.5px solid ${C.borderLight}`, borderRadius: 4, padding: '12px', background: C.bgPanel }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>선행연구 비교표</div>
+          <SketchBox width="100%" height={80} label="비교표" />
+        </div>
+        <button style={{ border: `1.5px solid ${C.repro}`, background: '#fff', padding: '8px', fontSize: 15, cursor: 'pointer', borderRadius: 3, color: C.repro, fontFamily: 'Caveat, cursive' }}>
+          Reproduction Agent로 →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReproduceScreen() {
+  const checks = [
+    [true, '공개 코드 저장소 확인 (github.com/kim-lab/ara)'],
+    [true, '환경 의존성 목록 추출 (requirements.txt)'],
+    [true, 'CUDA 버전 확인 (11.7+)'],
+    [false, 'BEIR 데이터셋 다운로드 및 전처리'],
+    [false, 'DPR 체크포인트 로드'],
+    [false, 'Baseline 재현 실행 (threshold=0.6)'],
+    [false, '원 논문 성능과 비교 검증'],
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 16, height: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 5 }}>재현 계획서</div>
+          <div style={{ display: 'flex', gap: 7 }}>
+            <Tag label="github.com/kim-lab/ara" bg="#e8f5ee" />
+            <Pill label="Reproduction Agent" color={C.repro} status="running" small />
+          </div>
+        </div>
+        <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 4, padding: '14px', background: '#fff', marginBottom: 14 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>재현 체크리스트</div>
+          {checks.map(([done, label], i) => <Chk key={i} done={done} label={label} />)}
+        </div>
+        <div style={{ border: `1.5px solid ${C.borderLight}`, borderRadius: 4, padding: '14px', background: C.bgPanel }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>환경 세팅 가이드</div>
+          <SketchBox width="100%" height={75} label="conda/pip 명령어 블록" style={{ fontFamily: 'Space Mono, monospace' }} />
+        </div>
+      </div>
+      <div style={{ width: 230, display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
+        <div style={{ border: `1.5px solid ${C.repro}`, borderRadius: 4, padding: '14px', background: '#fdf8f0', textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.repro, marginBottom: 8 }}>재현 가능성 점수</div>
+          <div style={{ fontSize: 42, fontWeight: 700, color: C.repro }}>72<span style={{ fontSize: 18 }}>/100</span></div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>코드 +30 / 데이터 +20 / 설정 +22</div>
+        </div>
+        <div style={{ border: `1.5px solid ${C.borderLight}`, borderRadius: 4, padding: '12px', background: C.bgPanel }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 7 }}>⚠ 리스크 포인트</div>
+          {['BEIR 전처리 스크립트 미공개', 'Threshold 튜닝 기준 불명확'].map((r, i) => (
+            <div key={i} style={{ fontSize: 13, color: '#b03040', marginBottom: 4 }}>• {r}</div>
+          ))}
+        </div>
+        <button style={{ border: `1.5px solid ${C.experiment}`, background: '#fff', padding: '9px', fontSize: 15, cursor: 'pointer', borderRadius: 3, color: C.experiment, fontFamily: 'Caveat, cursive' }}>
+          실험 설계로 →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExperimentScreen() {
+  const exps = [
+    { name: 'Baseline (thresh=0.6)', ds: 'BEIR', metric: 'nDCG@10', status: 'done', result: '42.3' },
+    { name: 'Threshold = 0.5', ds: 'BEIR', metric: 'nDCG@10', status: 'running', result: '—' },
+    { name: 'Threshold = 0.7', ds: 'BEIR', metric: 'nDCG@10', status: 'queued', result: '—' },
+    { name: 'cascade 제거 (ablation)', ds: 'BEIR', metric: 'nDCG@10', status: 'queued', result: '—' },
+    { name: 'MSMARCO 도메인 적용', ds: 'MSMARCO', metric: 'MRR@10', status: 'queued', result: '—' },
+  ];
+  const stBg = { done: '#e8f5ee', running: '#fdf5e0', queued: '#f0f0f0' };
+  return (
+    <div style={{ display: 'flex', gap: 16, height: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 3 }}>실험 설계</div>
+            <Pill label="Experiment Agent" color={C.experiment} status="running" small />
+          </div>
+          <button style={{ border: `1.5px solid ${C.border}`, background: '#fff', padding: '4px 12px', fontSize: 14, cursor: 'pointer', borderRadius: 3, fontFamily: 'Caveat, cursive' }}>+ 실험 추가</button>
+        </div>
+        <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 4, overflow: 'hidden', marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', background: C.bgActive, borderBottom: `1.5px solid ${C.border}` }}>
+            {['실험 이름', '데이터셋', '지표', '상태', '결과'].map((h, i) => (
+              <div key={i} style={{ padding: '8px 12px', fontSize: 13, fontWeight: 700 }}>{h}</div>
+            ))}
+          </div>
+          {exps.map((e, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', borderBottom: '1px solid #eee', background: i % 2 === 0 ? '#fff' : C.bgPanel }}>
+              <div style={{ padding: '9px 12px', fontSize: 14 }}>{e.name}</div>
+              <div style={{ padding: '9px 12px', fontSize: 13, color: C.muted }}>{e.ds}</div>
+              <div style={{ padding: '9px 12px', fontSize: 13, color: C.muted }}>{e.metric}</div>
+              <div style={{ padding: '9px 12px' }}>
+                <Tag label={e.status} bg={stBg[e.status]} />
+              </div>
+              <div style={{ padding: '9px 12px', fontSize: 14, fontWeight: e.result !== '—' ? 700 : 400, color: e.result !== '—' ? C.scout : '#aaa' }}>{e.result}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ border: `1.5px solid ${C.borderLight}`, borderRadius: 4, padding: '13px', background: C.bgPanel }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Ablation 시나리오 제안</div>
+          {['cascade 제거 시 성능 변화 측정', 'Dense retriever 교체 (Contriever)', '다국어 데이터셋 적용'].map((a, i) => (
+            <div key={i} style={{ border: '1px solid #ddd', borderRadius: 3, padding: '7px 12px', background: '#fff', marginBottom: 6, fontSize: 14, display: 'flex', justifyContent: 'space-between' }}>
+              {a}
+              <span style={{ color: C.experiment, cursor: 'pointer' }}>+ 추가</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ width: 210, display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
+        <div style={{ border: `1.5px solid ${C.analyst}`, borderRadius: 4, padding: '12px', background: '#fdf0f2' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.analyst, marginBottom: 6 }}>Analyst Agent</div>
+          <div style={{ fontSize: 13, color: '#333', lineHeight: 1.65 }}>
+            Baseline 분석 중...<br />
+            논문: <b>43.1</b> vs 재현: <b>42.3</b><br />
+            차이: −0.8 (허용 범위 내)
+          </div>
+        </div>
+        <SketchBox width="100%" height={130} label="결과 비교 차트" />
+      </div>
+    </div>
+  );
+}
+
+function InsightsScreen() {
+  return (
+    <div style={{ display: 'flex', gap: 16, height: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>결과 분석 & 후속연구</div>
+        <div style={{ border: `1.5px solid ${C.analyst}`, borderRadius: 4, padding: '14px', background: '#fdf0f2', marginBottom: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.analyst, marginBottom: 10 }}>Analyst Agent 분석 리포트</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+            {[['논문 성능', '43.1', C.scout], ['재현 성능', '42.3', C.reader], ['차이', '−0.8 (1.9%)', C.analyst]].map(([label, val, color], i) => (
+              <div key={i} style={{ border: '1px solid #ddd', borderRadius: 3, padding: '9px', background: '#fff', textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>{label}</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color }}>{val}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 13, color: '#333', lineHeight: 1.65 }}>
+            성능 차이의 주요 원인으로 BEIR 전처리 방식 차이가 추정됨.<br />
+            cascade 제거 실험에서 성능 <b>3.2% 하락</b> → cascade가 핵심 기여임 재확인.
+          </div>
+        </div>
+        <div style={{ border: `1.5px solid ${C.proposal}`, borderRadius: 4, padding: '14px', background: '#f0f8f7' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.proposal }}>Proposal Agent — 후속 가설</div>
+            <Pill label="Proposal Agent" color={C.proposal} status="running" small />
+          </div>
+          {[
+            'Threshold를 쿼리별 동적 조정 시 cost 절감 + 성능 향상 동시 달성 가능할 것',
+            '다국어 환경에서 cascade skip 패턴이 언어별 retriever 신뢰도 차이로 달라질 것',
+            'Lightweight scorer로 skip 판단 대체 → latency 추가 절감 가능성 존재',
+          ].map((h, i) => (
+            <div key={i} style={{ border: '1px solid #b2d8d4', borderRadius: 3, padding: '9px 12px', background: '#fff', marginBottom: 8, fontSize: 14, lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 700, color: C.proposal }}>H{i + 1}.</span> {h}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ width: 210, display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
+        <div style={{ border: `1.5px solid ${C.borderLight}`, borderRadius: 4, padding: '13px', background: C.bgPanel }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>실패 포인트 자산화</div>
+          <div style={{ fontSize: 13, color: '#333', lineHeight: 1.7 }}>
+            ✗ 전처리 불일치<br />
+            ✗ threshold 민감도<br />
+            <span style={{ color: C.muted }}>→ 후속 실험 단서로 저장</span>
+          </div>
+        </div>
+        <SketchBox width="100%" height={100} label="novelty hypothesis map" />
+        <button style={{ border: `1.5px solid ${C.proposal}`, background: C.proposal, padding: '10px', fontSize: 15, cursor: 'pointer', borderRadius: 3, color: '#fff', fontFamily: 'Caveat, cursive' }}>
+          연구 제안서 초안 생성 →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── LAYOUTS ─────────────────────────────────────────────────────────────────
+
+const SCREENS = [
+  { id: 'home', label: 'Projects' },
+  { id: 'scout', label: 'Scout' },
+  { id: 'read', label: 'Read' },
+  { id: 'reproduce', label: 'Reproduce' },
+  { id: 'experiment', label: 'Experiment' },
+  { id: 'insights', label: 'Insights' },
+];
+
+const SCREEN_COMPS = {
+  home: HomeScreen, scout: ScoutScreen, read: ReadScreen,
+  reproduce: ReproduceScreen, experiment: ExperimentScreen, insights: InsightsScreen,
+};
+
+function Content({ screen }) {
+  const Comp = SCREEN_COMPS[screen] || HomeScreen;
+  return <Comp />;
+}
+
+const AGENT_BAR = [
+  { name: 'Scout', color: C.scout, status: 'done' },
+  { name: 'Reader', color: C.reader, status: 'done' },
+  { name: 'Reproduction', color: C.repro, status: 'running' },
+  { name: 'Experiment', color: C.experiment, status: 'idle' },
+  { name: 'Analyst', color: C.analyst, status: 'idle' },
+  { name: 'Proposal', color: C.proposal, status: 'idle' },
+];
+
+// ── Variant A: Mission Control (Linear-style) ─────────────────────────────
+function VariantA({ screen, setScreen }) {
+  return (
+    <div style={{ display: 'flex', height: '100%', background: C.bg }}>
+      <div style={{ width: 220, borderRight: `1.5px solid ${C.border}`, background: '#fff', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '14px 18px', borderBottom: `1.5px solid ${C.border}` }}>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 1 }}>ARES</div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: 'Space Mono, monospace' }}>agentic research</div>
+        </div>
+        <div style={{ padding: '10px 0', borderBottom: '1px solid #eee' }}>
+          <div style={{ fontSize: 11, color: C.muted, padding: '0 18px', marginBottom: 3, fontFamily: 'Space Mono, monospace' }}>WORKSPACE</div>
+          <div style={{ padding: '7px 18px', background: C.bgActive, fontSize: 15, fontWeight: 600, borderLeft: `3px solid ${C.border}` }}>RAG Reranker Study</div>
+          <div style={{ padding: '7px 18px', fontSize: 14, color: C.muted }}>LLM Reasoning</div>
+          <div style={{ padding: '7px 18px', fontSize: 14, color: C.muted }}>Local Inference</div>
+        </div>
+        <div style={{ padding: '10px 0', flex: 1 }}>
+          <div style={{ fontSize: 11, color: C.muted, padding: '0 18px', marginBottom: 3, fontFamily: 'Space Mono, monospace' }}>PIPELINE</div>
+          {SCREENS.map(s => (
+            <div key={s.id} onClick={() => setScreen(s.id)} style={{
+              padding: '8px 18px', fontSize: 15, cursor: 'pointer',
+              background: screen === s.id ? C.bgActive : 'transparent',
+              borderLeft: screen === s.id ? `3px solid ${C.border}` : '3px solid transparent',
+              color: screen === s.id ? C.text : C.muted, fontWeight: screen === s.id ? 600 : 400,
+            }}>{s.label}</div>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ borderBottom: `1.5px solid ${C.border}`, padding: '6px 20px', display: 'flex', gap: 8, alignItems: 'center', background: '#fff', flexWrap: 'wrap', flexShrink: 0 }}>
+          {AGENT_BAR.map(a => <Pill key={a.name} label={a.name} color={a.color} status={a.status} small />)}
+        </div>
+        <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
+          <Content screen={screen} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Variant B: Research Notebook (Obsidian-style) ─────────────────────────
+function VariantB({ screen, setScreen }) {
+  const breadcrumb = {
+    home: 'All Projects',
+    scout: '📂 RAG Reranker Study  ›  🔍 Scout Queue',
+    read: '📂 RAG Reranker Study  ›  📄 Papers  ›  Adaptive Skipping',
+    reproduce: '📂 RAG Reranker Study  ›  ⚙️ Reproduction  ›  Adaptive Skipping',
+    experiment: '📂 RAG Reranker Study  ›  🧪 Experiments  ›  threshold_ablation',
+    insights: '📂 RAG Reranker Study  ›  💡 Insights',
+  };
+  return (
+    <div style={{ display: 'flex', height: '100%', background: C.bg }}>
+      <div style={{ width: 255, borderRight: `1.5px solid ${C.border}`, background: '#f5f4ef', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '13px 16px', borderBottom: `1.5px solid ${C.border}` }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>ARES</div>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: '8px 0', fontSize: 14 }}>
+          <div onClick={() => setScreen('home')} style={{ padding: '5px 16px', cursor: 'pointer', fontWeight: 600, color: screen === 'home' ? C.text : C.muted }}>🏠 All Projects</div>
+          <div style={{ padding: '5px 16px', fontWeight: 700, color: '#333' }}>📂 RAG Reranker Study</div>
+          {[{id:'scout',label:'🔍 Scout Queue'},{id:'read',label:'📄 Papers (12)'}].map(item => (
+            <div key={item.id} onClick={() => setScreen(item.id)} style={{ padding: '5px 28px', cursor: 'pointer', background: screen === item.id ? C.bgActive : 'transparent', borderRadius: 3, color: screen === item.id ? C.text : C.muted }}>{item.label}</div>
+          ))}
+          <div style={{ padding: '5px 16px', fontWeight: 600, color: '#444' }}>⚙️ Reproduction</div>
+          <div onClick={() => setScreen('reproduce')} style={{ padding: '5px 40px', cursor: 'pointer', background: screen === 'reproduce' ? C.bgActive : 'transparent', borderRadius: 3, color: screen === 'reproduce' ? C.text : C.muted }}>Adaptive Skipping</div>
+          {[{id:'experiment',label:'🧪 Experiments'},{id:'insights',label:'💡 Insights'}].map(item => (
+            <div key={item.id} onClick={() => setScreen(item.id)} style={{ padding: '5px 28px', cursor: 'pointer', background: screen === item.id ? C.bgActive : 'transparent', borderRadius: 3, color: screen === item.id ? C.text : C.muted }}>{item.label}</div>
+          ))}
+          <div style={{ padding: '5px 16px', fontWeight: 600, color: C.muted }}>📂 LLM Reasoning</div>
+          <div style={{ padding: '5px 16px', fontWeight: 600, color: C.muted }}>📂 Local Inference</div>
+        </div>
+        <div style={{ borderTop: '1px solid #ddd', padding: '10px 14px', background: '#eeeee8' }}>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 5, fontFamily: 'Space Mono, monospace' }}>AGENT ACTIVITY</div>
+          {[{color:C.repro,name:'Reproduction',status:'running'},{color:C.reader,name:'Reader',status:'done'},{color:C.scout,name:'Scout',status:'done'}].map((a, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 3 }}>
+              <span style={{ color: a.color, fontSize: 8 }}>⬤</span>
+              <span>{a.name}</span>
+              <span style={{ color: C.muted, fontSize: 11 }}>{a.status}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ borderBottom: `1.5px solid ${C.border}`, padding: '8px 20px', fontSize: 13, color: C.muted, background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <span>{breadcrumb[screen]}</span>
+          <Pill label="Reproduction Agent" color={C.repro} status="running" small />
+        </div>
+        <div style={{ flex: 1, padding: '20px', overflow: 'auto' }}>
+          <Content screen={screen} />
+        </div>
+        <div style={{ borderTop: '1px solid #ddd', padding: '8px 20px', background: '#f5f4ef', fontSize: 13, color: C.muted, flexShrink: 0 }}>
+          <b>연결된 노트: </b>
+          {['Adaptive Skipping Paper', 'BEIR Benchmark', 'RAG Baseline Survey'].map((link, i) => (
+            <span key={i} style={{ color: C.reader, cursor: 'pointer', marginLeft: 8 }}>[[{link}]]</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Variant C: Agent Terminal (Cursor-style) ──────────────────────────────
+function VariantC({ screen, setScreen }) {
+  const log = [
+    { color: C.scout, agent: 'SCOUT', msg: '12개 논문 수집 완료. 관련도순 정렬됨.', done: true },
+    { color: C.reader, agent: 'READER', msg: '"Adaptive Skipping" 요약 완료. 재현 체크포인트 추출됨.', done: true },
+    { color: C.repro, agent: 'REPRODUCTION', msg: '환경 의존성 분석 중 — BEIR 전처리 스크립트 미공개 확인.', done: false },
+    { color: C.repro, agent: 'REPRODUCTION', msg: '재현 가능성 점수: 72/100. 리스크 2건 플래그됨.', done: false },
+  ];
+  return (
+    <div style={{ display: 'flex', height: '100%', background: '#161616' }}>
+      <div style={{ width: 195, borderRight: '1px solid #2a2a2a', background: '#0e0e0e', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid #2a2a2a' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#e0dfd8', fontFamily: 'Space Mono, monospace' }}>ARES</div>
+          <div style={{ fontSize: 10, color: '#555', fontFamily: 'Space Mono, monospace' }}>v0.1-alpha</div>
+        </div>
+        <div style={{ padding: '8px 0', flex: 1 }}>
+          <div style={{ fontSize: 10, color: '#444', padding: '4px 14px', marginBottom: 3, fontFamily: 'Space Mono, monospace' }}>PROJECTS</div>
+          <div style={{ padding: '5px 14px', background: '#1e1e1e', borderLeft: `2px solid ${C.scout}`, fontSize: 13, color: '#e0dfd8' }}>RAG Reranker</div>
+          <div style={{ padding: '5px 14px', fontSize: 13, color: '#444' }}>LLM Reasoning</div>
+          <div style={{ padding: '5px 14px', fontSize: 13, color: '#444' }}>Local Inference</div>
+          <div style={{ fontSize: 10, color: '#444', padding: '12px 14px 4px', fontFamily: 'Space Mono, monospace' }}>PIPELINE</div>
+          {SCREENS.map(s => (
+            <div key={s.id} onClick={() => setScreen(s.id)} style={{
+              padding: '5px 14px', fontSize: 13, cursor: 'pointer',
+              background: screen === s.id ? '#0e2a1e' : 'transparent',
+              color: screen === s.id ? C.scout : '#555',
+              borderLeft: screen === s.id ? `2px solid ${C.scout}` : '2px solid transparent',
+            }}>{s.label}</div>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex: 1, background: C.bg, overflow: 'auto', padding: '20px', minWidth: 0 }}>
+        <Content screen={screen} />
+      </div>
+      <div style={{ width: 275, borderLeft: '1px solid #2a2a2a', background: '#0e0e0e', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '9px 14px', borderBottom: '1px solid #2a2a2a', fontSize: 11, color: '#555', fontFamily: 'Space Mono, monospace' }}>AGENT STREAM</div>
+        <div style={{ flex: 1, overflow: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {log.map((entry, i) => (
+            <div key={i} style={{ borderLeft: `2px solid ${entry.color}`, paddingLeft: 9 }}>
+              <div style={{ fontSize: 10, color: entry.color, fontFamily: 'Space Mono, monospace', marginBottom: 3 }}>{entry.agent} {entry.done ? '✓' : ''}</div>
+              <div style={{ fontSize: 13, color: '#999', lineHeight: 1.5 }}>{entry.msg}</div>
+            </div>
+          ))}
+          <div style={{ borderLeft: `2px solid ${C.repro}`, paddingLeft: 9, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ fontSize: 10, color: C.repro, fontFamily: 'Space Mono, monospace' }}>REPRODUCTION</span>
+            <span style={{ color: '#444', fontSize: 13 }}>· · ·</span>
+          </div>
+        </div>
+        <div style={{ borderTop: '1px solid #2a2a2a', padding: '10px' }}>
+          <div style={{ border: '1px solid #2a2a2a', borderRadius: 3, padding: '7px 10px', background: '#161616', fontSize: 13, color: '#444', display: 'flex', justifyContent: 'space-between', fontFamily: 'Space Mono, monospace' }}>
+            <span>agent에게 지시...</span>
+            <span>⏎</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── APP ──────────────────────────────────────────────────────────────────────
+
+const VARIANTS = [
+  { id: 'A', label: 'A — Mission Control', sub: 'Linear 스타일, 플랫 사이드바 + 에이전트 상태바' },
+  { id: 'B', label: 'B — Research Notebook', sub: 'Obsidian 스타일, 계층 트리 + 백링크' },
+  { id: 'C', label: 'C — Agent Terminal', sub: 'Cursor 스타일, 에이전트 스트림 패널' },
+];
+const LAYOUT = { A: VariantA, B: VariantB, C: VariantC };
+
+function App() {
+  const [variant, setVariant] = useState(() => localStorage.getItem('ares_v') || 'A');
+  const [screen, setScreen] = useState(() => localStorage.getItem('ares_s') || 'home');
+  const [tweaks, setTweaks] = useState(false);
+
+  useEffect(() => { localStorage.setItem('ares_v', variant); }, [variant]);
+  useEffect(() => { localStorage.setItem('ares_s', screen); }, [screen]);
+  useEffect(() => {
+    const fn = e => {
+      if (e.data?.type === '__activate_edit_mode') setTweaks(true);
+      if (e.data?.type === '__deactivate_edit_mode') setTweaks(false);
+    };
+    window.addEventListener('message', fn);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', fn);
+  }, []);
+
+  const Layout = LAYOUT[variant];
+  const sub = VARIANTS.find(v => v.id === variant)?.sub;
+
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Variant switcher bar */}
+      <div style={{ background: '#111', padding: '7px 16px', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+        <span style={{ color: '#666', fontSize: 12, fontFamily: 'Space Mono, monospace', marginRight: 4 }}>VARIANT:</span>
+        {VARIANTS.map(v => (
+          <button key={v.id} onClick={() => setVariant(v.id)} style={{
+            border: `1.5px solid ${variant === v.id ? '#e0dfd8' : '#333'}`,
+            background: variant === v.id ? '#e0dfd8' : 'transparent',
+            color: variant === v.id ? '#111' : '#666',
+            padding: '4px 14px', fontSize: 14, cursor: 'pointer', borderRadius: 3,
+            fontFamily: 'Caveat, cursive', transition: 'all 0.15s',
+          }}>{v.label}</button>
+        ))}
+        <span style={{ color: '#555', fontSize: 13, marginLeft: 6 }}>{sub}</span>
+      </div>
+      {/* Layout */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        <Layout screen={screen} setScreen={setScreen} />
+      </div>
+      {/* Tweaks panel */}
+      {tweaks && (
+        <div style={{
+          position: 'fixed', bottom: 20, right: 20, background: '#fff',
+          border: `2px solid ${C.border}`, borderRadius: 5, padding: '16px 18px',
+          zIndex: 9999, width: 220, boxShadow: `4px 4px 0 ${C.border}`,
+          fontFamily: 'Caveat, cursive',
+        }}>
+          <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 12 }}>Tweaks</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>레이아웃 변형</div>
+          {VARIANTS.map(v => (
+            <div key={v.id} onClick={() => setVariant(v.id)} style={{ cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 7, fontSize: 14 }}>
+              <span style={{ width: 15, height: 15, border: `1.5px solid ${C.border}`, borderRadius: 2, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9 }}>{variant === v.id ? '✓' : ''}</span>
+              {v.label.split(' — ')[1]}
+            </div>
+          ))}
+          <div style={{ borderTop: '1px solid #eee', marginTop: 10, paddingTop: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>화면 선택</div>
+            {SCREENS.map(s => (
+              <div key={s.id} onClick={() => setScreen(s.id)} style={{ cursor: 'pointer', padding: '3px 0', fontSize: 14, color: screen === s.id ? C.scout : C.muted, fontWeight: screen === s.id ? 600 : 400 }}>
+                {screen === s.id ? '▸ ' : '  '}{s.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
