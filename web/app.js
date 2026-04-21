@@ -39,6 +39,7 @@ const STORAGE_KEYS = {
 };
 
 const APP_BASE_URL = new URL("./", window.location.href);
+const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
 
 const state = {
   booting: true,
@@ -97,6 +98,20 @@ function normalizeStage(stageId) {
 
 function stageById(stageId) {
   return WORKFLOW_STAGES.find((stage) => stage.id === stageId) || WORKFLOW_STAGES[0];
+}
+
+function reactGrabEnabled() {
+  const params = new URLSearchParams(window.location.search);
+  const grabParam = params.get("grab");
+  if (grabParam === "0" || grabParam === "false" || grabParam === "off") {
+    return false;
+  }
+
+  if (grabParam === "1" || grabParam === "true" || grabParam === "on") {
+    return true;
+  }
+
+  return LOCAL_GRAB_HOSTS.has(window.location.hostname);
 }
 
 function icon(name, { size = 16, color = "currentColor", className = "" } = {}) {
@@ -501,8 +516,8 @@ function renderSidebar() {
         const iconColor = active ? "#ffffff" : stage.color;
 
         return `
-          <div class="workflow-item ${active ? "is-active" : ""} ${menuOpen ? "menu-open" : ""}">
-            <button type="button" class="workflow-stage-btn hov" data-action="select-stage" data-stage-id="${escapeHtml(stage.id)}">
+          <div class="workflow-item ${active ? "is-active" : ""} ${menuOpen ? "menu-open" : ""}" data-ares-role="workflow-row" data-ares-stage="${escapeHtml(stage.id)}">
+            <button type="button" class="workflow-stage-btn hov" data-action="select-stage" data-stage-id="${escapeHtml(stage.id)}" data-ares-role="workflow-stage" data-ares-stage="${escapeHtml(stage.id)}">
               <span class="workflow-stage-icon" style="background:${iconBackground};color:${iconColor}">
                 ${icon(stage.icon, { size: 13 })}
               </span>
@@ -539,7 +554,7 @@ function renderSidebar() {
     : "";
 
   return `
-    <aside class="desktop-sidebar">
+    <aside class="desktop-sidebar" data-ares-surface="sidebar" data-ares-role="navigation">
       <section class="sidebar-section">
         <button type="button" class="workspace-switch hov">
           <span class="brand-mark">A</span>
@@ -576,6 +591,9 @@ function renderSidebar() {
                   class="project-item hov ${active ? "is-active" : ""}"
                   data-action="select-project"
                   data-project-id="${escapeHtml(project.id)}"
+                  data-ares-role="project-item"
+                  data-ares-project-id="${escapeHtml(project.id)}"
+                  data-ares-project-name="${escapeHtml(project.name)}"
                 >
                   <span class="project-swatch" style="background:${escapeHtml(project.color)}"></span>
                   <span class="project-item-label">${escapeHtml(project.name)}</span>
@@ -610,8 +628,17 @@ function renderSidebar() {
 
 function renderTopbar() {
   const stage = stageById(state.activeStage);
+  const grabHint = reactGrabEnabled()
+    ? `
+      <div class="grab-hint" role="note" aria-label="React Grab is enabled in local development">
+        ${icon("sparkles", { size: 12, color: TOKENS.read })}
+        <span>Grab enabled</span>
+        <span class="grab-hint-copy mono">Cmd/Ctrl+C</span>
+      </div>
+    `
+    : "";
   return `
-    <header class="main-topbar">
+    <header class="main-topbar" data-ares-surface="topbar" data-ares-stage="${escapeHtml(stage.id)}">
       <div class="topbar-stage">
         <span class="topbar-stage-badge" style="background:${stage.color}">
           ${icon(stage.icon, { size: 13, color: "#ffffff" })}
@@ -621,6 +648,7 @@ function renderTopbar() {
         <span class="topbar-stage-sub">${escapeHtml(stage.sub)}</span>
       </div>
       <div class="topbar-actions">
+        ${grabHint}
         <button type="button" class="btn-s">${icon("share", { size: 12 })} Share</button>
         <button type="button" class="btn-s">${icon("filter", { size: 12 })} Filter</button>
       </div>
@@ -652,7 +680,7 @@ function renderFilterPanel(project, visible) {
     .join("");
 
   return `
-    <aside class="search-filters">
+    <aside class="search-filters" data-ares-surface="search-filters" data-ares-stage="search">
       <div class="filter-eyebrow">Filter</div>
 
       <section class="filter-group">
@@ -711,6 +739,11 @@ function renderResultRow(paper) {
       class="paper-row hov-row ${selected ? "is-selected" : ""}"
       data-action="select-paper"
       data-paper-id="${escapeHtml(paper.paperId)}"
+      data-ares-surface="paper-row"
+      data-ares-role="paper-row"
+      data-ares-stage="search"
+      data-ares-paper-id="${escapeHtml(paper.paperId)}"
+      data-ares-paper-title="${escapeHtml(paper.title)}"
     >
       <div class="paper-main">
         <div class="paper-title">${escapeHtml(paper.title)}</div>
@@ -740,7 +773,7 @@ function renderResultList(visible) {
 function renderPreview(paper) {
   if (!paper) {
     return `
-      <aside class="search-preview">
+      <aside class="search-preview" data-ares-surface="search-preview" data-ares-stage="search">
         <div class="search-preview-header">
           <div class="preview-eyebrow">Paper</div>
           <div class="preview-title">Select a paper</div>
@@ -769,7 +802,7 @@ function renderPreview(paper) {
   const readLabel = state.queueingPaperId === paper.paperId ? "Queueing..." : "Read";
 
   return `
-    <aside class="search-preview">
+    <aside class="search-preview" data-ares-surface="search-preview" data-ares-stage="search" data-ares-paper-id="${escapeHtml(paper.paperId)}" data-ares-paper-title="${escapeHtml(paper.title)}">
       <div class="search-preview-header">
         <div class="preview-eyebrow">Paper</div>
         <div class="preview-title">${escapeHtml(paper.title)}</div>
@@ -824,10 +857,10 @@ function renderSearchStage(project) {
   const totalResults = state.searchMeta.total || state.results.length;
 
   return `
-    <div class="search-stage">
+    <div class="search-stage" data-ares-surface="search-stage" data-ares-stage="search">
       ${renderFilterPanel(project, visible)}
 
-      <section class="results-pane">
+      <section class="results-pane" data-ares-surface="search-results" data-ares-stage="search">
         <div class="search-toolbar">
           <form class="search-form" data-action="submit-search">
             <label class="search-input">
@@ -882,8 +915,8 @@ function renderPlaceholderStage(project) {
   const statusTag = renderTag(meta.status, statusColor(meta.status), meta.status === "done");
 
   return `
-    <div class="placeholder-stage">
-      <section class="placeholder-main">
+    <div class="placeholder-stage" data-ares-surface="placeholder-stage" data-ares-stage="${escapeHtml(stage.id)}">
+      <section class="placeholder-main" data-ares-surface="placeholder-main" data-ares-stage="${escapeHtml(stage.id)}">
         <div class="placeholder-main-inner">
           <div class="placeholder-eyebrow">${escapeHtml(stage.label)}</div>
           <h1 class="placeholder-title">${escapeHtml(stage.sub)}</h1>
@@ -913,7 +946,7 @@ function renderPlaceholderStage(project) {
         </div>
       </section>
 
-      <aside class="agent-panel">
+      <aside class="agent-panel" data-ares-surface="agent-panel" data-ares-stage="${escapeHtml(stage.id)}">
         <div class="agent-panel-header">
           <div class="agent-panel-status">
             ${statusIcon(meta.status)}
@@ -961,7 +994,7 @@ function renderPlaceholderStage(project) {
 
 function renderBottomNav() {
   return `
-    <nav class="bottom-nav" aria-label="Workflow tabs">
+    <nav class="bottom-nav" aria-label="Workflow tabs" data-ares-surface="bottom-nav" data-ares-role="navigation">
       ${WORKFLOW_STAGES.map((stage) => {
         const active = stage.id === state.activeStage;
         return `
@@ -971,6 +1004,8 @@ function renderBottomNav() {
             data-action="select-stage"
             data-stage-id="${escapeHtml(stage.id)}"
             style="--stage-color:${stage.color};--stage-tint:${stage.color}12"
+            data-ares-role="bottom-stage"
+            data-ares-stage="${escapeHtml(stage.id)}"
           >
             ${icon(stage.icon, { size: 17, color: active ? stage.color : TOKENS.t3 })}
             <span>${escapeHtml(stage.label)}</span>
@@ -1004,14 +1039,23 @@ function render() {
     return;
   }
 
+  const selected = state.activeStage === "search" ? selectedPaper() : null;
   const stageContent = state.activeStage === "search" ? renderSearchStage(project) : renderPlaceholderStage(project);
 
   app.innerHTML = `
-    <div class="app-shell">
+    <div
+      class="app-shell"
+      data-ares-app="true"
+      data-active-stage="${escapeHtml(state.activeStage)}"
+      data-active-project-id="${escapeHtml(project.id)}"
+      data-active-project-name="${escapeHtml(project.name)}"
+      data-active-paper-id="${escapeHtml(selected?.paperId || "")}"
+      data-active-paper-title="${escapeHtml(selected?.title || "")}"
+    >
       ${renderSidebar()}
-      <main class="workspace">
+      <main class="workspace" data-ares-surface="workspace" data-ares-stage="${escapeHtml(state.activeStage)}">
         ${renderTopbar()}
-        <div class="stage-wrap">${stageContent}</div>
+        <div class="stage-wrap" data-ares-surface="stage-wrap" data-ares-stage="${escapeHtml(state.activeStage)}">${stageContent}</div>
       </main>
       ${renderBottomNav()}
     </div>
