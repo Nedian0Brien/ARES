@@ -332,6 +332,11 @@ a {
   gap: 1px;
 }
 
+.workflow-list {
+  align-content: start;
+  grid-auto-rows: max-content;
+}
+
 .project-item {
   align-items: center;
   background: transparent;
