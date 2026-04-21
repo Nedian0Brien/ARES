@@ -12,6 +12,8 @@ const STORAGE_KEYS = {
   project: 'ares.project',
 };
 
+const APP_BASE_URL = new URL('./', window.location.href);
+
 const state = {
   booting: true,
   loading: false,
@@ -98,8 +100,12 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function appUrl(path) {
+  return new URL(String(path || '').replace(/^\/+/, ''), APP_BASE_URL);
+}
+
 function api(path, options = {}) {
-  return fetch(path, {
+  return fetch(appUrl(path), {
     headers: {
       'content-type': 'application/json',
       ...(options.headers || {}),
@@ -209,7 +215,7 @@ function replaceProject(project) {
 }
 
 async function loadProjects() {
-  const payload = await api('/api/projects');
+  const payload = await api('api/projects');
   setProjects(payload.projects || []);
 }
 
@@ -229,7 +235,7 @@ async function runSearch({ preserveSelection = false } = {}) {
       projectId: project.id,
       q: query,
     });
-    const payload = await api(`/api/search?${params.toString()}`);
+    const payload = await api(`api/search?${params.toString()}`);
     replaceProject(payload.project);
     state.results = payload.results || [];
     state.availableVenues = payload.availableVenues || [];
@@ -272,7 +278,7 @@ async function savePaper(paper) {
       replaceProject(payload.project);
       state.results = state.results.map((entry) => (entry.paperId === paper.paperId ? { ...entry, saved: false } : entry));
     } else {
-      const payload = await api(`/api/projects/${encodeURIComponent(project.id)}/library`, {
+      const payload = await api(`api/projects/${encodeURIComponent(project.id)}/library`, {
         method: 'POST',
         body: JSON.stringify({ paper }),
       });
@@ -299,7 +305,7 @@ async function queuePaper(paper) {
       return;
     }
 
-    const payload = await api(`/api/projects/${encodeURIComponent(project.id)}/queue`, {
+    const payload = await api(`api/projects/${encodeURIComponent(project.id)}/queue`, {
       method: 'POST',
       body: JSON.stringify({ paper }),
     });
