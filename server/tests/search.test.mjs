@@ -5,6 +5,7 @@ import os from 'node:os';
 import { promises as fs } from 'node:fs';
 
 import { decodeAbstract } from '../lib/search-utils.mjs';
+import { normalizeRequestPath } from '../lib/path-utils.mjs';
 import { searchSeedPapers } from '../lib/seed-data.mjs';
 import { createStore } from '../lib/store.mjs';
 
@@ -32,6 +33,13 @@ test('searchSeedPapers returns project-relevant ranked results', () => {
   assert.equal(payload.provider, 'seed');
   assert.equal(payload.results[0].paperId, 'seed-rag-adaptive-skip');
   assert.ok(payload.results[0].relevance >= 80);
+});
+
+test('normalizeRequestPath strips proxy path prefixes', () => {
+  assert.equal(normalizeRequestPath('/proxy/3100/'), '/');
+  assert.equal(normalizeRequestPath('/proxy/3100/api/projects'), '/api/projects');
+  assert.equal(normalizeRequestPath('/proxy/3100/styles.css'), '/styles.css');
+  assert.equal(normalizeRequestPath('/api/projects'), '/api/projects');
 });
 
 test('createStore persists saved papers and queue entries', async () => {

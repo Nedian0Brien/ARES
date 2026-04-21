@@ -4,6 +4,7 @@ import { promises as fs, watch as watchDirectory } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { searchOpenAlex } from './lib/openalex.mjs';
+import { normalizeRequestPath } from './lib/path-utils.mjs';
 import { searchSeedPapers } from './lib/seed-data.mjs';
 import { createStore } from './lib/store.mjs';
 import { normaliseVenueLabel } from './lib/search-utils.mjs';
@@ -378,14 +379,15 @@ const stopLiveReloadWatcher = await startLiveReloadWatcher();
 
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host}`);
+  const requestPath = normalizeRequestPath(url.pathname);
 
   try {
-    if (request.method === 'GET' && LIVE_RELOAD_ENABLED && url.pathname === '/__dev/reload') {
+    if (request.method === 'GET' && LIVE_RELOAD_ENABLED && requestPath === '/__dev/reload') {
       registerLiveReloadClient(request, response);
       return;
     }
 
-    if (request.method === 'GET' && LIVE_RELOAD_ENABLED && url.pathname === '/__dev/reload-client.js') {
+    if (request.method === 'GET' && LIVE_RELOAD_ENABLED && requestPath === '/__dev/reload-client.js') {
       response.writeHead(200, {
         'content-type': 'application/javascript; charset=utf-8',
         'cache-control': 'no-store',
@@ -394,7 +396,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'GET' && url.pathname === '/api/health') {
+    if (request.method === 'GET' && requestPath === '/api/health') {
       json(response, 200, {
         ok: true,
         providerConfigured: Boolean(OPENALEX_API_KEY),
@@ -402,14 +404,14 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'GET' && url.pathname === '/api/projects') {
+    if (request.method === 'GET' && requestPath === '/api/projects') {
       json(response, 200, {
         projects: store.getProjects(),
       });
       return;
     }
 
-    if (request.method === 'GET' && url.pathname === '/api/search') {
+    if (request.method === 'GET' && requestPath === '/api/search') {
       const projectId = url.searchParams.get('projectId');
       const page = Math.max(1, Number(url.searchParams.get('page') || 1));
 
@@ -430,7 +432,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'GET' && url.pathname === '/api/library') {
+    if (request.method === 'GET' && requestPath === '/api/library') {
       const projectId = url.searchParams.get('projectId');
       const query = (url.searchParams.get('q') || '').trim();
       if (!projectId) {
@@ -444,8 +446,8 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/library$/.test(url.pathname)) {
-      const [, , , projectId] = url.pathname.split('/');
+    if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/library$/.test(requestPath)) {
+      const [, , , projectId] = requestPath.split('/');
       const body = await readJsonBody(request);
       const paper = sanitisePaperPayload(body.paper);
       const saved = await store.savePaper(projectId, paper);
@@ -457,8 +459,8 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'DELETE' && /^\/api\/projects\/[^/]+\/library\/.+/.test(url.pathname)) {
-      const parts = url.pathname.split('/');
+    if (request.method === 'DELETE' && /^\/api\/projects\/[^/]+\/library\/.+/.test(requestPath)) {
+      const parts = requestPath.split('/');
       const projectId = parts[3];
       const paperId = decodeURIComponent(parts.slice(5).join('/'));
       await store.removePaper(projectId, paperId);
@@ -470,8 +472,8 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/queue$/.test(url.pathname)) {
-      const [, , , projectId] = url.pathname.split('/');
+    if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/queue$/.test(requestPath)) {
+      const [, , , projectId] = requestPath.split('/');
       const body = await readJsonBody(request);
       const paper = sanitisePaperPayload(body.paper);
       const queued = await store.queuePaper(projectId, paper);
@@ -483,12 +485,12 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (url.pathname.startsWith('/api/')) {
+    if (requestPath.startsWith('/api/')) {
       notFound(response);
       return;
     }
 
-    await serveStatic(url.pathname, response);
+    await serveStatic(requestPath, response);
   } catch (error) {
     sendError(response, error, 500);
   }
