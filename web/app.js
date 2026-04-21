@@ -101,20 +101,6 @@ function stageById(stageId) {
   return WORKFLOW_STAGES.find((stage) => stage.id === stageId) || WORKFLOW_STAGES[0];
 }
 
-function reactGrabEnabled() {
-  const params = new URLSearchParams(window.location.search);
-  const grabParam = params.get("grab");
-  if (grabParam === "0" || grabParam === "false" || grabParam === "off") {
-    return false;
-  }
-
-  if (grabParam === "1" || grabParam === "true" || grabParam === "on") {
-    return true;
-  }
-
-  return LOCAL_GRAB_HOSTS.has(window.location.hostname) || PROXY_DEV_PATH_PATTERN.test(window.location.pathname);
-}
-
 function icon(name, { size = 16, color = "currentColor", className = "" } = {}) {
   const icons = {
     search:
@@ -629,15 +615,6 @@ function renderSidebar() {
 
 function renderTopbar() {
   const stage = stageById(state.activeStage);
-  const grabHint = reactGrabEnabled()
-    ? `
-      <div class="grab-hint" role="note" aria-label="React Grab is enabled in local development">
-        ${icon("sparkles", { size: 12, color: TOKENS.read })}
-        <span>Grab enabled</span>
-        <span class="grab-hint-copy mono">Cmd/Ctrl+C</span>
-      </div>
-    `
-    : "";
   return `
     <header class="main-topbar" data-ares-surface="topbar" data-ares-stage="${escapeHtml(stage.id)}">
       <div class="topbar-stage">
@@ -649,7 +626,6 @@ function renderTopbar() {
         <span class="topbar-stage-sub">${escapeHtml(stage.sub)}</span>
       </div>
       <div class="topbar-actions">
-        ${grabHint}
         <button type="button" class="btn-s">${icon("share", { size: 12 })} Share</button>
         <button type="button" class="btn-s">${icon("filter", { size: 12 })} Filter</button>
       </div>
