@@ -1,4 +1,6 @@
-const REACT_GRAB_SRC = "https://unpkg.com/react-grab/dist/index.global.js";
+const REACT_GRAB_VERSION = "0.1.32";
+const REACT_GRAB_LOCAL_SRC = `./vendor/react-grab-${REACT_GRAB_VERSION}.global.js`;
+const REACT_GRAB_CDN_SRC = `https://unpkg.com/react-grab@${REACT_GRAB_VERSION}/dist/index.global.js`;
 const REACT_GRAB_QUERY_KEY = "grab";
 const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
 
@@ -187,11 +189,17 @@ async function bootReactGrab() {
   document.documentElement.dataset.reactGrabStatus = "loading";
 
   try {
-    await injectScript(REACT_GRAB_SRC);
+    await injectScript(REACT_GRAB_LOCAL_SRC);
     whenReactGrabReady(configureReactGrab);
   } catch (error) {
-    document.documentElement.dataset.reactGrabStatus = "error";
-    console.warn("[ARES] React Grab failed to load:", error);
+    try {
+      await injectScript(REACT_GRAB_CDN_SRC);
+      whenReactGrabReady(configureReactGrab);
+    } catch (fallbackError) {
+      document.documentElement.dataset.reactGrabStatus = "error";
+      console.warn("[ARES] React Grab failed to load:", error);
+      console.warn("[ARES] React Grab CDN fallback also failed:", fallbackError);
+    }
   }
 }
 
