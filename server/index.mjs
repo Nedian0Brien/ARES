@@ -1,6 +1,6 @@
 import http from 'node:http';
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
+import { promises as fs, watch as watchDirectory } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { searchOpenAlex } from './lib/openalex.mjs';
@@ -61,6 +61,11 @@ const PORT = Number(process.env.PORT || 3100);
 const HOST = process.env.HOST || '0.0.0.0';
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || '';
 const OPENALEX_MAILTO = process.env.OPENALEX_MAILTO || '';
+const LIVE_RELOAD_ENABLED = process.env.WATCH_REPORT_DEPENDENCIES === '1' || process.env.ARES_LIVE_RELOAD === '1';
+
+const liveReloadClients = new Set();
+let liveReloadTimer = null;
+let lastLiveReloadAt = 0;
 
 const store = await createStore({
   seedFile: SEED_FILE,
@@ -96,6 +101,144 @@ function sendError(response, error, statusCode = 500) {
   json(response, statusCode, {
     error: error instanceof Error ? error.message : String(error),
   });
+}
+
+function sendSseEvent(response, event, payload) {
+  response.write(`event: ${event}\n`);
+  response.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function broadcastLiveReload(filePath) {
+  if (!LIVE_RELOAD_ENABLED) {
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastLiveReloadAt < 300) {
+    return;
+  }
+
+  lastLiveReloadAt = now;
+
+  const payload = {
+    path: filePath ? path.relative(ROOT_DIR, filePath) : 'unknown',
+    changedAt: now,
+  };
+
+  for (const client of liveReloadClients) {
+    sendSseEvent(client.response, 'reload', payload);
+  }
+}
+
+function scheduleLiveReload(filePath) {
+  if (!LIVE_RELOAD_ENABLED) {
+    return;
+  }
+
+  if (liveReloadTimer) {
+    clearTimeout(liveReloadTimer);
+  }
+
+  liveReloadTimer = setTimeout(() => {
+    broadcastLiveReload(filePath);
+    liveReloadTimer = null;
+  }, 80);
+}
+
+function createLiveReloadClientScript() {
+  return `
+const endpoint = new URL('./__dev/reload', window.location.href);
+const source = new EventSource(endpoint);
+
+source.addEventListener('reload', () => {
+  window.location.reload();
+});
+
+source.onerror = () => {
+  console.debug('[ARES] Live reload disconnected. Waiting to reconnect...');
+};
+`.trimStart();
+}
+
+function injectLiveReloadScript(html) {
+  if (!LIVE_RELOAD_ENABLED || html.includes('__dev/reload-client.js')) {
+    return html;
+  }
+
+  return html.replace(
+    '</body>',
+    '    <script type="module" src="./__dev/reload-client.js"></script>\n  </body>',
+  );
+}
+
+function registerLiveReloadClient(request, response) {
+  response.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-store',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no',
+  });
+  response.write('retry: 1000\n');
+  response.write(': connected\n\n');
+
+  const heartbeat = setInterval(() => {
+    response.write(': keep-alive\n\n');
+  }, 15000);
+  heartbeat.unref?.();
+
+  const client = {
+    heartbeat,
+    response,
+  };
+  liveReloadClients.add(client);
+
+  request.on('close', () => {
+    clearInterval(heartbeat);
+    liveReloadClients.delete(client);
+  });
+}
+
+async function collectDirectories(rootDir) {
+  const directories = [rootDir];
+  const entries = await fs.readdir(rootDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    directories.push(...(await collectDirectories(path.join(rootDir, entry.name))));
+  }
+
+  return directories;
+}
+
+async function startLiveReloadWatcher() {
+  if (!LIVE_RELOAD_ENABLED) {
+    return () => {};
+  }
+
+  const directories = await collectDirectories(WEB_DIR);
+  const watchers = directories.map((directory) =>
+    watchDirectory(directory, (eventType, filename) => {
+      if (eventType !== 'change' && eventType !== 'rename') {
+        return;
+      }
+
+      const changedPath =
+        filename && String(filename).length
+          ? path.join(directory, String(filename))
+          : directory;
+
+      scheduleLiveReload(changedPath);
+    }),
+  );
+
+  return () => {
+    for (const watcher of watchers) {
+      watcher.close();
+    }
+  };
 }
 
 function decoratePapers(projectId, papers) {
@@ -214,7 +357,10 @@ async function serveStatic(requestPath, response) {
     }
 
     const extension = path.extname(resolved);
-    const content = await fs.readFile(resolved);
+    const content =
+      extension === '.html'
+        ? injectLiveReloadScript(await fs.readFile(resolved, 'utf8'))
+        : await fs.readFile(resolved);
     response.writeHead(200, {
       'content-type': CONTENT_TYPES[extension] || 'application/octet-stream',
       'cache-control':
@@ -228,10 +374,26 @@ async function serveStatic(requestPath, response) {
   }
 }
 
+const stopLiveReloadWatcher = await startLiveReloadWatcher();
+
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host}`);
 
   try {
+    if (request.method === 'GET' && LIVE_RELOAD_ENABLED && url.pathname === '/__dev/reload') {
+      registerLiveReloadClient(request, response);
+      return;
+    }
+
+    if (request.method === 'GET' && LIVE_RELOAD_ENABLED && url.pathname === '/__dev/reload-client.js') {
+      response.writeHead(200, {
+        'content-type': 'application/javascript; charset=utf-8',
+        'cache-control': 'no-store',
+      });
+      response.end(createLiveReloadClientScript());
+      return;
+    }
+
     if (request.method === 'GET' && url.pathname === '/api/health') {
       json(response, 200, {
         ok: true,
@@ -335,3 +497,16 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, HOST, () => {
   console.log(`ARES service listening on http://${HOST}:${PORT}`);
 });
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    stopLiveReloadWatcher();
+    server.close(() => {
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      process.exit(0);
+    }, 250).unref?.();
+  });
+}
