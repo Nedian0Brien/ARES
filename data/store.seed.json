@@ -1,0 +1,122 @@
+{
+  "projects": [
+    {
+      "id": "rag-reranker",
+      "name": "RAG Reranker Study",
+      "color": "#5e6ad2",
+      "focus": "검색-생성 파이프라인에서 reranker 비용을 줄이면서 정확도를 유지하는 방법을 검증한다.",
+      "defaultQuery": "\"rag reranker\" adaptive skipping efficiency",
+      "keywords": [
+        "rag",
+        "reranker",
+        "retrieval",
+        "adaptive skipping",
+        "beir",
+        "cost reduction"
+      ]
+    },
+    {
+      "id": "llm-reasoning",
+      "name": "LLM Reasoning",
+      "color": "#c04e68",
+      "focus": "추론 성능을 높이는 prompting, inference-time scaling, verifier 구조를 비교한다.",
+      "defaultQuery": "\"llm reasoning\" verifier inference time scaling",
+      "keywords": [
+        "reasoning",
+        "chain of thought",
+        "verifier",
+        "inference-time scaling",
+        "self consistency",
+        "math benchmark"
+      ]
+    },
+    {
+      "id": "local-inference",
+      "name": "Local Inference",
+      "color": "#3aa3a3",
+      "focus": "온디바이스 또는 로컬 GPU 환경에서 효율적인 추론 배포 전략을 정리한다.",
+      "defaultQuery": "\"local inference\" llm quantization serving",
+      "keywords": [
+        "local inference",
+        "quantization",
+        "edge deployment",
+        "vllm",
+        "llm serving",
+        "latency"
+      ]
+    }
+  ],
+  "library": {
+    "rag-reranker": [
+      {
+        "paperId": "seed-rag-adaptive-skip",
+        "title": "Reducing Reranker Costs in RAG via Adaptive Skipping",
+        "authors": [
+          "Mina Kim",
+          "Seongho Park"
+        ],
+        "venue": "ACL 2024",
+        "year": 2024,
+        "abstract": "Adaptive skipping reduces reranker calls in retrieval augmented generation systems by estimating confidence before expensive scoring. The approach preserves answer quality on BEIR-style evaluation while cutting reranker compute substantially.",
+        "summary": "Adaptive skipping reduces reranker calls while preserving answer quality on BEIR-like workloads.",
+        "keyPoints": [
+          "Confidence-aware cascade for reranker invocation",
+          "Meaningful compute savings on BEIR-style tasks",
+          "Designed for latency-sensitive RAG pipelines"
+        ],
+        "keywords": [
+          "rag",
+          "reranker",
+          "adaptive skipping",
+          "beir"
+        ],
+        "paperUrl": "https://example.org/papers/rag-adaptive-skip",
+        "pdfUrl": "https://example.org/papers/rag-adaptive-skip.pdf",
+        "sourceName": "ARES seed library",
+        "sourceProvider": "seed",
+        "citedByCount": 41,
+        "openAccess": true,
+        "relevance": 97,
+        "savedAt": "2026-04-21T09:00:00.000Z"
+      }
+    ],
+    "llm-reasoning": [
+      {
+        "paperId": "seed-reasoning-verifier",
+        "title": "Verifier-Guided Test-Time Scaling for LLM Reasoning",
+        "authors": [
+          "Dana Choi",
+          "Alex Murray"
+        ],
+        "venue": "NeurIPS 2025",
+        "year": 2025,
+        "abstract": "Verifier-guided decoding improves reasoning reliability by scoring candidate traces and allocating additional compute only when uncertainty is high. The method improves math and symbolic reasoning benchmarks while controlling inference cost.",
+        "summary": "Adaptive verifier passes improve reasoning quality without paying full compute cost on every sample.",
+        "keyPoints": [
+          "Verifier scores candidate reasoning traces",
+          "Compute scales with uncertainty instead of fixed depth",
+          "Strong gains on math-heavy benchmarks"
+        ],
+        "keywords": [
+          "reasoning",
+          "verifier",
+          "test-time scaling"
+        ],
+        "paperUrl": "https://example.org/papers/verifier-scaling",
+        "pdfUrl": null,
+        "sourceName": "ARES seed library",
+        "sourceProvider": "seed",
+        "citedByCount": 22,
+        "openAccess": false,
+        "relevance": 93,
+        "savedAt": "2026-04-21T09:10:00.000Z"
+      }
+    ],
+    "local-inference": []
+  },
+  "readingQueue": {
+    "rag-reranker": [],
+    "llm-reasoning": [],
+    "local-inference": []
+  }
+}

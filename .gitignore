@@ -1,2 +1,6 @@
 .omc
 .codex
+.env
+node_modules
+data/runtime/store.json
+npm-debug.log*

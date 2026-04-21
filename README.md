@@ -61,7 +61,7 @@ ARES는 역할 기반 에이전트 구조를 전제로 설계되어 있다.
 
 ## Current Status
 
-이 저장소는 아직 실제 제품 구현 단계에 들어가기 전의 **프로토타입 및 문서 설계 저장소**다.
+2026년 4월 21일 기준으로, ARES는 여전히 프로토타입과 문서가 중심인 저장소지만 이제 **Search 탭 기준의 첫 실행 가능한 서비스 골격**이 추가되었다.
 
 현재 포함된 내용:
 
@@ -69,20 +69,26 @@ ARES는 역할 기반 에이전트 구조를 전제로 설계되어 있다.
 - 와이어프레임
 - 제품 비전 문서
 - 프로토타입 기준 기능 명세 문서
+- Search 탭 MVP를 위한 로컬 Node 서비스
+- 프로젝트별 논문 검색 / 필터링 / 스크랩 저장 / reading queue API
+- 실제 API 사용이 불가능할 때도 화면이 유지되도록 하는 seed fallback 데이터
 
 아직 포함되지 않은 내용:
 
-- 프론트엔드 애플리케이션 코드
-- 백엔드 서비스
+- Reading 이후 단계의 실제 서비스 구현
+- 데이터베이스 및 사용자 인증
 - 실제 에이전트 실행 인프라
-- 실험 실행 파이프라인
+- 재현 실험 실행 파이프라인
 
-즉, 현재 단계의 목적은 **UI/UX 설계를 마무리하고, 제품 명세를 정렬한 뒤, 실제 구현으로 진입할 준비를 하는 것**이다.
+즉, 현재 단계의 목적은 **프로토타입을 실제 제품으로 옮기기 위한 첫 서비스 기반을 세우고, Search 단계부터 실제 데이터 흐름을 붙여 나가는 것**이다.
 
 ## Repository Structure
 
 ```text
 ARES/
+├── data/
+│   ├── store.seed.json
+│   └── runtime/
 ├── design/
 │   ├── ARES Prototype.html
 │   ├── ARES Wireframes.html
@@ -92,6 +98,15 @@ ARES/
 │   ├── specification.md
 │   ├── 구현 기획서.md
 │   └── 구현 기획서 - 원본.md
+├── server/
+│   ├── index.mjs
+│   ├── lib/
+│   └── tests/
+├── web/
+│   ├── app.js
+│   ├── index.html
+│   └── styles.css
+├── package.json
 └── README.md
 ```
 
@@ -106,17 +121,33 @@ ARES/
 - [Product Vision](docs/product%20vision.md)
   - 제품의 문제 정의, 비전, 사용자 가치
 
-## How To Review The Prototype
+## Run The Search MVP
 
-현재는 별도 개발 서버가 없다. 가장 간단한 확인 방법은 아래와 같다.
+Search 탭 서비스는 별도 의존성 없이 Node만 있으면 바로 실행할 수 있다.
 
-1. `design/ARES Prototype.html`을 브라우저에서 연다.
-2. 전체 워크플로우를 순서대로 점검한다.
-3. 화면별로 다음을 본다.
-   - 정보 구조가 자연스러운지
-   - 다음 단계 행동이 명확한지
-   - 상태 표현이 충분한지
-   - 에이전트 역할이 UI에 잘 드러나는지
+1. `.env.example`을 참고해 필요하면 `.env`를 만든다.
+2. `npm start` 또는 개발 중에는 `npm run dev`를 실행한다.
+3. 브라우저에서 `http://127.0.0.1:3000`을 연다.
+
+기본 동작:
+
+- 좌측에서 프로젝트를 바꾸면 프로젝트별 기본 검색 맥락이 바뀐다.
+- 중앙에서 논문을 검색하고 정렬/필터링할 수 있다.
+- 우측 preview에서 `Save to library`, `Read next` 액션을 수행할 수 있다.
+
+OpenAlex 연동:
+
+- OpenAlex는 2026년 2월 13일부터 실제 사용량 기준 API key가 필요하다.
+- `.env`에 `OPENALEX_API_KEY`를 넣으면 live 검색을 시도한다.
+- 키가 없거나 네트워크가 막힌 환경에서는 seed fallback 결과가 표시된다.
+
+검증:
+
+- `npm test`
+- `node --check server/index.mjs`
+- `node --check web/app.js`
+
+프로토타입 자체만 빠르게 보고 싶다면 기존처럼 `design/ARES Prototype.html`을 브라우저에서 직접 열어도 된다.
 
 ## Design Principles
 
@@ -132,11 +163,11 @@ ARES는 다음 원칙을 중심으로 설계한다.
 
 현재 우선순위는 다음과 같다.
 
-1. 프로토타입에서 UI/UX 설계를 마무리한다.
-2. 기능 명세와 화면 설계를 정렬한다.
-3. 실제 구현 범위를 확정한다.
-4. 프론트엔드와 백엔드 아키텍처를 설계한다.
-5. 구현을 시작한다.
+1. Search 탭의 OpenAlex live 검색 품질과 저장 모델을 안정화한다.
+2. Reading 탭에서 스크랩된 논문을 실제 읽기 객체로 연결한다.
+3. 프로젝트/논문 단위 영속 저장소를 JSON 파일에서 DB로 옮긴다.
+4. 에이전트 요약/추천 파이프라인을 Search와 Reading 사이에 연결한다.
+5. 이후 Research 단계의 재현 체크리스트 데이터 모델을 붙인다.
 
 ## Notes
 
