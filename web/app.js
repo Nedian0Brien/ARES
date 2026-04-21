@@ -18,6 +18,68 @@ const TOKENS = {
   writing: "#3aa3a3",
 };
 
+const SEARCH_MODES = {
+  scout: {
+    label: "Agent",
+    icon: "sparkles",
+    color: TOKENS.search,
+    desc: "AI 에이전트가 의미 기반으로 탐색",
+  },
+  keyword: {
+    label: "Keyword",
+    icon: "book",
+    color: TOKENS.read,
+    desc: "키워드 중심으로 빠르게 탐색",
+  },
+};
+
+const SEARCH_TARGET_TYPES = {
+  conference: { label: "Conference", icon: "building", color: TOKENS.read },
+  institution: { label: "Institution", icon: "cap", color: TOKENS.research },
+  author: { label: "Author", icon: "user", color: TOKENS.insight },
+};
+
+const SEARCH_TARGET_CATALOG = {
+  conference: {
+    popular: [
+      { id: "acl24", label: "ACL 2024", venue: "ACL" },
+      { id: "emnlp24", label: "EMNLP 2024", venue: "EMNLP" },
+      { id: "neurips24", label: "NeurIPS 2024", venue: "NeurIPS" },
+      { id: "iclr24", label: "ICLR 2024", venue: "ICLR" },
+      { id: "icml24", label: "ICML 2024", venue: "ICML" },
+      { id: "naacl24", label: "NAACL 2024", venue: "NAACL" },
+      { id: "cikm24", label: "CIKM 2024", venue: "CIKM" },
+      { id: "sigir24", label: "SIGIR 2024", venue: "SIGIR" },
+    ],
+    recent: [{ id: "icml23", label: "ICML 2023", venue: "ICML" }],
+  },
+  institution: {
+    popular: [
+      { id: "stanford_nlp", label: "Stanford NLP Group", kind: "lab" },
+      { id: "mit_csail", label: "MIT CSAIL", kind: "lab" },
+      { id: "cmu_lti", label: "CMU LTI", kind: "lab" },
+      { id: "berkeley_bair", label: "Berkeley AI Research", kind: "lab" },
+      { id: "kaist_ai", label: "KAIST AI", kind: "lab" },
+      { id: "snu_cs", label: "SNU CSE", kind: "lab" },
+      { id: "google_research", label: "Google Research", kind: "corp" },
+      { id: "deepmind", label: "Google DeepMind", kind: "corp" },
+      { id: "openai", label: "OpenAI", kind: "corp" },
+      { id: "anthropic", label: "Anthropic", kind: "corp" },
+      { id: "fair", label: "Meta FAIR", kind: "corp" },
+      { id: "msr", label: "Microsoft Research", kind: "corp" },
+    ],
+  },
+  author: {
+    popular: [
+      { id: "cmanning", label: "Christopher Manning", inst: "Stanford" },
+      { id: "pliang", label: "Percy Liang", inst: "Stanford" },
+      { id: "jason_wei", label: "Jason Wei", inst: "Anthropic" },
+      { id: "lukez", label: "Luke Zettlemoyer", inst: "UW · FAIR" },
+      { id: "dan_j", label: "Dan Jurafsky", inst: "Stanford" },
+    ],
+  },
+};
+
 const WORKFLOW_STAGES = [
   { id: "search", label: "Search", sub: "논문 서치 및 수집", color: TOKENS.search, icon: "search", kbd: "1" },
   { id: "reading", label: "Reading", sub: "AI 논문 리딩", color: TOKENS.read, icon: "book", kbd: "2" },
@@ -56,6 +118,18 @@ const state = {
   availableVenues: [],
   selectedPaperId: "",
   sort: "relevance",
+  searchMode: "scout",
+  filterPanelOpen: true,
+  previewPanelOpen: true,
+  scopePicker: null,
+  scopePickerQuery: "",
+  searchScopes: [],
+  filterSections: {
+    scope: true,
+    venue: true,
+    year: false,
+    rel: false,
+  },
   workflowOpen: true,
   openWorkflowMenu: "",
   searchMeta: {
@@ -67,7 +141,7 @@ const state = {
   },
   filters: {
     venues: new Set(),
-    years: new Set(["2024", "2023", "earlier", "unknown"]),
+    years: new Set(["2025", "2024", "2023", "earlier", "unknown"]),
     minRelevance: 60,
     openAccessOnly: false,
     savedOnly: false,
@@ -117,12 +191,34 @@ function icon(name, { size = 16, color = "currentColor", className = "" } = {}) 
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z"></path></svg>',
     chevR:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>',
+    chevL:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>',
     chevD:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>',
     plus:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>',
+    x:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>',
     filter:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.5V19l4 2v-8.5L22 3z"></path></svg>',
+    globe:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3a15 15 0 0 1 0 18"></path><path d="M12 3a15 15 0 0 0 0 18"></path></svg>',
+    building:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 10h.01"></path><path d="M9 14h.01"></path><path d="M15 10h.01"></path><path d="M15 14h.01"></path><path d="M11 21v-4h2v4"></path></svg>',
+    cap:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10l10-5 10 5-10 5-10-5z"></path><path d="M6 12v4c0 1.7 2.7 3 6 3s6-1.3 6-3v-4"></path></svg>',
+    user:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="8" r="4"></circle></svg>',
+    history:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 3v6h6"></path><path d="M12 7v5l3 2"></path></svg>',
+    clock:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>',
+    db:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path></svg>',
+    layers:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 8l10 5 10-5-10-5z"></path><path d="M2 12l10 5 10-5"></path><path d="M2 16l10 5 10-5"></path></svg>',
+    quote:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 11H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3v6l-3 5"></path><path d="M19 11h-3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3v6l-3 5"></path></svg>',
     ext:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg>',
     check:
@@ -232,11 +328,15 @@ function yearBucket(year) {
     return "unknown";
   }
 
+  if (year >= 2025) {
+    return "2025";
+  }
+
   if (year >= 2024) {
     return "2024";
   }
 
-  if (year >= 2021) {
+  if (year >= 2023) {
     return "2023";
   }
 
@@ -245,8 +345,9 @@ function yearBucket(year) {
 
 function yearBucketLabel(bucket) {
   return {
+    2025: "2025",
     2024: "2024",
-    2023: "2021-2023",
+    2023: "2023",
     earlier: "Earlier",
     unknown: "Unknown",
   }[bucket] || bucket;
@@ -289,11 +390,12 @@ function visibleResults() {
     return venueAllowed && yearAllowed && relevanceAllowed && openAccessAllowed && savedAllowed;
   });
 
+  const activeSort = state.searchMode === "keyword" ? "cited" : "relevance";
   const sorter = {
     relevance: (left, right) => (right.relevance || 0) - (left.relevance || 0) || (right.citedByCount || 0) - (left.citedByCount || 0),
     recent: (left, right) => (right.year || 0) - (left.year || 0) || (right.relevance || 0) - (left.relevance || 0),
     cited: (left, right) => (right.citedByCount || 0) - (left.citedByCount || 0) || (right.relevance || 0) - (left.relevance || 0),
-  }[state.sort];
+  }[activeSort];
 
   return filtered.sort(sorter);
 }
@@ -633,63 +735,295 @@ function renderTopbar() {
   `;
 }
 
-function renderFilterCheck(name, value, label, checked) {
+function uniqueValues(values = []) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function venueColor(venue) {
+  const value = String(venue || "").toLowerCase();
+  if (value.includes("emnlp")) {
+    return TOKENS.research;
+  }
+  if (value.includes("acl") || value.includes("naacl")) {
+    return TOKENS.read;
+  }
+  if (value.includes("neurips")) {
+    return TOKENS.writing;
+  }
+  if (value.includes("icml")) {
+    return TOKENS.result;
+  }
+  if (value.includes("iclr")) {
+    return TOKENS.insight;
+  }
+  if (value.includes("arxiv")) {
+    return TOKENS.t3;
+  }
+  return TOKENS.t3;
+}
+
+function renderVenueTag(venue) {
+  return renderTag(venue || "Unknown", venueColor(venue));
+}
+
+function resolveScopeCatalogItem(type, id) {
+  const groups = SEARCH_TARGET_CATALOG[type] || {};
+  return [...(groups.popular || []), ...(groups.recent || [])].find((item) => item.id === id) || null;
+}
+
+function searchProviderLabel() {
+  const provider = String(state.searchMeta.provider || "");
+  if (provider === "openalex") {
+    return "OpenAlex";
+  }
+  if (provider === "seed") {
+    return "ARES seed library";
+  }
+  return provider || "Search provider";
+}
+
+function searchYearOptions() {
+  const buckets = ["2025", "2024", "2023", "earlier"];
+  if (state.results.some((paper) => yearBucket(paper.year) === "unknown")) {
+    buckets.push("unknown");
+  }
+  return buckets;
+}
+
+function renderPulseDot(color = TOKENS.search, size = 6) {
+  return `<span class="pd" style="background:${color};width:${size}px;height:${size}px"></span>`;
+}
+
+function relevanceColor(value) {
+  if (value >= 90) {
+    return TOKENS.search;
+  }
+  if (value >= 75) {
+    return TOKENS.read;
+  }
+  return TOKENS.t3;
+}
+
+function renderRelevanceBar(value) {
   return `
-    <label class="filter-check ${checked ? "is-checked" : ""}">
-      <input class="sr-only" type="checkbox" name="${escapeHtml(name)}" value="${escapeHtml(value)}" ${checked ? "checked" : ""} />
-      <span class="filter-check-box">${checked ? icon("check", { size: 9, color: "#ffffff" }) : ""}</span>
-      <span>${escapeHtml(label)}</span>
-    </label>
+    <span class="paper-relevance-bar">
+      <span class="paper-relevance-bar-fill" style="width:${Math.max(0, Math.min(100, Number(value) || 0))}%;background:${relevanceColor(value)}"></span>
+    </span>
   `;
 }
 
-function renderFilterPanel(project, visible) {
-  const savedVisibleCount = visible.filter((paper) => paper.saved).length;
-  const newVisibleCount = Math.max(visible.length - savedVisibleCount, 0);
-  const venueMarkup = state.availableVenues.length
-    ? state.availableVenues
-        .map((venue) => renderFilterCheck("venue", venue, venue, state.filters.venues.has(venue)))
-        .join("")
-    : '<div class="empty-state" style="padding:6px 0">검색 결과가 들어오면 venue 필터가 채워집니다.</div>';
+function paperReason(paper) {
+  const matched = uniqueValues(paper.matchedKeywords || []).slice(0, 2);
+  const parts = [];
+  if (matched.length) {
+    parts.push(`matched ${matched.map((keyword) => `"${keyword}"`).join(" · ")}`);
+  }
+  if (paper.citedByCount) {
+    parts.push(`cited by ${paper.citedByCount}`);
+  }
+  if (paper.openAccess) {
+    parts.push("open access");
+  }
+  return parts.join(" · ") || "semantic similarity match";
+}
 
-  const yearMarkup = ["2024", "2023", "earlier", "unknown"]
-    .map((bucket) => renderFilterCheck("yearBucket", bucket, yearBucketLabel(bucket), state.filters.years.has(bucket)))
-    .join("");
+function paperMatchesScope(paper, scope) {
+  const venue = String(paper.venue || "").toLowerCase();
+  const authors = (paper.authors || []).map((author) => String(author).toLowerCase());
+  const haystack = `${paper.title || ""} ${paper.summary || paper.abstract || ""} ${(paper.keywords || []).join(" ")}`.toLowerCase();
+  const label = String(scope.label || "").toLowerCase();
+  const meta = scope.meta || {};
+
+  if (scope.type === "conference") {
+    return venue.includes(String(meta.venue || scope.label || "").toLowerCase());
+  }
+
+  if (scope.type === "author") {
+    return authors.some((author) => author.includes(label));
+  }
+
+  const anchor = String(meta.inst || scope.label || "").toLowerCase().split(" ")[0];
+  return Boolean(anchor) && haystack.includes(anchor);
+}
+
+function paperInScope(paper) {
+  return state.searchScopes.some((scope) => paperMatchesScope(paper, scope));
+}
+
+function renderSearchNotice(message) {
+  return `<div class="notice">${icon("plus", { size: 14, color: TOKENS.result })}<div>${escapeHtml(message)}</div></div>`;
+}
+
+function renderSearchModeToggle() {
+  return `
+    <div class="mode-seg" role="tablist" aria-label="Search mode">
+      ${Object.entries(SEARCH_MODES)
+        .map(([id, config]) => {
+          const active = state.searchMode === id;
+          return `
+            <button
+              type="button"
+              role="tab"
+              aria-selected="${active}"
+              class="mode-tab ${active ? "active" : ""}"
+              data-action="set-search-mode"
+              data-search-mode="${escapeHtml(id)}"
+              title="${escapeHtml(config.desc)}"
+            >
+              ${icon(config.icon, { size: 12, color: active ? config.color : TOKENS.t3 })}
+              <span>${escapeHtml(config.label)}</span>
+            </button>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderSearchScopeChip(scope, compact = false) {
+  const config = SEARCH_TARGET_TYPES[scope.type] || SEARCH_TARGET_TYPES.conference;
+  const prefix = compact ? "filter-scope-chip" : "scope-chip";
+  const shortLabel = config.label.slice(0, 4).toUpperCase();
 
   return `
-    <aside class="search-filters" data-ares-surface="search-filters" data-ares-stage="search">
-      <div class="filter-eyebrow">Filter</div>
+    <span class="${prefix}" style="border-color:${config.color}40;background:${config.color}08">
+      ${compact ? "" : icon(config.icon, { size: 11, color: config.color })}
+      ${compact ? "" : `<span class="scope-chip-type" style="color:${config.color}">${escapeHtml(shortLabel)}</span>`}
+      <span class="${compact ? "filter-scope-chip-label" : "scope-chip-label"}">${escapeHtml(scope.label)}</span>
+      <button type="button" class="${compact ? "x" : "x-btn"}" data-action="remove-scope" data-scope-id="${escapeHtml(scope.id)}" aria-label="Remove scope">
+        ${icon("x", { size: compact ? 9 : 10 })}
+      </button>
+    </span>
+  `;
+}
 
-      <section class="filter-group">
-        <div class="filter-group-title">Venue</div>
-        ${venueMarkup}
-      </section>
+function renderSearchFilterSection(label, iconName, sectionKey, bodyMarkup, activeCount = 0) {
+  const open = Boolean(state.filterSections[sectionKey]);
+  return `
+    <section class="search-filter-section">
+      <button type="button" class="sec-hdr" data-action="toggle-filter-section" data-filter-section="${escapeHtml(sectionKey)}">
+        <span class="sec-hdr-copy">
+          ${icon(iconName, { size: 11, color: TOKENS.t3 })}
+          <span>${escapeHtml(label)}</span>
+          ${activeCount > 0 ? `<span class="filter-count mono">${activeCount}</span>` : ""}
+        </span>
+        ${icon(open ? "chevD" : "chevR", { size: 11, color: TOKENS.t3 })}
+      </button>
+      <div class="sec-body ${open ? "" : "closed"}">${bodyMarkup}</div>
+    </section>
+  `;
+}
 
-      <section class="filter-group">
-        <div class="filter-group-title">Year</div>
-        ${yearMarkup}
-      </section>
+function renderSearchFilterPanel(project, visible) {
+  const savedVisibleCount = visible.filter((paper) => paper.saved).length;
+  const newVisibleCount = Math.max(visible.length - savedVisibleCount, 0);
 
-      <section class="filter-group">
-        <div class="filter-group-title">Relevance</div>
-        <input class="filter-range" type="range" name="minRelevance" min="0" max="100" step="1" value="${state.filters.minRelevance}" />
-        <div class="filter-range-value mono">&gt;= ${state.filters.minRelevance}%</div>
-      </section>
+  if (!state.filterPanelOpen) {
+    return `
+      <aside class="sidebar-collapsed-strip" data-ares-surface="search-filters" data-ares-stage="search">
+        <button type="button" class="panel-toggle-btn" data-action="toggle-filter-panel" title="필터 펼치기">
+          ${icon("chevR", { size: 13, color: TOKENS.t2 })}
+        </button>
+        <div class="collapsed-strip-divider"></div>
+        <button type="button" class="panel-toggle-btn" data-action="toggle-filter-panel" title="Scope">
+          ${icon("globe", { size: 12, color: TOKENS.t2 })}
+        </button>
+        <button type="button" class="panel-toggle-btn" data-action="toggle-filter-panel" title="Venue">
+          ${icon("filter", { size: 12, color: TOKENS.t2 })}
+        </button>
+        <button type="button" class="panel-toggle-btn" data-action="toggle-filter-panel" title="Year">
+          ${icon("clock", { size: 12, color: TOKENS.t2 })}
+        </button>
+        <button type="button" class="panel-toggle-btn" data-action="toggle-filter-panel" title="Relevance">
+          ${icon("dot", { size: 12, color: TOKENS.t2 })}
+        </button>
+      </aside>
+    `;
+  }
 
-      <section class="filter-group">
-        <div class="filter-group-title">Scope</div>
-        ${renderFilterCheck("openAccessOnly", "true", "Open access only", state.filters.openAccessOnly)}
-        ${renderFilterCheck("savedOnly", "true", "Saved only", state.filters.savedOnly)}
-      </section>
+  const scopeMarkup = Object.entries(SEARCH_TARGET_TYPES)
+    .map(([type, config]) => {
+      const activeScopes = state.searchScopes.filter((scope) => scope.type === type);
+      return `
+        <div class="filter-scope-type">
+          <div class="filter-scope-type-hdr">
+            ${icon(config.icon, { size: 11, color: config.color })}
+            <span>${escapeHtml(config.label)}</span>
+            ${activeScopes.length ? `<span class="mono" style="color:${config.color}">· ${activeScopes.length}</span>` : ""}
+          </div>
+          <div class="filter-scope-chip-row">
+            ${activeScopes.map((scope) => renderSearchScopeChip(scope, true)).join("")}
+          </div>
+          <button
+            type="button"
+            class="scope-add"
+            data-action="open-scope-picker"
+            data-scope-tab="${escapeHtml(type)}"
+            data-scope-source="sidebar"
+          >
+            ${icon("plus", { size: 10 })}
+            <span>Add ${escapeHtml(config.label.toLowerCase())}</span>
+          </button>
+        </div>
+      `;
+    })
+    .join("");
 
-      <section class="filter-divider">
+  const venueMarkup = state.availableVenues.length
+    ? state.availableVenues
+        .map((venue) => {
+          const checked = state.filters.venues.has(venue);
+          return `
+            <label class="filter-option ${checked ? "is-checked" : ""}">
+              <input class="sr-only" type="checkbox" name="venue" value="${escapeHtml(venue)}" ${checked ? "checked" : ""} />
+              <span class="filter-option-box">${checked ? icon("check", { size: 9, color: "#ffffff" }) : ""}</span>
+              <span class="filter-option-dot" style="background:${venueColor(venue)}"></span>
+              <span>${escapeHtml(venue)}</span>
+            </label>
+          `;
+        })
+        .join("")
+    : '<div class="empty-state compact-empty">검색 결과가 들어오면 venue 필터가 채워집니다.</div>';
+
+  const yearMarkup = searchYearOptions()
+    .map((bucket) => {
+      const checked = state.filters.years.has(bucket);
+      return `
+        <label class="filter-option ${checked ? "is-checked" : ""}">
+          <input class="sr-only" type="checkbox" name="yearBucket" value="${escapeHtml(bucket)}" ${checked ? "checked" : ""} />
+          <span class="filter-option-box">${checked ? icon("check", { size: 9, color: "#ffffff" }) : ""}</span>
+          <span>${escapeHtml(yearBucketLabel(bucket))}</span>
+        </label>
+      `;
+    })
+    .join("");
+
+  const relevanceMarkup = `
+    <input class="filter-range" type="range" name="minRelevance" min="0" max="100" step="1" value="${state.filters.minRelevance}" />
+    <div class="filter-range-value mono">≥ ${state.filters.minRelevance}%</div>
+  `;
+
+  return `
+    <aside class="search-filters search-filters-focal" data-ares-surface="search-filters" data-ares-stage="search">
+      <div class="search-filters-header">
+        <span class="filter-eyebrow">Filters</span>
+        <button type="button" class="panel-toggle-btn" data-action="toggle-filter-panel" title="필터 접기">
+          ${icon("chevL", { size: 13, color: TOKENS.t2 })}
+        </button>
+      </div>
+
+      ${renderSearchFilterSection("Scope", "globe", "scope", scopeMarkup, state.searchScopes.length)}
+      ${renderSearchFilterSection("Venue", "filter", "venue", venueMarkup, state.filters.venues.size)}
+      ${renderSearchFilterSection("Year", "clock", "year", yearMarkup, state.filters.years.size)}
+      ${renderSearchFilterSection("Relevance", "dot", "rel", relevanceMarkup)}
+
+      <section class="filter-divider filter-library-card">
         <div class="filter-group-title">Library</div>
         <div class="library-metric">
           <span class="library-metric-value">${project.libraryCount}</span>
           <span class="library-metric-label">papers</span>
         </div>
-        <div class="library-project-name">${escapeHtml(project.name)}</div>
-        <div class="tag-row" style="margin-top:8px">
+        <div class="tag-row filter-library-tags">
           ${renderTag(`${project.libraryCount} saved`, TOKENS.search, true)}
           ${renderTag(`${newVisibleCount} new`)}
         </div>
@@ -698,22 +1032,89 @@ function renderFilterPanel(project, visible) {
   `;
 }
 
-function renderResultRow(paper) {
+function renderSearchHero(visible, totalResults) {
+  const modeConfig = SEARCH_MODES[state.searchMode];
+  const providerLabel = searchProviderLabel();
+  const statusMeta =
+    state.searchMode === "scout"
+      ? `${visible.length}/${Math.max(totalResults, visible.length)} · ${state.searchMeta.live ? "live" : "seed"} · ${state.searchMeta.live ? "$live" : "free"}`
+      : `${Math.max(totalResults, visible.length)} · ${state.searchMeta.live ? "live" : "cached"} · free`;
+
+  return `
+    <div class="hero-wrap">
+      <div class="search-hero-head">
+        <span class="search-hero-eyebrow">
+          ${icon("search", { size: 11, color: TOKENS.search })}
+          <span>Paper Search</span>
+        </span>
+        <span class="search-hero-spacer"></span>
+        ${renderSearchModeToggle()}
+      </div>
+
+      <div class="scope-row">
+        <span class="scope-row-label">
+          ${icon("globe", { size: 11, color: TOKENS.t3 })}
+          <span>Searching in</span>
+        </span>
+        ${state.searchScopes.length ? "" : '<span class="scope-empty">everywhere</span>'}
+        ${state.searchScopes.map((scope) => renderSearchScopeChip(scope)).join("")}
+        <button
+          type="button"
+          class="scope-add"
+          data-action="open-scope-picker"
+          data-scope-tab="conference"
+          data-scope-source="hero"
+        >
+          ${icon("plus", { size: 10 })}
+          <span>Add target</span>
+        </button>
+      </div>
+
+      <form class="hero-input" data-action="submit-search">
+        ${icon("search", { size: 18, color: TOKENS.t3 })}
+        <input
+          id="search-input"
+          type="text"
+          name="query"
+          autocomplete="off"
+          spellcheck="false"
+          value="${escapeHtml(state.searchInput)}"
+          placeholder="${escapeHtml(state.searchMode === "scout" ? "어떤 논문을 찾으시나요? 자연어로 질문해보세요" : "키워드, 저자, 제목으로 검색")}"
+        />
+        <button type="submit" class="btn-p" ${state.loading ? "disabled" : ""}>
+          ${icon(modeConfig.icon, { size: 13, color: "#ffffff" })}
+          <span>${state.loading ? "Searching..." : "Search"}</span>
+        </button>
+      </form>
+
+      <div class="status-strip ${escapeHtml(state.searchMode)}">
+        ${
+          state.searchMode === "scout"
+            ? `${renderPulseDot(TOKENS.search, 7)}<span class="status-strip-mode">Agent</span>`
+            : `${icon("db", { size: 12, color: TOKENS.read })}<span class="status-strip-mode">Keyword</span>`
+        }
+        <span class="status-strip-sep">·</span>
+        <span class="status-strip-source">${escapeHtml(providerLabel)}</span>
+        <span class="status-strip-grow"></span>
+        <span class="reasoning-line">${escapeHtml(statusMeta)}</span>
+      </div>
+
+      ${state.searchMeta.warning ? renderSearchNotice(state.searchMeta.warning) : ""}
+      ${state.error ? renderSearchNotice(state.error) : ""}
+    </div>
+  `;
+}
+
+function renderSearchResultRow(paper) {
   const selected = paper.paperId === state.selectedPaperId;
-  const tags = [
-    renderTag(paper.venue || "Unknown venue"),
-    paper.openAccess ? renderTag("open access", TOKENS.search) : "",
-    paper.saved ? renderTag("saved", TOKENS.read) : "",
-    paper.queued ? renderTag("reading queue", TOKENS.result) : "",
-    ...(paper.matchedKeywords || []).slice(0, 2).map((keyword) => renderTag(keyword)),
-  ]
-    .filter(Boolean)
-    .join("");
+  const inScope = paperInScope(paper);
+  const reason = paperReason(paper);
+  const relevance = Number(paper.relevance || 0);
 
   return `
     <button
       type="button"
-      class="paper-row hov-row ${selected ? "is-selected" : ""}"
+      class="paper-row ${selected ? "is-selected" : ""}"
       data-action="select-paper"
       data-paper-id="${escapeHtml(paper.paperId)}"
       data-ares-surface="paper-row"
@@ -722,72 +1123,106 @@ function renderResultRow(paper) {
       data-ares-paper-id="${escapeHtml(paper.paperId)}"
       data-ares-paper-title="${escapeHtml(paper.title)}"
     >
-      <div class="paper-main">
-        <div class="paper-title">${escapeHtml(paper.title)}</div>
-        <div class="paper-meta">
-          <span class="paper-authors">${escapeHtml(formatAuthors(paper.authors))}</span>
-          <span class="paper-meta-separator">·</span>
-          <span class="tag-row">${tags}</span>
-        </div>
-      </div>
-      <div class="paper-score mono">${escapeHtml(String(paper.relevance || 0))}%</div>
+      <span class="paper-venue-bar" style="background:${venueColor(paper.venue)};opacity:${selected ? "1" : "0.32"}"></span>
+      <span class="paper-content">
+        <span class="paper-main">
+          <span class="paper-title">${escapeHtml(paper.title)}</span>
+          <span class="paper-meta">
+            <span class="paper-authors">${escapeHtml(formatAuthors(paper.authors))}</span>
+            <span class="paper-meta-separator">·</span>
+            ${renderVenueTag(paper.venue)}
+            <span class="paper-year mono">${escapeHtml(String(paper.year || "n/a"))}</span>
+            <span class="paper-meta-separator">·</span>
+            <span class="paper-cites">
+              ${icon("quote", { size: 11, color: TOKENS.t3 })}
+              <span>${escapeHtml(String(paper.citedByCount || 0))}</span>
+            </span>
+            ${paper.openAccess ? renderTag("open access", TOKENS.search) : ""}
+            ${paper.saved ? renderTag("saved", TOKENS.read, true) : ""}
+            ${paper.queued ? renderTag("reading queue", TOKENS.result) : ""}
+            ${inScope ? renderTag("in scope", TOKENS.search, true) : ""}
+          </span>
+          <span class="paper-summary">${escapeHtml(paper.summary || paper.abstract || "Abstract metadata is not available yet.")}</span>
+          ${
+            state.searchMode === "scout"
+              ? `<span class="reasoning-line paper-reasoning">${icon("sparkles", { size: 10, color: TOKENS.search })}<span>scout · ${escapeHtml(reason)}</span></span>`
+              : ""
+          }
+        </span>
+        <span class="paper-score-wrap">
+          <span class="paper-score mono" style="color:${relevanceColor(relevance)}">${escapeHtml(String(relevance))}</span>
+          ${renderRelevanceBar(relevance)}
+          <span class="paper-score-label">${state.searchMode === "scout" ? "relevance" : "match"}</span>
+        </span>
+      </span>
     </button>
   `;
 }
 
-function renderResultList(visible) {
+function renderSearchResultsList(visible) {
   if (state.loading) {
-    return '<div class="loading-state">Scout agent가 논문 후보를 수집 중입니다...</div>';
+    return '<div class="loading-state search-results-empty">Scout agent가 논문 후보를 수집 중입니다...</div>';
   }
 
   if (!visible.length) {
-    return '<div class="empty-state">현재 필터 조건에 맞는 논문이 없습니다. venue/year/relevance 조건을 조금 넓혀보세요.</div>';
+    return '<div class="empty-state search-results-empty">현재 필터 조건에 맞는 논문이 없습니다. venue, year, relevance 조건을 조금 넓혀보세요.</div>';
   }
 
-  return visible.map((paper) => renderResultRow(paper)).join("");
+  return visible.map((paper) => renderSearchResultRow(paper)).join("");
 }
 
-function renderPreview(paper) {
-  if (!paper) {
+function renderSearchPreview(paper) {
+  if (!state.previewPanelOpen) {
     return `
-      <aside class="search-preview" data-ares-surface="search-preview" data-ares-stage="search">
-        <div class="search-preview-header">
-          <div class="preview-eyebrow">Paper</div>
-          <div class="preview-title">Select a paper</div>
-        </div>
-        <div class="empty-state">좌측 리스트에서 논문을 선택하면 abstract, key points, source link가 여기에 표시됩니다.</div>
+      <aside class="preview-collapsed-strip" data-ares-surface="search-preview" data-ares-stage="search">
+        <button type="button" class="panel-toggle-btn" data-action="toggle-preview-panel" title="프리뷰 펼치기">
+          ${icon("chevL", { size: 13, color: TOKENS.t2 })}
+        </button>
+        <div class="collapsed-strip-divider"></div>
+        <button type="button" class="panel-toggle-btn" data-action="toggle-preview-panel" title="Paper preview">
+          ${icon("book", { size: 12, color: TOKENS.t2 })}
+        </button>
       </aside>
     `;
   }
 
-  const points = (paper.keyPoints && paper.keyPoints.length ? paper.keyPoints : [paper.summary || "Key points are not available yet."])
-    .map((point) => `<div class="preview-point">${icon("dot", { size: 6, color: TOKENS.search })}<span>${escapeHtml(point)}</span></div>`)
-    .join("");
+  if (!paper) {
+    return `
+      <aside class="search-preview search-preview-focal" data-ares-surface="search-preview" data-ares-stage="search">
+        <div class="search-preview-header search-preview-header-focal">
+          <div class="preview-heading">
+            <div class="preview-eyebrow">Paper</div>
+            <div class="preview-title">Select a paper</div>
+          </div>
+          <button type="button" class="panel-toggle-btn" data-action="toggle-preview-panel" title="프리뷰 접기">
+            ${icon("chevR", { size: 13, color: TOKENS.t2 })}
+          </button>
+        </div>
+        <div class="empty-state search-preview-empty">좌측 리스트에서 논문을 선택하면 프리뷰가 여기에 표시됩니다.</div>
+      </aside>
+    `;
+  }
 
-  const sourceHref = paper.pdfUrl || paper.paperUrl;
-  const sourceCard = sourceHref
-    ? `
-      <a class="preview-card" href="${escapeHtml(sourceHref)}" target="_blank" rel="noreferrer noopener">
-        ${icon(sourceHref.includes("github.com") ? "git" : "ext", { size: 14, color: TOKENS.t2 })}
-        <span class="preview-card-value mono">${escapeHtml(compactLink(sourceHref))}</span>
-        ${icon("ext", { size: 13, color: TOKENS.t3 })}
-      </a>
-    `
-    : "";
-
+  const previewTags = uniqueValues([...(paper.matchedKeywords || []).slice(0, 4), paper.openAccess ? "open access" : ""]).filter(Boolean);
   const saveLabel = paper.saved ? "Remove" : state.savingPaperId === paper.paperId ? "Saving..." : "Save";
   const readLabel = state.queueingPaperId === paper.paperId ? "Queueing..." : "Read";
 
   return `
-    <aside class="search-preview" data-ares-surface="search-preview" data-ares-stage="search" data-ares-paper-id="${escapeHtml(paper.paperId)}" data-ares-paper-title="${escapeHtml(paper.title)}">
-      <div class="search-preview-header">
-        <div class="preview-eyebrow">Paper</div>
-        <div class="preview-title">${escapeHtml(paper.title)}</div>
-        <div class="tag-row">
-          ${renderTag(formatAuthors(paper.authors))}
-          ${renderTag(paper.venue || "Unknown venue")}
-          ${paper.openAccess ? renderTag("open access", TOKENS.search) : ""}
+    <aside class="search-preview search-preview-focal" data-ares-surface="search-preview" data-ares-stage="search" data-ares-paper-id="${escapeHtml(paper.paperId)}" data-ares-paper-title="${escapeHtml(paper.title)}">
+      <div class="search-preview-header search-preview-header-focal">
+        <div class="preview-heading">
+          <div class="preview-eyebrow">Paper</div>
+          <div class="preview-title">${escapeHtml(paper.title)}</div>
+          <div class="tag-row">
+            ${renderTag(formatAuthors(paper.authors))}
+            ${renderVenueTag(paper.venue)}
+            ${renderTag(`${paper.citedByCount || 0} cites`)}
+            ${paper.openAccess ? renderTag("open access", TOKENS.search) : ""}
+          </div>
         </div>
+        <button type="button" class="panel-toggle-btn" data-action="toggle-preview-panel" title="프리뷰 접기">
+          ${icon("chevR", { size: 13, color: TOKENS.t2 })}
+        </button>
       </div>
 
       <div class="search-preview-body">
@@ -797,11 +1232,19 @@ function renderPreview(paper) {
         </section>
 
         <section class="preview-section">
-          <div class="preview-section-title">Key points</div>
-          ${points}
+          <div class="preview-section-title">Why relevant</div>
+          <div class="reasoning-line preview-reasoning-line">
+            ${icon("sparkles", { size: 11, color: TOKENS.search })}
+            <span>${escapeHtml(paperReason(paper))}</span>
+          </div>
         </section>
 
-        ${sourceCard}
+        <section class="preview-section">
+          <div class="preview-section-title">Tags</div>
+          <div class="tag-row">
+            ${previewTags.map((tag) => renderTag(tag)).join("")}
+          </div>
+        </section>
       </div>
 
       <div class="search-preview-footer">
@@ -812,7 +1255,8 @@ function renderPreview(paper) {
           data-paper-id="${escapeHtml(paper.paperId)}"
           ${state.savingPaperId === paper.paperId ? "disabled" : ""}
         >
-          ${saveLabel}
+          ${icon("bookmark", { size: 12, color: "#ffffff" })}
+          <span>${escapeHtml(saveLabel)}</span>
         </button>
         <button
           type="button"
@@ -821,10 +1265,109 @@ function renderPreview(paper) {
           data-paper-id="${escapeHtml(paper.paperId)}"
           ${state.queueingPaperId === paper.paperId ? "disabled" : ""}
         >
-          ${readLabel} ${icon("arrowR", { size: 12 })}
+          <span>${escapeHtml(readLabel)}</span>
+          ${icon("arrowR", { size: 12, color: "currentColor" })}
         </button>
       </div>
     </aside>
+  `;
+}
+
+function renderSearchScopePicker() {
+  if (!state.scopePicker) {
+    return "";
+  }
+
+  const { tab, left, top } = state.scopePicker;
+  const config = SEARCH_TARGET_TYPES[tab] || SEARCH_TARGET_TYPES.conference;
+  const catalog = SEARCH_TARGET_CATALOG[tab] || {};
+  const query = state.scopePickerQuery.trim().toLowerCase();
+  const activeIds = new Set(state.searchScopes.map((scope) => scope.id));
+  const filterItems = (items = []) => items.filter((item) => !query || item.label.toLowerCase().includes(query));
+  const popular = filterItems(catalog.popular);
+  const recent = filterItems(catalog.recent);
+
+  const renderPickerItem = (item, active = false) => {
+    const metaLine =
+      item.kind === "lab"
+        ? "Research lab"
+        : item.kind === "corp"
+          ? "Industry"
+          : item.inst
+            ? `@ ${item.inst}`
+            : item.venue
+              ? `venue: ${item.venue}`
+              : "";
+
+    if (active) {
+      return `
+        <div class="popover-item active">
+          ${icon(config.icon, { size: 13, color: config.color })}
+          <div class="popover-item-copy">
+            <div class="popover-item-title">${escapeHtml(item.label)}</div>
+            ${metaLine ? `<div class="popover-item-meta">${escapeHtml(metaLine)}</div>` : ""}
+          </div>
+          ${icon("check", { size: 12, color: TOKENS.search })}
+        </div>
+      `;
+    }
+
+    return `
+      <button
+        type="button"
+        class="popover-item"
+        data-action="add-scope"
+        data-scope-id="${escapeHtml(item.id)}"
+        data-scope-type="${escapeHtml(tab)}"
+        data-scope-label="${escapeHtml(item.label)}"
+      >
+        ${icon(config.icon, { size: 13, color: config.color })}
+        <div class="popover-item-copy">
+          <div class="popover-item-title">${escapeHtml(item.label)}</div>
+          ${metaLine ? `<div class="popover-item-meta">${escapeHtml(metaLine)}</div>` : ""}
+        </div>
+        ${icon("plus", { size: 12, color: TOKENS.t3 })}
+      </button>
+    `;
+  };
+
+  return `
+    <div class="popover scope-picker-popover" style="position:fixed;left:${Math.round(left)}px;top:${Math.round(top)}px">
+      <div class="popover-search">
+        ${icon("search", { size: 13, color: TOKENS.t3 })}
+        <input name="scopePickerQuery" value="${escapeHtml(state.scopePickerQuery)}" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(config.label)} 이름 검색…" />
+      </div>
+      <div class="popover-tabs">
+        ${Object.entries(SEARCH_TARGET_TYPES)
+          .map(([type, entry]) => {
+            const active = tab === type;
+            return `
+              <button
+                type="button"
+                class="popover-tab ${active ? "active" : ""}"
+                data-action="switch-scope-picker-tab"
+                data-scope-tab="${escapeHtml(type)}"
+              >
+                ${icon(entry.icon, { size: 11, color: active ? TOKENS.tx : TOKENS.t3 })}
+                <span>${escapeHtml(entry.label)}</span>
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+      <div class="popover-list">
+        ${popular.length ? '<div class="popover-section">Popular</div>' : ""}
+        ${popular.map((item) => renderPickerItem(item, activeIds.has(item.id))).join("")}
+        ${recent.length ? '<div class="popover-section popover-section-recent">Recent</div>' : ""}
+        ${recent.map((item) => renderPickerItem(item, activeIds.has(item.id))).join("")}
+        ${popular.length || recent.length ? "" : '<div class="popover-empty">일치하는 타겟이 없습니다.</div>'}
+      </div>
+      <div class="popover-footer">
+        <span class="popover-tip">Tip: scope을 좁힐수록 Scout 비용이 줄어듭니다</span>
+        <span class="popover-footer-spacer"></span>
+        <button type="button" class="btn-g popover-close-btn" data-action="close-scope-picker">Close</button>
+      </div>
+    </div>
   `;
 }
 
@@ -835,53 +1378,32 @@ function renderSearchStage(project) {
 
   return `
     <div class="search-stage" data-ares-surface="search-stage" data-ares-stage="search">
-      ${renderFilterPanel(project, visible)}
+      ${renderSearchFilterPanel(project, visible)}
 
-      <section class="results-pane" data-ares-surface="search-results" data-ares-stage="search">
-        <div class="search-toolbar">
-          <form class="search-form" data-action="submit-search">
-            <label class="search-input">
-              ${icon("search", { size: 15, color: TOKENS.t3 })}
-              <input
-                id="search-input"
-                type="text"
-                name="query"
-                autocomplete="off"
-                spellcheck="false"
-                value="${escapeHtml(state.searchInput)}"
-                placeholder="예: rag reranker cost reduction, verifier-guided reasoning..."
-              />
-              ${renderKbd("⌘K")}
-            </label>
-            <button type="submit" class="btn-p">${state.loading ? "Searching..." : "Search"}</button>
-          </form>
+      <section class="results-pane results-pane-focal" data-ares-surface="search-results" data-ares-stage="search">
+        ${renderSearchHero(visible, totalResults)}
 
-          <div class="search-meta-row">
-            <div class="search-meta">
-              <span><strong>${escapeHtml(String(totalResults))} results</strong></span>
-              <span>·</span>
-              <span>Sorted by ${escapeHtml(state.sort)}</span>
-              <span>·</span>
-              <span class="search-agent">
-                <span class="search-agent-dot pulse"></span>
-                Scout agent${state.searchMeta.provider ? ` · ${escapeHtml(state.searchMeta.provider)}` : ""}
-              </span>
+        <div class="results-list">
+          <div class="results-list-inner">
+            <div class="results-summary-row">
+              <div class="results-summary-copy">
+                <span class="results-summary-count">${escapeHtml(String(visible.length))} results</span>
+                <span class="results-summary-sub">· Sorted by ${state.searchMode === "scout" ? "relevance" : "citations"}</span>
+                ${state.searchScopes.length ? `<span class="results-summary-sub">· scoped to ${state.searchScopes.length} target${state.searchScopes.length > 1 ? "s" : ""}</span>` : ""}
+              </div>
+              <div class="results-summary-actions">
+                <button type="button" class="btn-g results-summary-btn">${icon("layers", { size: 12, color: "currentColor" })}<span>Group</span></button>
+                <button type="button" class="btn-g results-summary-btn">${icon("dl", { size: 12, color: "currentColor" })}<span>Export</span></button>
+              </div>
             </div>
-            <select class="sort-select" name="sort" aria-label="Sort results">
-              <option value="relevance" ${state.sort === "relevance" ? "selected" : ""}>Sort: relevance</option>
-              <option value="recent" ${state.sort === "recent" ? "selected" : ""}>Sort: recent</option>
-              <option value="cited" ${state.sort === "cited" ? "selected" : ""}>Sort: cited</option>
-            </select>
+
+            ${renderSearchResultsList(visible)}
           </div>
-
-          ${state.searchMeta.warning ? `<div class="notice">${icon("plus", { size: 14, color: TOKENS.result })}<div>${escapeHtml(state.searchMeta.warning)}</div></div>` : ""}
-          ${state.error ? `<div class="notice">${icon("plus", { size: 14, color: TOKENS.result })}<div>${escapeHtml(state.error)}</div></div>` : ""}
         </div>
-
-        <div class="results-list">${renderResultList(visible)}</div>
       </section>
 
-      ${renderPreview(selected)}
+      ${renderSearchPreview(selected)}
+      ${renderSearchScopePicker()}
     </div>
   `;
 }
@@ -1059,11 +1581,45 @@ function focusSearchInput({ forceSearchStage = false, select = false } = {}) {
   });
 }
 
+function focusScopePickerInput() {
+  window.requestAnimationFrame(() => {
+    const input = document.querySelector('[name="scopePickerQuery"]');
+    if (!input) {
+      return;
+    }
+
+    input.focus();
+    const length = input.value.length;
+    input.setSelectionRange(length, length);
+  });
+}
+
+function openScopePickerFromTrigger(trigger, tab) {
+  const rect = trigger.getBoundingClientRect();
+  const left = Math.max(12, Math.min(rect.left, window.innerWidth - 384));
+  const top = Math.max(56, Math.min(rect.bottom + 8, window.innerHeight - 440));
+  const source = trigger.dataset.scopeSource || "hero";
+
+  state.scopePicker = { tab, left, top, source };
+  state.scopePickerQuery = "";
+  render();
+  focusScopePickerInput();
+}
+
 document.addEventListener("click", async (event) => {
   const trigger = event.target.closest("[data-action]");
   if (!trigger) {
+    let needsRender = false;
     if (state.openWorkflowMenu && !event.target.closest(".sidebar-menu")) {
       state.openWorkflowMenu = "";
+      needsRender = true;
+    }
+    if (state.scopePicker && !event.target.closest(".scope-picker-popover")) {
+      state.scopePicker = null;
+      state.scopePickerQuery = "";
+      needsRender = true;
+    }
+    if (needsRender) {
       render();
     }
     return;
@@ -1075,8 +1631,18 @@ document.addEventListener("click", async (event) => {
     state.openWorkflowMenu = "";
   }
 
+  if (
+    state.scopePicker &&
+    !trigger.closest(".scope-picker-popover") &&
+    !["open-scope-picker", "remove-scope"].includes(action)
+  ) {
+    state.scopePicker = null;
+    state.scopePickerQuery = "";
+  }
+
   if (action === "select-stage") {
     state.activeStage = normalizeStage(trigger.dataset.stageId);
+    state.scopePicker = null;
     saveStorage(STORAGE_KEYS.stage, state.activeStage);
     render();
     return;
@@ -1084,6 +1650,7 @@ document.addEventListener("click", async (event) => {
 
   if (action === "select-project") {
     state.activeProjectId = trigger.dataset.projectId;
+    state.scopePicker = null;
     saveStorage(STORAGE_KEYS.project, state.activeProjectId);
     state.searchInput = activeProject()?.defaultQuery || "";
     await runSearch();
@@ -1113,7 +1680,95 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "focus-search") {
+    state.scopePicker = null;
     focusSearchInput({ forceSearchStage: true, select: true });
+    return;
+  }
+
+  if (action === "set-search-mode") {
+    const nextMode = trigger.dataset.searchMode === "keyword" ? "keyword" : "scout";
+    state.searchMode = nextMode;
+    syncSelectedPaper();
+    render();
+    return;
+  }
+
+  if (action === "toggle-filter-panel") {
+    state.filterPanelOpen = !state.filterPanelOpen;
+    render();
+    return;
+  }
+
+  if (action === "toggle-preview-panel") {
+    state.previewPanelOpen = !state.previewPanelOpen;
+    render();
+    return;
+  }
+
+  if (action === "toggle-filter-section") {
+    const section = trigger.dataset.filterSection;
+    if (section && Object.prototype.hasOwnProperty.call(state.filterSections, section)) {
+      state.filterSections[section] = !state.filterSections[section];
+      render();
+    }
+    return;
+  }
+
+  if (action === "open-scope-picker") {
+    const tab = trigger.dataset.scopeTab || "conference";
+    if (
+      state.scopePicker &&
+      state.scopePicker.tab === tab &&
+      state.scopePicker.source === (trigger.dataset.scopeSource || "hero")
+    ) {
+      state.scopePicker = null;
+      state.scopePickerQuery = "";
+      render();
+      return;
+    }
+    openScopePickerFromTrigger(trigger, tab);
+    return;
+  }
+
+  if (action === "switch-scope-picker-tab") {
+    if (state.scopePicker) {
+      state.scopePicker = { ...state.scopePicker, tab: trigger.dataset.scopeTab || "conference" };
+      render();
+      focusScopePickerInput();
+    }
+    return;
+  }
+
+  if (action === "close-scope-picker") {
+    state.scopePicker = null;
+    state.scopePickerQuery = "";
+    render();
+    return;
+  }
+
+  if (action === "add-scope") {
+    const type = trigger.dataset.scopeType;
+    const id = trigger.dataset.scopeId;
+    const label = trigger.dataset.scopeLabel;
+    if (type && id && label && !state.searchScopes.some((scope) => scope.id === id)) {
+      state.searchScopes = [
+        ...state.searchScopes,
+        {
+          id,
+          type,
+          label,
+          meta: resolveScopeCatalogItem(type, id),
+        },
+      ];
+      render();
+      focusScopePickerInput();
+    }
+    return;
+  }
+
+  if (action === "remove-scope") {
+    state.searchScopes = state.searchScopes.filter((scope) => scope.id !== trigger.dataset.scopeId);
+    render();
     return;
   }
 
@@ -1162,6 +1817,13 @@ document.addEventListener("submit", async (event) => {
 document.addEventListener("input", (event) => {
   if (event.target.name === "query") {
     state.searchInput = event.target.value;
+    return;
+  }
+
+  if (event.target.name === "scopePickerQuery") {
+    state.scopePickerQuery = event.target.value;
+    render();
+    focusScopePickerInput();
     return;
   }
 
@@ -1234,8 +1896,10 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (event.key === "Escape" && state.openWorkflowMenu) {
+  if (event.key === "Escape" && (state.openWorkflowMenu || state.scopePicker)) {
     state.openWorkflowMenu = "";
+    state.scopePicker = null;
+    state.scopePickerQuery = "";
     render();
   }
 });
