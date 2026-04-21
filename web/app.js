@@ -40,6 +40,7 @@ const STORAGE_KEYS = {
 
 const APP_BASE_URL = new URL("./", window.location.href);
 const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
+const PROXY_DEV_PATH_PATTERN = /^\/proxy\/\d+(?:\/|$)/;
 
 const state = {
   booting: true,
@@ -111,7 +112,7 @@ function reactGrabEnabled() {
     return true;
   }
 
-  return LOCAL_GRAB_HOSTS.has(window.location.hostname);
+  return LOCAL_GRAB_HOSTS.has(window.location.hostname) || PROXY_DEV_PATH_PATTERN.test(window.location.pathname);
 }
 
 function icon(name, { size = 16, color = "currentColor", className = "" } = {}) {

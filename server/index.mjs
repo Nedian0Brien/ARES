@@ -57,8 +57,8 @@ async function ensureEnvLoaded(filePath) {
 
 await ensureEnvLoaded(path.join(ROOT_DIR, '.env'));
 
-const PORT = Number(process.env.PORT || 3000);
-const HOST = process.env.HOST || '127.0.0.1';
+const PORT = Number(process.env.PORT || 3100);
+const HOST = process.env.HOST || '0.0.0.0';
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || '';
 const OPENALEX_MAILTO = process.env.OPENALEX_MAILTO || '';
 

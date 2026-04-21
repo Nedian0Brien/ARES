@@ -3,6 +3,11 @@ const REACT_GRAB_LOCAL_SRC = `./vendor/react-grab-${REACT_GRAB_VERSION}.global.j
 const REACT_GRAB_CDN_SRC = `https://unpkg.com/react-grab@${REACT_GRAB_VERSION}/dist/index.global.js`;
 const REACT_GRAB_QUERY_KEY = "grab";
 const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
+const PROXY_DEV_PATH_PATTERN = /^\/proxy\/\d+(?:\/|$)/;
+
+function isDevelopmentLikeRuntime() {
+  return LOCAL_GRAB_HOSTS.has(window.location.hostname) || PROXY_DEV_PATH_PATTERN.test(window.location.pathname);
+}
 
 function readGrabPreference() {
   const params = new URLSearchParams(window.location.search);
@@ -16,7 +21,7 @@ function readGrabPreference() {
     return true;
   }
 
-  return LOCAL_GRAB_HOSTS.has(window.location.hostname);
+  return isDevelopmentLikeRuntime();
 }
 
 function injectScript(src) {
