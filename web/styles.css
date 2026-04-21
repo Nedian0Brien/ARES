@@ -387,10 +387,15 @@ a {
 
 .workflow-item {
   align-items: center;
+  background: transparent;
   border-radius: 5px;
   display: flex;
   gap: 1px;
   position: relative;
+}
+
+.workflow-item.is-active {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .workflow-stage-btn {
@@ -398,12 +403,14 @@ a {
   background: transparent;
   border-radius: 5px;
   display: flex;
+  flex: 1;
   gap: 8px;
+  min-width: 0;
   padding: 4px 6px;
 }
 
 .workflow-item.is-active .workflow-stage-btn {
-  background: rgba(0, 0, 0, 0.05);
+  background: transparent;
 }
 
 .workflow-stage-icon {
