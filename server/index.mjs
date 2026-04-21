@@ -217,7 +217,10 @@ async function serveStatic(requestPath, response) {
     const content = await fs.readFile(resolved);
     response.writeHead(200, {
       'content-type': CONTENT_TYPES[extension] || 'application/octet-stream',
-      'cache-control': extension === '.html' ? 'no-store' : 'public, max-age=300',
+      'cache-control':
+        extension === '.html' || extension === '.css' || extension === '.js'
+          ? 'no-store'
+          : 'public, max-age=300',
     });
     response.end(content);
   } catch {
