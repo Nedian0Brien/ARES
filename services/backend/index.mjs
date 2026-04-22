@@ -567,6 +567,14 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/library$/.test(requestPath)) {
+      const projectId = parseProjectRoute(requestPath, 'library');
+      json(response, 200, {
+        results: store.getLibrary(projectId),
+      });
+      return;
+    }
+
     if (request.method === 'GET' && requestPath === '/api/agent-runs') {
       const projectId = String(url.searchParams.get('projectId') || '').trim();
       const stage = String(url.searchParams.get('stage') || '').trim();

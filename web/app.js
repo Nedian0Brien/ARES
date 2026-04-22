@@ -162,6 +162,7 @@ const state = {
   activeProjectId: loadStorage(STORAGE_KEYS.project, ""),
   searchInput: "",
   projects: [],
+  projectLibrary: [],
   results: [],
   availableVenues: [],
   readingSessions: [],
@@ -776,6 +777,160 @@ function effectiveReadingSessions(project = activeProject()) {
   return buildPreviewReadingSessions(project);
 }
 
+function actualReadingSessions(project = activeProject()) {
+  if (state.readingSessions.length) {
+    return sortReadingSessions(state.readingSessions);
+  }
+
+  if (Array.isArray(project?.recentReadingSessions) && project.recentReadingSessions.length) {
+    return sortReadingSessions(project.recentReadingSessions);
+  }
+
+  return [];
+}
+
+function currentProjectLibrary() {
+  return Array.isArray(state.projectLibrary) ? [...state.projectLibrary] : [];
+}
+
+function parseTimestamp(value) {
+  const timestamp = Date.parse(value || "");
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortByRecentTimestamp(values = [], keys = ["updatedAt", "savedAt", "queuedAt", "createdAt"]) {
+  return [...values].sort((left, right) => {
+    const leftTimestamp = keys.map((key) => parseTimestamp(left?.[key])).find(Boolean) || 0;
+    const rightTimestamp = keys.map((key) => parseTimestamp(right?.[key])).find(Boolean) || 0;
+    return rightTimestamp - leftTimestamp;
+  });
+}
+
+function dashboardLibraryItems() {
+  return sortByRecentTimestamp(currentProjectLibrary(), ["savedAt", "updatedAt", "createdAt"]);
+}
+
+function dashboardQueuedPaperIds(project = activeProject()) {
+  return new Set(
+    actualReadingSessions(project)
+      .filter((session) => ["queue", "running"].includes(session.status))
+      .map((session) => session.paperId)
+      .filter(Boolean),
+  );
+}
+
+function dashboardPercent(part, total) {
+  if (!total) {
+    return 0;
+  }
+
+  return Math.round((part / total) * 1000) / 10;
+}
+
+function dashboardRecentCount(items = [], days = 7, keys = ["savedAt", "updatedAt", "createdAt"]) {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return items.filter((item) => (keys.map((key) => parseTimestamp(item?.[key])).find(Boolean) || 0) >= cutoff).length;
+}
+
+function dashboardRelativeAge(value) {
+  const timestamp = parseTimestamp(value);
+  if (!timestamp) {
+    return "—";
+  }
+
+  const deltaDays = Math.max(0, Math.floor((Date.now() - timestamp) / (24 * 60 * 60 * 1000)));
+  if (deltaDays === 0) {
+    return "today";
+  }
+
+  if (deltaDays < 30) {
+    return `${deltaDays}d`;
+  }
+
+  const weeks = Math.max(1, Math.round(deltaDays / 7));
+  return `${weeks}w`;
+}
+
+function dashboardDailyCounts(items = [], days = 30, keys = ["savedAt", "updatedAt", "createdAt"]) {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const counts = Array.from({ length: days }, () => 0);
+
+  items.forEach((item) => {
+    const timestamp = keys.map((key) => parseTimestamp(item?.[key])).find(Boolean) || 0;
+    if (!timestamp) {
+      return;
+    }
+
+    const delta = Math.floor((todayStart - timestamp) / dayMs);
+    if (delta < 0 || delta >= days) {
+      return;
+    }
+
+    counts[days - delta - 1] += 1;
+  });
+
+  return counts;
+}
+
+function dashboardCumulativeCounts(items = [], days = 30, keys = ["savedAt", "updatedAt", "createdAt"]) {
+  const daily = dashboardDailyCounts(items, days, keys);
+  const total = items.length;
+  let runningTotal = total - daily.reduce((sum, value) => sum + value, 0);
+  return daily.map((value) => {
+    runningTotal += value;
+    return runningTotal;
+  });
+}
+
+function dashboardSeriesPath(values = [], width, height, { padTop = 2, padBottom = 2 } = {}) {
+  if (!values.length) {
+    return "";
+  }
+
+  const top = padTop;
+  const bottom = Math.max(top + 1, height - padBottom);
+  const usableHeight = Math.max(1, bottom - top);
+  const maxValue = Math.max(...values, 1);
+  const step = values.length === 1 ? 0 : width / (values.length - 1);
+  const points = values.map((value, index) => {
+    const x = Number((step * index).toFixed(2));
+    const ratio = maxValue ? value / maxValue : 0;
+    const y = Number((bottom - ratio * usableHeight).toFixed(2));
+    return { x, y };
+  });
+
+  return points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
+}
+
+function dashboardAreaPath(values = [], width, height, options = {}) {
+  const linePath = dashboardSeriesPath(values, width, height, options);
+  if (!linePath) {
+    return "";
+  }
+
+  const step = values.length === 1 ? 0 : width / (values.length - 1);
+  const lastX = Number((step * Math.max(values.length - 1, 0)).toFixed(2));
+  return `${linePath} L${lastX},${height} L0,${height} Z`;
+}
+
+function dashboardVenueBreakdown(library = []) {
+  const counts = new Map();
+  library.forEach((paper) => {
+    const venue = String(paper?.venue || "Unknown").trim() || "Unknown";
+    counts.set(venue, (counts.get(venue) || 0) + 1);
+  });
+
+  return [...counts.entries()]
+    .map(([venue, count]) => ({ venue, count }))
+    .sort((left, right) => right.count - left.count || left.venue.localeCompare(right.venue));
+}
+
+function dashboardPaperTags(paper) {
+  return uniqueValues([...(paper?.matchedKeywords || []), ...(paper?.keywords || [])]).filter(Boolean).slice(0, 3);
+}
+
 function selectedReadingSession() {
   const sessions = effectiveReadingSessions();
   return sessions.find((session) => session.id === state.activeReadingSessionId) || sessions[0] || null;
@@ -817,6 +972,17 @@ function replaceProject(project) {
 async function loadProjects() {
   const payload = await api("api/projects");
   setProjects(payload.projects || []);
+}
+
+async function loadProjectLibrary() {
+  const project = activeProject();
+  if (!project) {
+    state.projectLibrary = [];
+    return;
+  }
+
+  const payload = await api(`api/projects/${encodeURIComponent(project.id)}/library`);
+  state.projectLibrary = Array.isArray(payload.results) ? payload.results : [];
 }
 
 async function loadReadingSessions({ preserveSelection = true } = {}) {
@@ -979,6 +1145,7 @@ async function savePaper(paper) {
       const payload = await api(path, { method: "DELETE" });
       replaceProject(payload.project);
       state.results = state.results.map((entry) => (entry.paperId === paper.paperId ? { ...entry, saved: false } : entry));
+      await loadProjectLibrary();
     } else {
       const payload = await api(`api/projects/${encodeURIComponent(project.id)}/library`, {
         method: "POST",
@@ -986,6 +1153,7 @@ async function savePaper(paper) {
       });
       replaceProject(payload.project);
       state.results = state.results.map((entry) => (entry.paperId === paper.paperId ? { ...entry, saved: true } : entry));
+      await loadProjectLibrary();
     }
 
     syncSelectedPaper();
@@ -1382,6 +1550,402 @@ function renderSearchScopeChip(scope, compact = false) {
         ${icon("x", { size: compact ? 9 : 10 })}
       </button>
     </span>
+  `;
+}
+
+function renderDashboardSearchModeToggle() {
+  return `
+    <div class="dashboard-submit" aria-label="Search mode">
+      ${Object.entries(SEARCH_MODES)
+        .map(([id, config]) => {
+          const active = state.searchMode === id;
+          const actionAttrs = active ? "" : `data-action="set-search-mode" data-search-mode="${escapeHtml(id)}"`;
+          return `
+            <button
+              type="${active ? "submit" : "button"}"
+              class="dashboard-sbtn ${active ? "active" : ""}"
+              data-mode="${escapeHtml(id)}"
+              title="${escapeHtml(config.ctaLabel)}"
+              aria-label="${escapeHtml(config.ctaLabel)}"
+              ${actionAttrs}
+              ${state.loading ? "disabled" : ""}
+            >
+              ${icon(config.icon, { size: 14.5 })}
+              <span class="dashboard-sbtn-copy">
+                <span>${escapeHtml(config.ctaLabel)}</span>
+                ${icon("ctaArrow", { size: 13 })}
+              </span>
+            </button>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderDashboardScopeChip(scope) {
+  return `
+    <span class="dashboard-scope-chip">
+      <span>${escapeHtml(scope.label)}</span>
+      <button type="button" class="dashboard-scope-chip-remove" data-action="remove-scope" data-scope-id="${escapeHtml(scope.id)}" aria-label="Remove scope">
+        ×
+      </button>
+    </span>
+  `;
+}
+
+function renderDashboardSegmentBar(segments = [], total, { dashedRemainder = false } = {}) {
+  const safeTotal = Math.max(Number(total) || 0, 0);
+  const safeSegments = segments.filter((segment) => Number(segment?.count) > 0);
+  const used = safeSegments.reduce((sum, segment) => sum + Number(segment.count || 0), 0);
+  const remainder = Math.max(safeTotal - used, 0);
+
+  return `
+    <div class="dashboard-kc-seg">
+      ${safeSegments
+        .map(
+          (segment) =>
+            `<span class="s" style="width:${dashboardPercent(Number(segment.count || 0), safeTotal || used || 1)}%; background:${segment.color}"></span>`,
+        )
+        .join("")}
+      ${
+        dashedRemainder
+          ? `<span class="dashed" style="${remainder ? "" : "flex:1"}"></span>`
+          : remainder
+            ? `<span class="s" style="width:${dashboardPercent(remainder, safeTotal)}%; background:${TOKENS.t4}"></span>`
+            : ""
+      }
+    </div>
+  `;
+}
+
+function renderDashboardWorklistRow(row, index) {
+  const { paper, queued, folderLabel, folderColor, tags, savedLabel } = row;
+  const pdfCollected = Boolean(paper.pdfUrl);
+
+  return `
+    <div class="dashboard-tbl-row data ${index === 0 ? "selected" : ""}">
+      <span class="dashboard-tbl-title">
+        <span class="t">${escapeHtml(paper.title || "Untitled paper")}</span>
+        <span class="a">${escapeHtml(formatAuthors(paper.authors || []))}</span>
+      </span>
+      <span class="dashboard-venue"><span class="vbar" style="background:${venueColor(paper.venue)}"></span>${escapeHtml(paper.venue || "Unknown")}</span>
+      <span class="dashboard-year mono">${escapeHtml(savedLabel)}</span>
+      <span>
+        ${
+          folderLabel
+            ? `<span class="dashboard-cell-folder"><span class="swatch" style="background:${folderColor || TOKENS.research}"></span>${escapeHtml(folderLabel)}</span>`
+            : '<span class="dashboard-cell-folder empty">+ 폴더 지정</span>'
+        }
+      </span>
+      <span class="dashboard-cell-tags">
+        ${
+          tags.length
+            ? tags.map((tag) => `<span class="dashboard-tag-pill auto">${escapeHtml(tag)}</span>`).join("")
+            : '<span class="dashboard-tag-pill muted">No tags</span>'
+        }
+        <span class="dashboard-tag-add">+</span>
+      </span>
+      <span><span class="dashboard-cell-queue ${queued ? "on" : ""}">${queued ? '<span class="dot"></span>queued' : "—"}</span></span>
+      <span>
+        <span class="dashboard-cell-pdf ${pdfCollected ? "on" : "empty"}">
+          ${pdfCollected ? `${icon("check", { size: 11, color: "currentColor" })}수집됨` : "drop"}
+        </span>
+      </span>
+    </div>
+  `;
+}
+
+function renderSearchDashboard(project) {
+  const library = dashboardLibraryItems();
+  const totalCollected = library.length;
+  const recentCount = dashboardRecentCount(library, 7, ["savedAt", "updatedAt", "createdAt"]);
+  const taggedCount = library.filter((paper) => dashboardPaperTags(paper).length > 0).length;
+  const pdfCount = library.filter((paper) => Boolean(paper.pdfUrl)).length;
+  const actualSessions = actualReadingSessions(project);
+  const queuedPaperIds = dashboardQueuedPaperIds(project);
+  const queueCount = Math.max(project?.queueCount || 0, queuedPaperIds.size);
+  const venueBreakdown = dashboardVenueBreakdown(library);
+  const venueCount = venueBreakdown.length;
+  const topVenue = venueBreakdown[0] || { venue: "Unknown", count: 0 };
+  const folderGroups = (() => {
+    const groups = new Map();
+    library.forEach((paper) => {
+      const label = String(paper?.folder || paper?.folderName || paper?.collectionName || "").trim();
+      if (!label) {
+        return;
+      }
+
+      const current = groups.get(label) || { label, count: 0, color: paper?.folderColor || "" };
+      current.count += 1;
+      current.color ||= paper?.folderColor || "";
+      groups.set(label, current);
+    });
+    return [...groups.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+  })();
+  const folderPalette = [TOKENS.research, TOKENS.search, TOKENS.result, TOKENS.writing, TOKENS.read, "#a67c3f"];
+  const folderSegments = folderGroups.slice(0, 6).map((group, index) => ({
+    ...group,
+    color: group.color || folderPalette[index % folderPalette.length],
+  }));
+  const folderCount = folderGroups.reduce((sum, group) => sum + group.count, 0);
+  const unclassifiedCount = Math.max(totalCollected - folderCount, 0);
+  const totalSeries = dashboardCumulativeCounts(library, 30, ["savedAt", "updatedAt", "createdAt"]);
+  const totalAreaPath = dashboardAreaPath(totalSeries, 120, 34, { padTop: 2, padBottom: 4 });
+  const totalLinePath = dashboardSeriesPath(totalSeries, 120, 34, { padTop: 2, padBottom: 4 });
+  const queueSeries = dashboardDailyCounts(
+    actualSessions.filter((session) => ["queue", "running"].includes(session.status)),
+    7,
+    ["updatedAt", "queuedAt", "createdAt"],
+  );
+  const venueSegments = (() => {
+    if (!venueBreakdown.length) {
+      return [];
+    }
+
+    const leading = venueBreakdown.slice(0, 4).map((entry, index) => ({
+      count: entry.count,
+      color: [TOKENS.tx, TOKENS.read, TOKENS.search, TOKENS.result][index % 4],
+    }));
+    const remainder = venueBreakdown.slice(4).reduce((sum, entry) => sum + entry.count, 0);
+    if (remainder) {
+      leading.push({ count: remainder, color: TOKENS.t4 });
+    }
+    return leading;
+  })();
+  const worklistRows = library.slice(0, 8).map((paper) => {
+    const tags = dashboardPaperTags(paper).slice(0, 2);
+    return {
+      paper,
+      queued: queuedPaperIds.has(paper.paperId),
+      folderLabel: String(paper?.folder || paper?.folderName || paper?.collectionName || "").trim(),
+      folderColor: paper?.folderColor || "",
+      tags,
+      savedLabel: dashboardRelativeAge(paper.savedAt || paper.updatedAt || paper.createdAt),
+    };
+  });
+  const recentWorkCount = dashboardRecentCount(library, 7, ["savedAt", "updatedAt", "createdAt"]);
+  const totalPages = Math.max(1, Math.ceil(totalCollected / 8));
+  const pageButtons = Array.from({ length: Math.min(totalPages, 3) }, (_, index) => index + 1);
+  const queueRecentCount = dashboardRecentCount(
+    actualSessions.filter((session) => ["queue", "running"].includes(session.status)),
+    7,
+    ["updatedAt", "queuedAt", "createdAt"],
+  );
+  const worklistRangeLabel =
+    totalCollected > 0 ? `1-${worklistRows.length} of ${totalCollected}` : "0 of 0";
+
+  return `
+    <div class="search-stage search-stage-dashboard" data-ares-surface="search-stage" data-ares-stage="search" data-search-layout="${escapeHtml(state.searchLayout)}">
+      <section class="search-dashboard" data-ares-surface="search-dashboard" data-ares-stage="search">
+        <section class="dashboard-hero-wrap">
+          <form class="dashboard-hero ${escapeHtml(state.searchMode)}" data-action="submit-search">
+            <span class="dashboard-lead-icon" aria-hidden="true">${icon("heroSearch", { size: 16, color: TOKENS.t3 })}</span>
+            <input
+              id="search-input"
+              type="text"
+              name="query"
+              autocomplete="off"
+              spellcheck="false"
+              value="${escapeHtml(state.searchInput)}"
+              placeholder="${escapeHtml(searchPlaceholder(state.searchMode))}"
+            />
+            ${renderDashboardSearchModeToggle()}
+          </form>
+
+          <div class="dashboard-scope-row">
+            <span class="dashboard-scope-label">Target</span>
+            ${state.searchScopes.map((scope) => renderDashboardScopeChip(scope)).join("")}
+            <button
+              type="button"
+              class="dashboard-scope-add"
+              data-action="open-scope-picker"
+              data-scope-tab="conference"
+              data-scope-source="hero"
+            >
+              <span>+</span>
+              <span>Add target</span>
+            </button>
+          </div>
+
+          ${state.searchMeta.warning ? renderSearchNotice(state.searchMeta.warning) : ""}
+          ${state.error ? renderSearchNotice(state.error) : ""}
+        </section>
+
+        <div class="dashboard-sec-head">
+          <h2>Overview</h2>
+          <span class="hint">프로젝트 라이브러리 · 최근 30일</span>
+        </div>
+        <div class="dashboard-kpi-grid">
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">총 수집</div>
+            <div class="dashboard-kpi-val">${escapeHtml(String(totalCollected))}</div>
+            <div class="dashboard-kpi-sub"><span class="up">+${escapeHtml(String(recentCount))}</span> · 지난 7일</div>
+            <div class="dashboard-kpi-chart">
+              <svg class="dashboard-kc-area" viewBox="0 0 120 34" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="dashboardKpiArea" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="#2a2a2e" stop-opacity="0.14"></stop>
+                    <stop offset="100%" stop-color="#2a2a2e" stop-opacity="0"></stop>
+                  </linearGradient>
+                </defs>
+                <path d="${totalAreaPath || "M0,34 L120,34 L120,34 L0,34 Z"}" fill="url(#dashboardKpiArea)"></path>
+                <path d="${totalLinePath || "M0,34 L120,34"}" fill="none" stroke="#2a2a2e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              <div class="dashboard-kpi-chart-legend"><span>30d ago</span><span>today</span></div>
+            </div>
+          </div>
+
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">폴더 지정</div>
+            <div class="dashboard-kpi-val">${escapeHtml(String(folderCount))}<span class="of">/${escapeHtml(String(totalCollected))}</span></div>
+            <div class="dashboard-kpi-sub"><span class="down">${escapeHtml(String(unclassifiedCount))}</span> 미분류</div>
+            <div class="dashboard-kpi-chart">
+              ${renderDashboardSegmentBar(folderSegments, totalCollected, { dashedRemainder: true })}
+              <div class="dashboard-kpi-chart-legend"><span>${escapeHtml(`${folderGroups.length} 폴더 · ${dashboardPercent(folderCount, totalCollected)}%`)}</span><span style="color:var(--warn)">미분류 ${escapeHtml(String(dashboardPercent(unclassifiedCount, totalCollected)))}%</span></div>
+            </div>
+          </div>
+
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">Reading queue</div>
+            <div class="dashboard-kpi-val">${escapeHtml(String(queueCount))}</div>
+            <div class="dashboard-kpi-sub"><span class="up">+${escapeHtml(String(queueRecentCount))}</span> · 대기 중</div>
+            <div class="dashboard-kpi-chart">
+              <div class="dashboard-kc-bars">
+                ${queueSeries
+                  .map((value, index) => {
+                    const height = queueSeries.some(Boolean) ? Math.max(8, dashboardPercent(value, Math.max(...queueSeries, 1))) : 8;
+                    return `<span class="b ${index < Math.max(0, queueSeries.length - 2) ? "dim" : ""}" style="height:${height}%"></span>`;
+                  })
+                  .join("")}
+              </div>
+              <div class="dashboard-kpi-chart-legend"><span>Mon</span><span>Sun</span></div>
+            </div>
+          </div>
+
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">수집 출처</div>
+            <div class="dashboard-kpi-val">${escapeHtml(String(venueCount))} <span class="of">venues</span></div>
+            <div class="dashboard-kpi-sub">${escapeHtml(topVenue.venue)} ${escapeHtml(String(topVenue.count))} · 최다</div>
+            <div class="dashboard-kpi-chart">
+              ${renderDashboardSegmentBar(venueSegments, totalCollected)}
+              <div class="dashboard-kpi-chart-legend"><span>${escapeHtml(venueBreakdown.slice(0, 3).map((entry) => entry.venue).join(" · ") || "No venue data")}</span><span>${escapeHtml(venueBreakdown.length > 3 ? "Other" : "")}</span></div>
+            </div>
+          </div>
+
+          <div class="dashboard-kpi">
+            <div class="dashboard-kpi-label">PDF 수집</div>
+            <div class="dashboard-kpi-val">${escapeHtml(String(pdfCount))}<span class="of">/${escapeHtml(String(totalCollected))}</span></div>
+            <div class="dashboard-kpi-sub"><span class="down">${escapeHtml(String(Math.max(totalCollected - pdfCount, 0)))}</span> 없음</div>
+            <div class="dashboard-kpi-chart">
+              ${renderDashboardSegmentBar([{ count: pdfCount, color: TOKENS.search }], totalCollected, { dashedRemainder: true })}
+              <div class="dashboard-kpi-chart-legend"><span>수집 ${escapeHtml(String(dashboardPercent(pdfCount, totalCollected)))}%</span><span style="color:var(--warn)">미수집 ${escapeHtml(String(dashboardPercent(Math.max(totalCollected - pdfCount, 0), totalCollected)))}%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-sec-head">
+          <h2>Analytics</h2>
+          <span class="hint">수집 흐름 · 정리 진행도</span>
+        </div>
+        <div class="dashboard-chart-row">
+          <article class="dashboard-card">
+            <div class="dashboard-card-head">
+              <div>
+                <div class="dashboard-card-title">수집 추이</div>
+                <div class="dashboard-card-sub">기간별 수집 논문 수</div>
+              </div>
+              <div class="dashboard-toggle-group">
+                <button type="button">7D</button><button type="button" class="active">30D</button><button type="button">90D</button><button type="button">ALL</button>
+              </div>
+            </div>
+            <svg class="dashboard-chart-area" viewBox="0 0 640 170" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="dashboardAreaMain" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#5e9c6f" stop-opacity="0.18"></stop>
+                  <stop offset="100%" stop-color="#5e9c6f" stop-opacity="0"></stop>
+                </linearGradient>
+              </defs>
+              <g stroke="#efeeeb" stroke-width="1">
+                <line x1="0" y1="32" x2="640" y2="32"></line>
+                <line x1="0" y1="82" x2="640" y2="82"></line>
+                <line x1="0" y1="132" x2="640" y2="132"></line>
+              </g>
+              <path d="${dashboardAreaPath(totalSeries, 640, 170, { padTop: 22, padBottom: 18 }) || "M0,170 L640,170 L640,170 L0,170 Z"}" fill="url(#dashboardAreaMain)"></path>
+              <path d="${dashboardSeriesPath(totalSeries, 640, 170, { padTop: 22, padBottom: 18 }) || "M0,170 L640,170"}" fill="none" stroke="#5e9c6f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+              <g font-family="Inter,sans-serif" font-size="10" fill="#b0b0b8">
+                <text x="0" y="164">30d ago</text>
+                <text x="214" y="164">20d</text>
+                <text x="428" y="164">10d</text>
+                <text x="602" y="164">Today</text>
+              </g>
+            </svg>
+          </article>
+
+          <article class="dashboard-card">
+            <div class="dashboard-card-head">
+              <div>
+                <div class="dashboard-card-title">워크플로우 상태</div>
+                <div class="dashboard-card-sub">수집 → Reading</div>
+              </div>
+            </div>
+            <div class="dashboard-funnel">
+              <div class="dashboard-funnel-row"><span class="dashboard-funnel-label">수집됨</span><div class="dashboard-funnel-bar"><span style="width:100%; background:#2a2a2e"></span></div><span class="dashboard-funnel-val mono">${escapeHtml(String(totalCollected))}</span><span class="dashboard-funnel-pct mono">100%</span></div>
+              <div class="dashboard-funnel-row"><span class="dashboard-funnel-label">폴더 지정</span><div class="dashboard-funnel-bar"><span style="width:${dashboardPercent(folderCount, totalCollected)}%; background:${folderSegments[0]?.color || TOKENS.research}"></span></div><span class="dashboard-funnel-val mono">${escapeHtml(String(folderCount))}</span><span class="dashboard-funnel-pct mono">${escapeHtml(String(dashboardPercent(folderCount, totalCollected)))}%</span></div>
+              <div class="dashboard-funnel-row"><span class="dashboard-funnel-label">태그 생성</span><div class="dashboard-funnel-bar"><span style="width:${dashboardPercent(taggedCount, totalCollected)}%; background:${TOKENS.read}"></span></div><span class="dashboard-funnel-val mono">${escapeHtml(String(taggedCount))}</span><span class="dashboard-funnel-pct mono">${escapeHtml(String(dashboardPercent(taggedCount, totalCollected)))}%</span></div>
+              <div class="dashboard-funnel-row"><span class="dashboard-funnel-label">Reading 큐</span><div class="dashboard-funnel-bar"><span style="width:${dashboardPercent(queueCount, totalCollected)}%; background:${TOKENS.writing}"></span></div><span class="dashboard-funnel-val mono">${escapeHtml(String(queueCount))}</span><span class="dashboard-funnel-pct mono">${escapeHtml(String(dashboardPercent(queueCount, totalCollected)))}%</span></div>
+              <div class="dashboard-funnel-row"><span class="dashboard-funnel-label">PDF 수집</span><div class="dashboard-funnel-bar"><span style="width:${dashboardPercent(pdfCount, totalCollected)}%; background:${TOKENS.search}"></span></div><span class="dashboard-funnel-val mono">${escapeHtml(String(pdfCount))}</span><span class="dashboard-funnel-pct mono">${escapeHtml(String(dashboardPercent(pdfCount, totalCollected)))}%</span></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="dashboard-tbl-head">
+          <h2>Worklist</h2>
+          <div class="dashboard-filter-chips">
+            <button type="button" class="dashboard-f-chip active">전체<span class="n">${escapeHtml(String(totalCollected))}</span></button>
+            <button type="button" class="dashboard-f-chip">폴더 미분류<span class="n">${escapeHtml(String(unclassifiedCount))}</span></button>
+            <button type="button" class="dashboard-f-chip">Reading 대기<span class="n">${escapeHtml(String(queueCount))}</span></button>
+            <button type="button" class="dashboard-f-chip">PDF 없음<span class="n">${escapeHtml(String(Math.max(totalCollected - pdfCount, 0)))}</span></button>
+            <button type="button" class="dashboard-f-chip">최근 수집<span class="n">${escapeHtml(String(recentWorkCount))}</span></button>
+          </div>
+          <div class="dashboard-tool">
+            <button type="button" class="dashboard-tool-btn">
+              ${icon("filter", { size: 11, color: "currentColor" })}
+              최근 수집순
+            </button>
+          </div>
+        </div>
+
+        <div class="dashboard-tbl">
+          <div class="dashboard-tbl-row header">
+            <span>Title · Authors</span>
+            <span>Venue</span>
+            <span>Saved</span>
+            <span>Folder</span>
+            <span>Tags</span>
+            <span>Reading</span>
+            <span>PDF</span>
+          </div>
+          ${
+            worklistRows.length
+              ? worklistRows.map((row, index) => renderDashboardWorklistRow(row, index)).join("")
+              : '<div class="empty-state dashboard-worklist-empty">저장된 논문이 아직 없습니다. 검색 결과에서 Save를 누르면 이 Worklist에 논문이 쌓입니다.</div>'
+          }
+          <div class="dashboard-tbl-foot">
+            <span>${escapeHtml(worklistRangeLabel)}</span>
+            <div class="dashboard-page-btns">
+              <button type="button" class="dashboard-page-btn">‹</button>
+              ${pageButtons
+                .map((page) => `<button type="button" class="dashboard-page-btn ${page === 1 ? "active" : ""}">${page}</button>`)
+                .join("")}
+              <button type="button" class="dashboard-page-btn">›</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      ${renderSearchScopePicker()}
+    </div>
   `;
 }
 
@@ -1846,6 +2410,10 @@ function renderSearchScopePicker() {
 }
 
 function renderSearchStage(project) {
+  if (!state.hasSearched) {
+    return renderSearchDashboard(project);
+  }
+
   const visible = visibleResults();
   const selected = selectedPaper();
   const totalResults = state.searchMeta.total || state.results.length;
@@ -3510,10 +4078,12 @@ document.addEventListener("click", async (event) => {
   if (action === "select-project") {
     clearActiveRunPoll();
     state.activeProjectId = trigger.dataset.projectId;
+    state.projectLibrary = [];
     state.scopePicker = null;
     saveStorage(STORAGE_KEYS.project, state.activeProjectId);
     state.searchInput = activeProject()?.defaultQuery || "";
     resetSearchState();
+    await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: false });
     render();
     return;
@@ -3976,6 +4546,7 @@ async function boot() {
     const project = activeProject();
     state.searchInput = project?.defaultQuery || "";
     resetSearchState();
+    await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: false });
     const pendingSession = state.readingSessions.find((session) => session.runId && session.status !== "done");
     if (pendingSession?.runId) {
