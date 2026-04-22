@@ -21,13 +21,17 @@ const TOKENS = {
 const SEARCH_MODES = {
   scout: {
     label: "Agent",
-    icon: "sparkles",
+    ctaLabel: "Agent Search",
+    compactLabel: "Agent",
+    icon: "compass",
     color: TOKENS.search,
     desc: "AI 에이전트가 의미 기반으로 탐색",
   },
   keyword: {
     label: "Keyword",
-    icon: "book",
+    ctaLabel: "Keyword Search",
+    compactLabel: "Keyword",
+    icon: "keywordBook",
     color: TOKENS.read,
     desc: "키워드 중심으로 빠르게 탐색",
   },
@@ -216,8 +220,14 @@ function icon(name, { size = 16, color = "currentColor", className = "" } = {}) 
   const icons = {
     search:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>',
+    heroSearch:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>',
     book:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>',
+    keywordBook:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V4.5A1.5 1.5 0 0 1 5.5 3H20v16H5.5A1.5 1.5 0 0 1 4 17.5Z"></path><path d="M8 7h8M8 11h6"></path></svg>',
+    compass:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="m15.5 8.5-3 6-6 3 3-6Z"></path></svg>',
     flask:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"></path><path d="M10 3v6L4.5 18a2 2 0 0 0 1.7 3h11.6a2 2 0 0 0 1.7-3L14 9V3"></path><path d="M7 15h10"></path></svg>',
     chart:
@@ -228,6 +238,8 @@ function icon(name, { size = 16, color = "currentColor", className = "" } = {}) 
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z"></path></svg>',
     chevR:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>',
+    ctaArrow:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>',
     chevL:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>',
     chevD:
@@ -1058,22 +1070,27 @@ function renderSearchNotice(message) {
 
 function renderSearchModeToggle() {
   return `
-    <div class="mode-seg" role="tablist" aria-label="Search mode">
+    <div class="hero-submit" aria-label="Search mode">
       ${Object.entries(SEARCH_MODES)
         .map(([id, config]) => {
           const active = state.searchMode === id;
+          const actionAttrs = active ? "" : `data-action="set-search-mode" data-search-mode="${escapeHtml(id)}"`;
           return `
             <button
-              type="button"
-              role="tab"
-              aria-selected="${active}"
-              class="mode-tab ${active ? "active" : ""}"
-              data-action="set-search-mode"
-              data-search-mode="${escapeHtml(id)}"
-              title="${escapeHtml(config.desc)}"
+              type="${active ? "submit" : "button"}"
+              class="hero-submit-btn ${active ? "active" : ""}"
+              data-mode="${escapeHtml(id)}"
+              title="${escapeHtml(config.ctaLabel)}"
+              aria-label="${escapeHtml(config.ctaLabel)}"
+              ${actionAttrs}
+              ${state.loading ? "disabled" : ""}
             >
-              ${icon(config.icon, { size: 12, color: active ? config.color : TOKENS.t3 })}
-              <span>${escapeHtml(config.label)}</span>
+              ${icon(config.icon, { size: 14.5 })}
+              <span class="expand">
+                <span class="hero-submit-label hero-submit-label-desktop">${escapeHtml(config.ctaLabel)}</span>
+                <span class="hero-submit-label hero-submit-label-mobile">${escapeHtml(config.compactLabel)}</span>
+                <span class="go" aria-hidden="true">${icon("ctaArrow", { size: 13 })}</span>
+              </span>
             </button>
           `;
         })
@@ -1238,7 +1255,7 @@ function renderSearchHero(visible, totalResults) {
   const modeConfig = SEARCH_MODES[state.searchMode];
   const providerLabel = searchProviderLabel();
   const statusMeta = !state.hasSearched
-    ? "Press Search to start"
+    ? `Press ${modeConfig.ctaLabel} to start`
     : state.searchMode === "scout"
       ? `${visible.length}/${Math.max(totalResults, visible.length)} · ${state.searchMeta.live ? "live" : "seed"} · ${state.searchMeta.live ? "$live" : "free"}`
       : `${Math.max(totalResults, visible.length)} · ${state.searchMeta.live ? "live" : "cached"} · free`;
@@ -1246,9 +1263,7 @@ function renderSearchHero(visible, totalResults) {
   return `
     <div class="hero-wrap">
       <form class="hero-input ${escapeHtml(state.searchMode)}" data-action="submit-search">
-        ${renderSearchModeToggle()}
-        <span class="hero-input-divider" aria-hidden="true"></span>
-        ${icon("search", { size: 17, color: modeConfig.color })}
+        <span class="hero-lead-icon" aria-hidden="true">${icon("heroSearch", { size: 16, color: TOKENS.t3 })}</span>
         <input
           id="search-input"
           type="text"
@@ -1256,12 +1271,9 @@ function renderSearchHero(visible, totalResults) {
           autocomplete="off"
           spellcheck="false"
           value="${escapeHtml(state.searchInput)}"
-          placeholder="${escapeHtml(state.searchMode === "scout" ? "어떤 논문을 찾으시나요? 자연어로 질문해보세요" : "키워드, 저자, 제목으로 검색")}"
+          placeholder="${escapeHtml(state.searchMode === "scout" ? "의미 기반으로 논문을 찾아볼까요?" : "키워드, 저자, 제목으로 검색")}"
         />
-        <button type="submit" class="btn-p btn-hero-submit" ${state.loading ? "disabled" : ""}>
-          ${icon(modeConfig.icon, { size: 13, color: "#ffffff" })}
-          <span>${state.loading ? "Searching..." : "Search"}</span>
-        </button>
+        ${renderSearchModeToggle()}
       </form>
 
       <div class="hero-meta ${escapeHtml(state.searchMode)}">
@@ -2135,6 +2147,7 @@ document.addEventListener("click", async (event) => {
     state.searchMode = nextMode;
     syncSelectedPaper();
     render();
+    focusSearchInput();
     return;
   }
 
