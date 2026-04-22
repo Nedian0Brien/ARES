@@ -1994,35 +1994,27 @@ function previewSearchModeSwitch(nextMode) {
     return Promise.resolve();
   }
 
-  hero.classList.remove("scout", "keyword");
-  hero.classList.add(nextMode);
-
-  const activeButton = hero.querySelector(".hero-submit-btn.active");
-  const nextButton = hero.querySelector(`.hero-submit-btn[data-mode="${nextMode}"]`);
-  if (activeButton) {
-    activeButton.classList.remove("active");
-    activeButton.type = "button";
-    activeButton.dataset.action = "set-search-mode";
-    activeButton.dataset.searchMode = currentMode;
-  }
-  if (nextButton) {
-    nextButton.classList.add("active");
-    nextButton.type = "submit";
-    delete nextButton.dataset.action;
-    delete nextButton.dataset.searchMode;
-  }
-
-  const input = hero.querySelector("#search-input");
-  if (input) {
-    input.placeholder = searchPlaceholder(nextMode);
-  }
-
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
     return Promise.resolve();
   }
 
   return new Promise((resolve) => {
-    window.setTimeout(resolve, SEARCH_MODE_TRANSITION_MS);
+    window.requestAnimationFrame(() => {
+      hero.classList.remove("scout", "keyword");
+      hero.classList.add(nextMode);
+
+      const activeButton = hero.querySelector(".hero-submit-btn.active");
+      const nextButton = hero.querySelector(`.hero-submit-btn[data-mode="${nextMode}"]`);
+      activeButton?.classList.remove("active");
+      nextButton?.classList.add("active");
+
+      const input = hero.querySelector("#search-input");
+      if (input) {
+        input.placeholder = searchPlaceholder(nextMode);
+      }
+
+      window.setTimeout(resolve, SEARCH_MODE_TRANSITION_MS);
+    });
   });
 }
 
@@ -2154,13 +2146,14 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "set-search-mode") {
+    event.preventDefault();
     const nextMode = trigger.dataset.searchMode === "keyword" ? "keyword" : "scout";
     if (nextMode === state.searchMode) {
       return;
     }
 
-    state.searchMode = nextMode;
     await previewSearchModeSwitch(nextMode);
+    state.searchMode = nextMode;
     syncSelectedPaper();
     render();
     focusSearchInput();
