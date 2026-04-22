@@ -1699,11 +1699,9 @@ a {
 }
 
 .hero-meta {
-  align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  justify-content: space-between;
   margin-top: 10px;
 }
 
@@ -1713,30 +1711,6 @@ a {
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
-}
-
-.hero-meta-status {
-  align-items: center;
-  color: var(--t3);
-  display: inline-flex;
-  flex-shrink: 0;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10.5px;
-  gap: 6px;
-  letter-spacing: 0;
-}
-
-.hero-meta-source {
-  color: var(--t3);
-}
-
-.hero-meta-sep {
-  color: var(--t4);
-  font-size: 9px;
-}
-
-.hero-meta-stats {
-  color: var(--t2);
 }
 
 .scope-empty {

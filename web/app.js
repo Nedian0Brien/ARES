@@ -104,6 +104,8 @@ const STORAGE_KEYS = {
   project: "ares.project",
 };
 
+const SEARCH_MODE_TRANSITION_MS = 280;
+
 const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
 const PROXY_DEV_PATH_PATTERN = /^\/proxy\/\d+(?:\/|$)/;
 
@@ -971,29 +973,8 @@ function resolveScopeCatalogItem(type, id) {
   return [...(groups.popular || []), ...(groups.recent || [])].find((item) => item.id === id) || null;
 }
 
-function searchProviderLabel() {
-  if (!state.hasSearched) {
-    return "Ready";
-  }
-
-  const provider = String(state.searchMeta.provider || "");
-  if (provider === "scout-agent") {
-    const runtime = String(state.searchMeta.agentRuntime || "scout").trim().toLowerCase();
-    if (runtime === "codex") {
-      return "Codex Scout";
-    }
-    if (!runtime) {
-      return "Scout agent";
-    }
-    return `${runtime.slice(0, 1).toUpperCase()}${runtime.slice(1)} Scout`;
-  }
-  if (provider === "openalex") {
-    return "OpenAlex";
-  }
-  if (provider === "seed") {
-    return "ARES seed library";
-  }
-  return provider || "Search provider";
+function searchPlaceholder(mode) {
+  return mode === "scout" ? "의미 기반으로 논문을 찾아볼까요?" : "키워드, 저자, 제목으로 검색";
 }
 
 function searchYearOptions() {
@@ -1252,14 +1233,6 @@ function renderSearchFilterPanel(project, visible) {
 }
 
 function renderSearchHero(visible, totalResults) {
-  const modeConfig = SEARCH_MODES[state.searchMode];
-  const providerLabel = searchProviderLabel();
-  const statusMeta = !state.hasSearched
-    ? `Press ${modeConfig.ctaLabel} to start`
-    : state.searchMode === "scout"
-      ? `${visible.length}/${Math.max(totalResults, visible.length)} · ${state.searchMeta.live ? "live" : "seed"} · ${state.searchMeta.live ? "$live" : "free"}`
-      : `${Math.max(totalResults, visible.length)} · ${state.searchMeta.live ? "live" : "cached"} · free`;
-
   return `
     <div class="hero-wrap">
       <form class="hero-input ${escapeHtml(state.searchMode)}" data-action="submit-search">
@@ -1271,7 +1244,7 @@ function renderSearchHero(visible, totalResults) {
           autocomplete="off"
           spellcheck="false"
           value="${escapeHtml(state.searchInput)}"
-          placeholder="${escapeHtml(state.searchMode === "scout" ? "의미 기반으로 논문을 찾아볼까요?" : "키워드, 저자, 제목으로 검색")}"
+          placeholder="${escapeHtml(searchPlaceholder(state.searchMode))}"
         />
         ${renderSearchModeToggle()}
       </form>
@@ -1290,11 +1263,6 @@ function renderSearchHero(visible, totalResults) {
             ${icon("plus", { size: 10 })}
             <span>Add target</span>
           </button>
-        </div>
-        <div class="hero-meta-status">
-          <span class="hero-meta-source">${escapeHtml(providerLabel)}</span>
-          <span class="hero-meta-sep">·</span>
-          <span class="hero-meta-stats">${escapeHtml(statusMeta)}</span>
         </div>
       </div>
 
@@ -2015,6 +1983,49 @@ function focusSearchInput({ forceSearchStage = false, select = false } = {}) {
   });
 }
 
+function previewSearchModeSwitch(nextMode) {
+  const hero = document.querySelector(".hero-input");
+  if (!hero) {
+    return Promise.resolve();
+  }
+
+  const currentMode = hero.classList.contains("scout") ? "scout" : "keyword";
+  if (currentMode === nextMode) {
+    return Promise.resolve();
+  }
+
+  hero.classList.remove("scout", "keyword");
+  hero.classList.add(nextMode);
+
+  const activeButton = hero.querySelector(".hero-submit-btn.active");
+  const nextButton = hero.querySelector(`.hero-submit-btn[data-mode="${nextMode}"]`);
+  if (activeButton) {
+    activeButton.classList.remove("active");
+    activeButton.type = "button";
+    activeButton.dataset.action = "set-search-mode";
+    activeButton.dataset.searchMode = currentMode;
+  }
+  if (nextButton) {
+    nextButton.classList.add("active");
+    nextButton.type = "submit";
+    delete nextButton.dataset.action;
+    delete nextButton.dataset.searchMode;
+  }
+
+  const input = hero.querySelector("#search-input");
+  if (input) {
+    input.placeholder = searchPlaceholder(nextMode);
+  }
+
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, SEARCH_MODE_TRANSITION_MS);
+  });
+}
+
 function focusScopePickerInput() {
   window.requestAnimationFrame(() => {
     const input = document.querySelector('[name="scopePickerQuery"]');
@@ -2144,7 +2155,12 @@ document.addEventListener("click", async (event) => {
 
   if (action === "set-search-mode") {
     const nextMode = trigger.dataset.searchMode === "keyword" ? "keyword" : "scout";
+    if (nextMode === state.searchMode) {
+      return;
+    }
+
     state.searchMode = nextMode;
+    await previewSearchModeSwitch(nextMode);
     syncSelectedPaper();
     render();
     focusSearchInput();
