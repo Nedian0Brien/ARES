@@ -3373,6 +3373,40 @@ function startReadingResize(axis, event) {
   document.body.classList.add("reading-resize-active");
 }
 
+function applyReadingSplitUI() {
+  if (state.activeStage !== "reading") {
+    return false;
+  }
+
+  const stage = document.querySelector('[data-ares-surface="reading-stage"]');
+  const split = stage?.querySelector(".reading-split");
+  const docPane = split?.querySelector(".reading-doc-pane");
+  if (!stage || !split || !docPane) {
+    return false;
+  }
+
+  const orientation = state.readingOrientation === "vertical" ? "vertical" : "horizontal";
+  const splitValue = orientation === "vertical" ? state.readingSplitVertical : state.readingSplitHorizontal;
+  const workbenchPane = split.querySelector(".reading-workbench-pane");
+  const handle = split.querySelector(".reading-resize-handle");
+
+  stage.dataset.readingOrientation = orientation;
+  split.classList.toggle("is-vertical", orientation === "vertical");
+  docPane.style.flex = state.readingWorkbenchCollapsed ? "1 1 auto" : `0 0 calc(${splitValue}% - 2.5px)`;
+
+  if (workbenchPane) {
+    workbenchPane.style.flex = `0 0 calc(${100 - splitValue}% - 2.5px)`;
+  }
+
+  if (handle) {
+    handle.classList.toggle("is-vertical", orientation === "vertical");
+    handle.classList.toggle("is-horizontal", orientation !== "vertical");
+    handle.dataset.readingResizeAxis = orientation;
+  }
+
+  return true;
+}
+
 function stopReadingResize() {
   readingResizeDrag = null;
   if (readingResizeFrame) {
@@ -3402,7 +3436,7 @@ function updateReadingSplitFromPointer(clientX, clientY) {
     const next = clampValue(readingResizeDrag.startSplit + (delta / total) * 100, bounds.min, bounds.max);
     if (Math.abs(next - state.readingSplitVertical) >= 0.1) {
       state.readingSplitVertical = Number(next.toFixed(2));
-      render();
+      applyReadingSplitUI();
     }
     return;
   }
@@ -3412,7 +3446,7 @@ function updateReadingSplitFromPointer(clientX, clientY) {
   const next = clampValue(readingResizeDrag.startSplit + (delta / total) * 100, bounds.min, bounds.max);
   if (Math.abs(next - state.readingSplitHorizontal) >= 0.1) {
     state.readingSplitHorizontal = Number(next.toFixed(2));
-    render();
+    applyReadingSplitUI();
   }
 }
 
