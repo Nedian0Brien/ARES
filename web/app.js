@@ -2527,8 +2527,6 @@ function renderReadingStage(project) {
       data-ares-stage="reading"
       data-reading-orientation="${escapeHtml(state.readingOrientation)}"
     >
-      <span class="reading-variant">Final · Unified Workbench<span style="opacity:0.7;margin-left:6px">· ${escapeHtml(state.readingOrientation)}</span></span>
-
       <div class="reading-metabar">
         <div class="reading-crumb-group">
           ${icon("book", { size: 13, color: TOKENS.read })}

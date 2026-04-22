@@ -1177,21 +1177,6 @@ a {
   padding: 28px 30px;
 }
 
-.reading-variant {
-  background: rgba(94, 106, 210, 0.12);
-  border: 1px solid rgba(94, 106, 210, 0.3);
-  border-radius: 999px;
-  color: var(--read);
-  display: flex;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 9px;
-  position: fixed;
-  right: 12px;
-  top: 52px;
-  z-index: 25;
-}
-
 .reading-metabar {
   align-items: center;
   background: var(--s1);
@@ -2502,10 +2487,6 @@ a {
 }
 
 @media (max-width: 900px) {
-  .reading-variant {
-    display: none;
-  }
-
   .reading-shell-main {
     flex-direction: column;
   }
