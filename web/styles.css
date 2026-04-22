@@ -143,8 +143,31 @@ a {
   border-color: var(--b2);
 }
 
+.btn-ghost {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--t2);
+  display: inline-flex;
+  gap: 6px;
+  letter-spacing: -0.006em;
+  padding: 5px 7px;
+}
+
+.btn-ghost:hover {
+  background: var(--s2);
+  color: var(--tx);
+}
+
+.btn-ghost:focus-visible {
+  outline: 2px solid rgba(94, 106, 210, 0.3);
+  outline-offset: 1px;
+}
+
 .btn-p:disabled,
-.btn-s:disabled {
+.btn-s:disabled,
+.btn-ghost:disabled {
   cursor: progress;
   opacity: 0.6;
 }
