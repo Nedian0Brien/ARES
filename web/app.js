@@ -105,6 +105,10 @@ const STORAGE_KEYS = {
 };
 
 const SEARCH_MODE_TRANSITION_MS = 280;
+const SEARCH_LAYOUT_BREAKPOINTS = {
+  mobileMax: 900,
+  tabletMax: 1279,
+};
 
 const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
 const PROXY_DEV_PATH_PATTERN = /^\/proxy\/\d+(?:\/|$)/;
@@ -137,6 +141,7 @@ function resolveAppBaseUrl(locationLike = window.location) {
 }
 
 const APP_BASE_URL = resolveAppBaseUrl();
+const INITIAL_SEARCH_LAYOUT = detectSearchLayout();
 
 const state = {
   booting: true,
@@ -158,8 +163,9 @@ const state = {
   selectedPaperId: "",
   sort: "relevance",
   searchMode: "keyword",
-  filterPanelOpen: true,
-  previewPanelOpen: true,
+  searchLayout: INITIAL_SEARCH_LAYOUT,
+  filterPanelOpen: INITIAL_SEARCH_LAYOUT !== "tablet",
+  previewPanelOpen: INITIAL_SEARCH_LAYOUT !== "tablet",
   scopePicker: null,
   scopePickerQuery: "",
   searchScopes: [],
@@ -216,6 +222,53 @@ function normalizeStage(stageId) {
 
 function stageById(stageId) {
   return WORKFLOW_STAGES.find((stage) => stage.id === stageId) || WORKFLOW_STAGES[0];
+}
+
+function detectSearchLayout(width = window.innerWidth) {
+  if (width <= SEARCH_LAYOUT_BREAKPOINTS.mobileMax) {
+    return "mobile";
+  }
+
+  if (width <= SEARCH_LAYOUT_BREAKPOINTS.tabletMax) {
+    return "tablet";
+  }
+
+  return "desktop";
+}
+
+function isTabletSearchLayout() {
+  return state.searchLayout === "tablet";
+}
+
+function syncResponsiveSearchLayout(nextLayout = detectSearchLayout()) {
+  const previousLayout = state.searchLayout;
+  if (previousLayout === nextLayout) {
+    return false;
+  }
+
+  state.searchLayout = nextLayout;
+
+  if (nextLayout === "tablet") {
+    state.filterPanelOpen = false;
+    state.previewPanelOpen = false;
+    state.scopePicker = null;
+    state.scopePickerQuery = "";
+    return true;
+  }
+
+  if (previousLayout === "tablet" && nextLayout === "desktop") {
+    state.filterPanelOpen = true;
+    state.previewPanelOpen = true;
+    return true;
+  }
+
+  if (previousLayout === "tablet" && nextLayout === "mobile") {
+    state.filterPanelOpen = true;
+    state.previewPanelOpen = Boolean(state.selectedPaperId);
+    return true;
+  }
+
+  return true;
 }
 
 function icon(name, { size = 16, color = "currentColor", className = "" } = {}) {
@@ -621,6 +674,11 @@ function resetSearchState() {
     agentRuntime: "",
   };
   state.filters.venues = new Set();
+
+  if (isTabletSearchLayout()) {
+    state.filterPanelOpen = false;
+    state.previewPanelOpen = false;
+  }
 }
 
 async function runSearch({ preserveSelection = false } = {}) {
@@ -1117,6 +1175,7 @@ function renderSearchFilterSection(label, iconName, sectionKey, bodyMarkup, acti
 function renderSearchFilterPanel(project, visible) {
   const savedVisibleCount = visible.filter((paper) => paper.saved).length;
   const newVisibleCount = Math.max(visible.length - savedVisibleCount, 0);
+  const tabletDrawer = isTabletSearchLayout();
 
   if (!state.filterPanelOpen) {
     return `
@@ -1204,10 +1263,11 @@ function renderSearchFilterPanel(project, visible) {
   `;
 
   return `
-    <aside class="search-filters search-filters-focal" data-ares-surface="search-filters" data-ares-stage="search">
+    ${tabletDrawer ? '<div class="panel-backdrop panel-backdrop-left" data-action="close-filter-panel" aria-hidden="true"></div>' : ""}
+    <aside class="search-filters search-filters-focal${tabletDrawer ? " panel-drawer panel-drawer-left" : ""}" data-ares-surface="search-filters" data-ares-stage="search">
       <div class="search-filters-header">
         <span class="filter-eyebrow">Filters</span>
-        <button type="button" class="panel-toggle-btn" data-action="toggle-filter-panel" title="필터 접기">
+        <button type="button" class="panel-toggle-btn" data-action="${tabletDrawer ? "close-filter-panel" : "toggle-filter-panel"}" title="필터 접기">
           ${icon("chevL", { size: 13, color: TOKENS.t2 })}
         </button>
       </div>
@@ -1345,6 +1405,11 @@ function renderSearchResultsList(visible) {
 }
 
 function renderSearchPreview(paper) {
+  const tabletDrawer = isTabletSearchLayout();
+  const previewDrawerClass = tabletDrawer ? " panel-drawer panel-drawer-right" : "";
+  const previewCloseAction = tabletDrawer ? "close-preview-panel" : "toggle-preview-panel";
+  const previewBackdropAction = tabletDrawer ? "close-preview-panel" : "close-preview-modal";
+
   if (!state.previewPanelOpen) {
     const emptyCls = paper ? "" : " is-empty";
     return `
@@ -1362,13 +1427,14 @@ function renderSearchPreview(paper) {
 
   if (!paper) {
     return `
-      <aside class="search-preview search-preview-focal is-empty" data-ares-surface="search-preview" data-ares-stage="search">
+      ${tabletDrawer ? `<div class="preview-backdrop panel-backdrop panel-backdrop-right" data-action="${previewBackdropAction}" aria-hidden="true"></div>` : ""}
+      <aside class="search-preview search-preview-focal is-empty${previewDrawerClass}" data-ares-surface="search-preview" data-ares-stage="search">
         <div class="search-preview-header search-preview-header-focal">
           <div class="preview-heading">
             <div class="preview-eyebrow">Paper</div>
             <div class="preview-title">Select a paper</div>
           </div>
-          <button type="button" class="panel-toggle-btn" data-action="toggle-preview-panel" title="프리뷰 접기">
+          <button type="button" class="panel-toggle-btn" data-action="${previewCloseAction}" title="프리뷰 접기">
             ${icon("chevR", { size: 13, color: TOKENS.t2 })}
           </button>
         </div>
@@ -1382,8 +1448,8 @@ function renderSearchPreview(paper) {
   const readLabel = state.readingStartingPaperId === paper.paperId ? "Starting..." : "Read";
 
   return `
-    <div class="preview-backdrop" data-action="close-preview-modal" aria-hidden="true"></div>
-    <aside class="search-preview search-preview-focal" data-ares-surface="search-preview" data-ares-stage="search" data-ares-paper-id="${escapeHtml(paper.paperId)}" data-ares-paper-title="${escapeHtml(paper.title)}">
+    <div class="preview-backdrop${tabletDrawer ? " panel-backdrop panel-backdrop-right" : ""}" data-action="${previewBackdropAction}" aria-hidden="true"></div>
+    <aside class="search-preview search-preview-focal${previewDrawerClass}" data-ares-surface="search-preview" data-ares-stage="search" data-ares-paper-id="${escapeHtml(paper.paperId)}" data-ares-paper-title="${escapeHtml(paper.title)}">
       <div class="search-preview-header search-preview-header-focal">
         <div class="preview-heading">
           <div class="preview-eyebrow">Paper</div>
@@ -1395,7 +1461,7 @@ function renderSearchPreview(paper) {
             ${paper.openAccess ? renderTag("open access", TOKENS.search) : ""}
           </div>
         </div>
-        <button type="button" class="panel-toggle-btn preview-close-desktop" data-action="toggle-preview-panel" title="프리뷰 접기">
+        <button type="button" class="panel-toggle-btn preview-close-desktop" data-action="${previewCloseAction}" title="프리뷰 접기">
           ${icon("chevR", { size: 13, color: TOKENS.t2 })}
         </button>
         <button type="button" class="panel-toggle-btn preview-close-mobile" data-action="close-preview-modal" title="닫기" aria-label="닫기">
@@ -1555,7 +1621,7 @@ function renderSearchStage(project) {
   const totalResults = state.searchMeta.total || state.results.length;
 
   return `
-    <div class="search-stage" data-ares-surface="search-stage" data-ares-stage="search">
+    <div class="search-stage" data-ares-surface="search-stage" data-ares-stage="search" data-search-layout="${escapeHtml(state.searchLayout)}">
       ${renderSearchFilterPanel(project, visible)}
 
       <section class="results-pane results-pane-focal" data-ares-surface="search-results" data-ares-stage="search">
@@ -1928,6 +1994,7 @@ function renderShell(message) {
 }
 
 function render() {
+  syncResponsiveSearchLayout();
   const project = activeProject();
 
   if (!project) {
@@ -2168,9 +2235,24 @@ document.addEventListener("click", async (event) => {
 
     state.selectedPaperId = nextPaperId;
     state.previewPanelOpen = true;
+    if (isTabletSearchLayout()) {
+      state.filterPanelOpen = false;
+    }
     if (!patchSearchSelectionUI()) {
       render();
     }
+    return;
+  }
+
+  if (action === "close-filter-panel") {
+    state.filterPanelOpen = false;
+    render();
+    return;
+  }
+
+  if (action === "close-preview-panel") {
+    state.previewPanelOpen = false;
+    render();
     return;
   }
 
@@ -2227,13 +2309,21 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "toggle-filter-panel") {
-    state.filterPanelOpen = !state.filterPanelOpen;
+    const nextOpen = !state.filterPanelOpen;
+    state.filterPanelOpen = nextOpen;
+    if (isTabletSearchLayout() && nextOpen) {
+      state.previewPanelOpen = false;
+    }
     render();
     return;
   }
 
   if (action === "toggle-preview-panel") {
-    state.previewPanelOpen = !state.previewPanelOpen;
+    const nextOpen = !state.previewPanelOpen;
+    state.previewPanelOpen = nextOpen;
+    if (isTabletSearchLayout() && nextOpen) {
+      state.filterPanelOpen = false;
+    }
     render();
     return;
   }
@@ -2429,12 +2519,47 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (event.key === "Escape" && (state.openWorkflowMenu || state.scopePicker)) {
-    state.openWorkflowMenu = "";
-    state.scopePicker = null;
-    state.scopePickerQuery = "";
-    render();
+  if (event.key === "Escape") {
+    let needsRender = false;
+
+    if (state.openWorkflowMenu || state.scopePicker) {
+      state.openWorkflowMenu = "";
+      state.scopePicker = null;
+      state.scopePickerQuery = "";
+      needsRender = true;
+    }
+
+    if (isTabletSearchLayout()) {
+      if (state.filterPanelOpen) {
+        state.filterPanelOpen = false;
+        needsRender = true;
+      }
+      if (state.previewPanelOpen) {
+        state.previewPanelOpen = false;
+        needsRender = true;
+      }
+    }
+
+    if (needsRender) {
+      render();
+    }
   }
+});
+
+let resizeTicking = false;
+
+window.addEventListener("resize", () => {
+  if (resizeTicking) {
+    return;
+  }
+
+  resizeTicking = true;
+  window.requestAnimationFrame(() => {
+    resizeTicking = false;
+    if (syncResponsiveSearchLayout()) {
+      render();
+    }
+  });
 });
 
 async function boot() {
