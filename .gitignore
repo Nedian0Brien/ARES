@@ -1,6 +1,8 @@
 .omc
 .codex
 .env
+.runtime
+.worktrees
 node_modules
 data/runtime/store.json
 npm-debug.log*

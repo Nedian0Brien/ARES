@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARES — Search Refined Concepts</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #fbfbfa;
+  --sb: #f5f5f4;
+  --s1: #ffffff;
+  --s2: #f7f7f6;
+  --s3: #f0efed;
+  --b1: #e8e8e6;
+  --b2: #d4d4d2;
+  --tx: #0a0a0b;
+  --t2: #4a4a50;
+  --t3: #8a8a92;
+  --t4: #b0b0b8;
+}
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  background: var(--bg);
+  color: var(--tx);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  font-size: 13px;
+  letter-spacing: -0.006em;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes fadeIn { from{opacity:0; transform: translateY(4px);} to{opacity:1; transform: translateY(0);} }
+@keyframes shimmer { 0%{background-position: -200% 0;} 100%{background-position: 200% 0;} }
+@keyframes pingRing {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  80%,100% { transform: scale(2.2); opacity: 0; }
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: #d8d7d3; border-radius: 3px; border: 1px solid transparent; }
+::-webkit-scrollbar-thumb:hover { background: #b8b7b3; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.hov:hover { background: rgba(0,0,0,0.035) !important; }
+.hov-soft:hover { background: rgba(0,0,0,0.02) !important; }
+.hov-card:hover { background: var(--s2) !important; border-color: #d2d1ce !important; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
+.hov-row:hover { background: rgba(0,0,0,0.025) !important; }
+
+.kbd {
+  font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 500; color: var(--t3);
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 3px;
+  padding: 0 5px; min-width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0;
+}
+
+button { font-family: inherit; }
+.btn-p { background: #18181b; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; letter-spacing: -0.006em; }
+.btn-p:hover { background: #26262b; }
+.btn-s { background: var(--s1); color: var(--tx); border: 1px solid var(--b1); border-radius: 6px; padding: 5px 11px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; letter-spacing: -0.006em; }
+.btn-s:hover { background: var(--s2); border-color: var(--b2); }
+.btn-g { background: transparent; color: var(--t2); border: none; border-radius: 6px; padding: 5px 10px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn-g:hover { background: var(--s2); color: var(--tx); }
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 500;
+  padding: 1px 7px; border-radius: 4px;
+  background: var(--s2); color: var(--t2);
+  border: 1px solid var(--b1);
+  white-space: nowrap;
+  letter-spacing: -0.003em;
+}
+
+/* Concept switcher */
+.concept-tabs { display: inline-flex; background: var(--s2); border: 1px solid var(--b1); border-radius: 7px; padding: 2px; }
+.concept-tab {
+  background: transparent; border: none; font-size: 12px; font-weight: 550; letter-spacing: -0.01em;
+  color: var(--t3); padding: 4px 10px; border-radius: 5px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; transition: all 120ms ease;
+}
+.concept-tab .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.5; }
+.concept-tab.active { background: #fff; color: var(--tx); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.concept-tab.active .dot { opacity: 1; }
+
+/* Hero search (Proposal A) */
+.hero-wrap {
+  padding: 32px 40px 20px;
+  background: linear-gradient(180deg, rgba(94,156,111,0.045) 0%, rgba(94,156,111,0) 100%);
+  border-bottom: 1px solid var(--b1);
+}
+.hero-input {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1px solid var(--b1); border-radius: 10px;
+  padding: 10px 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.015), 0 4px 24px rgba(94,156,111,0.05);
+  transition: all 150ms ease;
+}
+.hero-input:focus-within { border-color: #5e9c6f; box-shadow: 0 0 0 3px rgba(94,156,111,0.12); }
+.hero-input input {
+  flex: 1; border: none; outline: none; font: inherit; font-size: 15px;
+  letter-spacing: -0.012em; color: var(--tx); background: transparent; min-width: 0;
+}
+.hero-input input::placeholder { color: var(--t4); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 500; color: var(--t2);
+  padding: 3px 9px; border-radius: 999px;
+  background: #fff; border: 1px solid var(--b1);
+  cursor: pointer; transition: all 120ms ease;
+}
+.chip:hover { border-color: var(--b2); background: var(--s2); }
+.chip.on { background: var(--tx); color: #fff; border-color: var(--tx); }
+
+/* Pulse dot */
+.pd { width: 6px; height: 6px; border-radius: 50%; display: inline-block; position: relative; }
+.pd::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit;
+  animation: pingRing 2s cubic-bezier(0,0,0.2,1) infinite;
+}
+
+/* Canvas (B) */
+.canvas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.paper-card-b {
+  background: #fff; border: 1px solid var(--b1); border-radius: 8px; overflow: hidden;
+  display: flex; flex-direction: column; cursor: pointer; transition: all 120ms ease;
+}
+.paper-card-b:hover { border-color: var(--b2); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(10,10,11,0.045); }
+.paper-card-b.sel { border-color: var(--tx); box-shadow: 0 0 0 2px rgba(10,10,11,0.06); }
+
+/* Stream (C) */
+.stream-card {
+  display: flex; align-items: stretch; gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--b1); cursor: pointer;
+  transition: background 120ms ease;
+}
+.stream-card:hover { background: var(--s2); }
+.stream-card.sel { background: #fff; box-shadow: inset 3px 0 0 var(--tx); }
+.venue-block {
+  width: 52px; height: 52px; border-radius: 6px; flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; letter-spacing: -0.03em;
+}
+.relevance-meter { width: 130px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+
+.filter-chip-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.reasoning-line {
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  color: var(--t3); letter-spacing: 0; line-height: 1.6;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+
+.quick-action-row {
+  display: flex; gap: 4px; opacity: 0;
+  transition: opacity 120ms ease;
+}
+.stream-card:hover .quick-action-row { opacity: 1; }
+.qa-btn {
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--b1);
+  background: #fff; color: var(--t2); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.qa-btn:hover { background: var(--s2); color: var(--tx); border-color: var(--b2); }
+
+/* Skeleton line (used as subtle reasoning shimmer) */
+.shimmer-line {
+  background: linear-gradient(90deg, var(--s3) 25%, var(--s2) 50%, var(--s3) 75%);
+  background-size: 200% 100%; animation: shimmer 2.2s ease-in-out infinite;
+  height: 2px; border-radius: 1px;
+}
+
+/* Network mini graph */
+.mini-graph { position: relative; width: 100%; height: 180px; }
+
+.bottom-nav { display: none; }
+@media (max-width: 900px) {
+  .desktop-sidebar { display: none !important; }
+  .bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--b1); z-index: 100; padding: 4px 0 6px; }
+  .main-wrap { padding-bottom: 64px !important; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Icons -->
+<script type="text/babel" data-presets="react">
+const Icon = ({ name, size = 16, color = 'currentColor', style = {} }) => {
+  const s = size;
+  const p = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', style };
+  const paths = {
+    search: <><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></>,
+    book: <><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></>,
+    flask: <><path d="M9 3h6"/><path d="M10 3v6L4.5 18a2 2 0 001.7 3h11.6a2 2 0 001.7-3L14 9V3"/><path d="M7 15h10"/></>,
+    chart: <><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></>,
+    sparkles: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></>,
+    pen: <><path d="M17 3l4 4L7 21H3v-4L17 3z"/></>,
+    chevR: <path d="M9 6l6 6-6 6"/>,
+    chevD: <path d="M6 9l6 6 6-6"/>,
+    chevU: <path d="M6 15l6-6 6 6"/>,
+    plus: <><path d="M12 5v14M5 12h14"/></>,
+    filter: <path d="M22 3H2l8 9.5V19l4 2v-8.5L22 3z"/>,
+    ext: <><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></>,
+    check: <path d="M20 6L9 17l-5-5"/>,
+    dot: <circle cx="12" cy="12" r="4" fill={color} stroke="none"/>,
+    git: <><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></>,
+    code: <><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></>,
+    clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+    bookmark: <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z"/>,
+    quote: <><path d="M7 7v5H3V8a3 3 0 013-3h1zM17 7v5h-4V8a3 3 0 013-3h1z"/></>,
+    network: <><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5l-5 9.5M12 7.5l5 9.5"/></>,
+    wand: <><path d="M15 4V2M15 10V8M11 6h2M17 6h2M3 21l14-14M11 11l2 2"/></>,
+    share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></>,
+    moreH: <><circle cx="6" cy="12" r="1.4" fill={color} stroke="none"/><circle cx="12" cy="12" r="1.4" fill={color} stroke="none"/><circle cx="18" cy="12" r="1.4" fill={color} stroke="none"/></>,
+    arrowR: <><path d="M5 12h14M12 5l7 7-7 7"/></>,
+    arrowUpR: <><path d="M7 17L17 7M7 7h10v10"/></>,
+    layers: <><path d="M12 3L2 8l10 5 10-5-10-5z"/><path d="M2 16l10 5 10-5"/><path d="M2 12l10 5 10-5"/></>,
+    download: <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></>,
+    cite: <><path d="M6 7h3v3a3 3 0 01-3 3M15 7h3v3a3 3 0 01-3 3"/></>,
+    star: <path d="M12 3l2.5 6 6.5.5-5 4.5 1.5 6.5L12 17l-5.5 3.5L8 14 3 9.5l6.5-.5L12 3z"/>,
+    brain: <><path d="M9 4a3 3 0 00-3 3c0 1 .4 1.8 1 2.3A2.5 2.5 0 004 12a2.5 2.5 0 002 2.5V17a3 3 0 106 0V4a3 3 0 00-3 0z"/><path d="M15 4a3 3 0 013 3c0 1-.4 1.8-1 2.3A2.5 2.5 0 0120 12a2.5 2.5 0 01-2 2.5V17a3 3 0 11-6 0"/></>,
+    x: <path d="M18 6L6 18M6 6l12 12"/>,
+    history: <><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l3 2"/></>,
+  };
+  return <svg {...p}>{paths[name]}</svg>;
+};
+window.Icon = Icon;
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
+
+/* ── TOKENS ─────────────────────────────────────────────────────── */
+const T = {
+  bg: '#fbfbfa', sb: '#f5f5f4', s1: '#ffffff', s2: '#f7f7f6', s3: '#f0efed',
+  b1: '#e8e8e6', b2: '#d4d4d2', tx: '#0a0a0b', t2: '#4a4a50', t3: '#8a8a92', t4: '#b0b0b8',
+  search: '#5e9c6f', read: '#5e6ad2', research: '#8957c9', result: '#c07b3a',
+  insight: '#c04e68', writing: '#3aa3a3',
+};
+const mono = { fontFamily: "'JetBrains Mono', monospace", fontFeatureSettings: 'normal' };
+
+const SECTIONS = [
+  { id: 'search',   label: 'Search',   sub: '논문 서치 및 수집',        color: T.search,   icon: 'search',   kbd: '1' },
+  { id: 'read',     label: 'Reading',  sub: 'AI 논문 리딩',             color: T.read,     icon: 'book',     kbd: '2' },
+  { id: 'research', label: 'Research', sub: '재현연구 및 실험',          color: T.research, icon: 'flask',    kbd: '3' },
+  { id: 'results',  label: 'Result',   sub: '결과 도출 및 정리',         color: T.result,   icon: 'chart',    kbd: '4' },
+  { id: 'insights', label: 'Insight',  sub: '인사이트 취합',             color: T.insight,  icon: 'sparkles', kbd: '5' },
+  { id: 'writing',  label: 'Writing',  sub: '논문 작성 보조',            color: T.writing,  icon: 'pen',      kbd: '6' },
+];
+
+/* ── VENUE STYLES ─────────────────────────────────────────────── */
+const VENUE = {
+  'ACL':     { c: '#5e6ad2', label: 'ACL' },
+  'EMNLP':   { c: '#8957c9', label: 'EMNLP' },
+  'arXiv':   { c: '#8a8a92', label: 'arXiv' },
+  'NeurIPS': { c: '#3aa3a3', label: 'NeurIPS' },
+  'ICML':    { c: '#c07b3a', label: 'ICML' },
+};
+
+/* ── PAPER DATA (enriched) ────────────────────────────────────── */
+const PAPERS = [
+  {
+    id: 'p1',
+    title: 'Reducing Reranker Costs in RAG via Adaptive Skipping',
+    auth: 'Kim, Park, Jung', authN: 3, venue: 'ACL', year: 2024,
+    rel: 98, code: true, saved: true, cites: 142,
+    abs: '모든 쿼리에 reranker를 적용하는 대신 retriever 신뢰도 기반 Adaptive Skip 메커니즘을 도입하여 40% 비용 절감, BEIR SOTA 달성.',
+    cluster: 'cost', tags: ['RAG', 'Reranker', 'Efficiency'],
+    reason: 'Matched "RAG reranker cost" · cites nDCG@10',
+  },
+  {
+    id: 'p2',
+    title: 'Efficient RAG with Lightweight Rerankers',
+    auth: 'Chen, Liu, Wang', authN: 4, venue: 'EMNLP', year: 2024,
+    rel: 91, code: true, saved: false, cites: 87,
+    abs: 'Distillation 기반의 경량 reranker를 제안, 12x 속도 향상을 유지하면서 full-reranker의 96% 성능을 재현.',
+    cluster: 'cost', tags: ['Distillation', 'RAG'],
+    reason: 'Matched "lightweight" + "cost"',
+  },
+  {
+    id: 'p3',
+    title: 'FlashRAG: A Modular Framework for RAG Research',
+    auth: 'Jin, Yao, Chen', authN: 5, venue: 'arXiv', year: 2024,
+    rel: 87, code: true, saved: true, cites: 214,
+    abs: '6개 RAG 파이프라인을 1-line으로 swap 가능한 모듈형 프레임워크. 36개 벤치마크 shared interface 제공.',
+    cluster: 'arch', tags: ['Framework', 'Reproducibility'],
+    reason: 'High citations · framework',
+  },
+  {
+    id: 'p4',
+    title: 'Is Reranking Really Necessary for RAG?',
+    auth: 'Park, Lee', authN: 2, venue: 'ACL', year: 2024,
+    rel: 78, code: false, saved: false, cites: 54,
+    abs: 'Ablation 관점에서 reranker 생략 시의 quality-cost trade-off를 18개 도메인에서 체계적으로 분석.',
+    cluster: 'eval', tags: ['Ablation', 'Analysis'],
+    reason: 'Ablation · reranker',
+  },
+  {
+    id: 'p5',
+    title: 'RAGLAB: Research-Oriented Unified Framework',
+    auth: 'Zhang, Huang, Xu', authN: 4, venue: 'arXiv', year: 2024,
+    rel: 72, code: true, saved: false, cites: 31,
+    abs: '공정한 비교를 위한 표준화된 구성요소 단위 평가 환경. 9개 알고리즘 병렬 실행을 지원.',
+    cluster: 'eval', tags: ['Benchmark'],
+    reason: 'Benchmark · comparison',
+  },
+  {
+    id: 'p6',
+    title: 'Cascade Retrieval for Low-Latency Open-Domain QA',
+    auth: 'Watanabe et al.', authN: 3, venue: 'NeurIPS', year: 2023,
+    rel: 69, code: true, saved: false, cites: 198,
+    abs: '3-stage cascade로 retriever stage별 confidence를 집계, 평균 지연을 52% 감소시키는 학습 프레임워크.',
+    cluster: 'arch', tags: ['Cascade', 'Latency'],
+    reason: 'Cascade · confidence',
+  },
+];
+
+const CLUSTERS = [
+  { id: 'cost', label: 'Cost reduction',      color: T.search,   desc: '효율 최적화 및 비용 절감' },
+  { id: 'eval', label: 'Evaluation methods',  color: T.read,     desc: 'Ablation · 벤치마크 비교' },
+  { id: 'arch', label: 'Architecture',        color: T.research, desc: '파이프라인 및 구조 제안' },
+];
+
+/* ── ATOMS ──────────────────────────────────────────────────────── */
+const Tag = ({ label, color, dot, size = 11 }) => (
+  <span className="tag" style={color ? { background: `${color}12`, color, borderColor: `${color}30`, fontSize: size } : { fontSize: size }}>
+    {dot && <span style={{ width: 5, height: 5, borderRadius: '50%', background: color || T.t3 }} />}
+    {label}
+  </span>
+);
+
+const VenueTag = ({ venue, size = 11 }) => {
+  const v = VENUE[venue] || VENUE['arXiv'];
+  return <Tag label={`${venue}`} color={v.c} size={size} />;
+};
+
+const Kbd = ({ children }) => <span className="kbd">{children}</span>;
+
+const PulseDot = ({ color = T.search, size = 6 }) => (
+  <span className="pd" style={{ background: color, width: size, height: size }} />
+);
+
+const RelevanceBar = ({ value, color = T.search, width = 60, height = 4 }) => {
+  const c = value >= 90 ? T.search : value >= 75 ? T.read : T.t3;
+  return (
+    <div style={{ width, height, background: T.s3, borderRadius: height / 2, overflow: 'hidden' }}>
+      <div style={{ width: `${value}%`, height: '100%', background: c, transition: 'width 300ms ease' }} />
+    </div>
+  );
+};
+
+const RelevanceDonut = ({ value, size = 36 }) => {
+  const r = (size - 4) / 2;
+  const c = 2 * Math.PI * r;
+  const color = value >= 90 ? T.search : value >= 75 ? T.read : T.t3;
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.s3} strokeWidth="2.5"/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth="2.5"
+              strokeDasharray={c} strokeDashoffset={c - (c * value / 100)} strokeLinecap="round"
+              style={{ transition: 'stroke-dashoffset 400ms ease' }} />
+    </svg>
+  );
+};
+
+/* ── PROPOSAL A: FOCAL SEARCH ──────────────────────────────────── */
+function FocalSearch() {
+  const [sel, setSel] = useState(0);
+  const [q, setQ] = useState('RAG reranker cost 줄이는 방법');
+  const [chips, setChips] = useState({ acl: true, code: true, recent: true, ablation: false });
+  const papers = PAPERS;
+  const sp = papers[sel];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* HERO */}
+      <div className="hero-wrap">
+        <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <Icon name="search" size={12} color={T.search} />
+            <span style={{ fontWeight: 600, color: T.search }}>Paper Search</span>
+            <span style={{ color: T.t4 }}>·</span>
+            <span>자연어로 질문하면 Scout가 논문을 찾습니다</span>
+          </div>
+
+          <div className="hero-input">
+            <Icon name="search" size={18} color={T.t3} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="어떤 논문을 찾으시나요?" />
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Kbd>⌘K</Kbd>
+              <button className="btn-p" style={{ padding: '6px 14px' }}>
+                <Icon name="wand" size={13} />Search
+              </button>
+            </div>
+          </div>
+
+          {/* Smart chips */}
+          <div className="filter-chip-row">
+            <span style={{ fontSize: 11, color: T.t3, marginRight: 2 }}>필터</span>
+            <button className={`chip ${chips.acl ? 'on' : ''}`} onClick={() => setChips(c => ({ ...c, acl: !c.acl }))}>
+              <Icon name="check" size={10} color={chips.acl ? '#fff' : T.t3} /> ACL · EMNLP
+            </button>
+            <button className={`chip ${chips.code ? 'on' : ''}`} onClick={() => setChips(c => ({ ...c, code: !c.code }))}>
+              <Icon name="code" size={10} color={chips.code ? '#fff' : T.t3} /> has code
+            </button>
+            <button className={`chip ${chips.recent ? 'on' : ''}`} onClick={() => setChips(c => ({ ...c, recent: !c.recent }))}>
+              <Icon name="clock" size={10} color={chips.recent ? '#fff' : T.t3} /> 2023–2024
+            </button>
+            <button className={`chip ${chips.ablation ? 'on' : ''}`} onClick={() => setChips(c => ({ ...c, ablation: !c.ablation }))}>
+              <Icon name="plus" size={10} color={chips.ablation ? '#fff' : T.t3} /> ablation study
+            </button>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11, color: T.t3, ...mono }}>rel ≥ 70%</span>
+          </div>
+
+          {/* Scout status strip */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: '#fff', border: `1px solid ${T.search}30`, borderRadius: 8,
+            padding: '9px 14px',
+          }}>
+            <PulseDot color={T.search} size={7} />
+            <span style={{ fontSize: 12.5, color: T.tx, fontWeight: 500 }}>Scout agent</span>
+            <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+            <span style={{ fontSize: 12, color: T.t2 }}>arXiv, ACL Anthology, Semantic Scholar 탐색 중</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11.5, color: T.t3, ...mono }}>6 / 12 found</span>
+            <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+            <span style={{ fontSize: 11.5, color: T.t3, ...mono }}>0.82s</span>
+          </div>
+        </div>
+      </div>
+
+      {/* RESULTS + PREVIEW */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: '18px 40px 40px' }}>
+          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid ${T.b1}` }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em' }}>{papers.length} results</span>
+                <span style={{ fontSize: 11.5, color: T.t3 }}>· Sorted by relevance</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn-g" style={{ fontSize: 11.5, padding: '4px 8px' }}><Icon name="layers" size={12} /> Group</button>
+                <button className="btn-g" style={{ fontSize: 11.5, padding: '4px 8px' }}><Icon name="download" size={12} /> Export</button>
+              </div>
+            </div>
+
+            {papers.map((p, i) => (
+              <div key={p.id} onClick={() => setSel(i)} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 14,
+                padding: '14px 0', cursor: 'pointer',
+                borderBottom: `1px solid ${T.b1}`,
+                animation: 'fadeIn 180ms ease',
+              }}>
+                {/* Venue strip */}
+                <div style={{
+                  width: 4, alignSelf: 'stretch', borderRadius: 2,
+                  background: (VENUE[p.venue] || VENUE.arXiv).c,
+                  opacity: sel === i ? 1 : 0.3,
+                  transition: 'opacity 160ms ease', flexShrink: 0,
+                }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 15.5, fontWeight: 600, letterSpacing: '-0.015em',
+                        color: sel === i ? T.tx : T.tx, lineHeight: 1.35, marginBottom: 5,
+                      }}>{p.title}</div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, color: T.t2, fontWeight: 500 }}>{p.auth}</span>
+                        <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+                        <VenueTag venue={p.venue} />
+                        <span style={{ fontSize: 12, color: T.t3, ...mono }}>{p.year}</span>
+                        <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+                        <span style={{ fontSize: 11.5, color: T.t3, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <Icon name="quote" size={11} color={T.t3} /> {p.cites}
+                        </span>
+                        {p.code && <Tag label="code" color={T.search} />}
+                        {p.saved && <Tag label="saved" color={T.read} dot />}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.6, marginBottom: 6 }}>{p.abs}</div>
+                      <div className="reasoning-line">
+                        <Icon name="sparkles" size={10} color={T.search} />
+                        <span>scout · {p.reason}</span>
+                      </div>
+                    </div>
+                    {/* Relevance */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0, width: 80 }}>
+                      <span style={{ fontSize: 18, fontWeight: 650, letterSpacing: '-0.03em', ...mono, color: p.rel >= 90 ? T.search : p.rel >= 75 ? T.read : T.t2 }}>{p.rel}</span>
+                      <RelevanceBar value={p.rel} width={68} height={3} />
+                      <span style={{ fontSize: 10, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>relevance</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Preview */}
+        <div style={{ width: 320, borderLeft: `1px solid ${T.b1}`, background: T.s1, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.b1}` }}>
+            <div style={{ fontSize: 10.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Paper</div>
+            <div style={{ fontSize: 14, fontWeight: 550, lineHeight: 1.4, marginBottom: 10, letterSpacing: '-0.01em' }}>{sp.title}</div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              <Tag label={sp.auth} /><VenueTag venue={sp.venue} />
+              <Tag label={`${sp.cites} cites`} />
+              {sp.code && <Tag label="code" color={T.search} />}
+            </div>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: '14px 20px' }}>
+            <div style={{ fontSize: 11, color: T.t3, marginBottom: 6 }}>Abstract</div>
+            <div style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.65, marginBottom: 14 }}>{sp.abs}</div>
+            <div style={{ fontSize: 11, color: T.t3, marginBottom: 6 }}>Why relevant</div>
+            <div className="reasoning-line" style={{ fontSize: 11.5, marginBottom: 14 }}>
+              <Icon name="sparkles" size={11} color={T.search} /> {sp.reason}
+            </div>
+            <div style={{ fontSize: 11, color: T.t3, marginBottom: 6 }}>Tags</div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {sp.tags.map(t => <Tag key={t} label={t} />)}
+            </div>
+          </div>
+          <div style={{ padding: '12px 20px', borderTop: `1px solid ${T.b1}`, display: 'flex', gap: 7 }}>
+            <button className="btn-p" style={{ flex: 1, justifyContent: 'center' }}>
+              <Icon name="bookmark" size={12} />Save
+            </button>
+            <button className="btn-s" style={{ flex: 1, justifyContent: 'center' }}>
+              Read <Icon name="arrowR" size={12} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── PROPOSAL B: KNOWLEDGE CANVAS ──────────────────────────────── */
+function CanvasSearch() {
+  const [sel, setSel] = useState('p1');
+
+  return (
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      {/* Left filter rail */}
+      <div style={{ width: 200, borderRight: `1px solid ${T.b1}`, background: T.s2, flexShrink: 0, overflow: 'auto', padding: '16px 18px' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>View</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 20 }}>
+          {[['canvas', 'Canvas', 'layers', true], ['list', 'List', 'filter', false]].map(([id, lbl, ic, on]) => (
+            <div key={id} className="hov" style={{
+              padding: '6px 8px', borderRadius: 5, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: on ? 'rgba(0,0,0,0.04)' : 'transparent',
+              color: on ? T.tx : T.t2, fontSize: 12.5, fontWeight: on ? 550 : 400,
+            }}>
+              <Icon name={ic} size={13} color={on ? T.tx : T.t3} />{lbl}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Cluster by</div>
+        {CLUSTERS.map(c => (
+          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 0', fontSize: 12, color: T.t2 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: c.color }} />{c.label}
+          </div>
+        ))}
+
+        <div style={{ borderTop: `1px solid ${T.b1}`, marginTop: 16, paddingTop: 14 }}>
+          <div style={{ fontSize: 11, color: T.t3, marginBottom: 8 }}>Venue</div>
+          {['arXiv', 'ACL', 'EMNLP', 'NeurIPS'].map((v, i) => (
+            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: T.t2, padding: '3px 0', cursor: 'pointer' }}>
+              <div style={{ width: 13, height: 13, border: `1.5px solid ${i < 3 ? T.tx : T.b2}`, borderRadius: 3, background: i < 3 ? T.tx : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {i < 3 && <Icon name="check" size={9} color="#fff" />}
+              </div>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: (VENUE[v] || VENUE.arXiv).c }} />
+              {v}
+            </label>
+          ))}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${T.b1}`, marginTop: 14, paddingTop: 14 }}>
+          <div style={{ fontSize: 11, color: T.t3, marginBottom: 8 }}>Library</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+            <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em' }}>12</span>
+            <span style={{ fontSize: 11, color: T.t3 }}>papers</span>
+          </div>
+          <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
+            <Tag label="3 saved" color={T.search} dot />
+            <Tag label="9 new" />
+          </div>
+        </div>
+      </div>
+
+      {/* Main canvas */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Search */}
+        <div style={{ padding: '14px 24px', borderBottom: `1px solid ${T.b1}`, background: T.s1 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ flex: 1, display: 'flex', gap: 8, background: T.s2, border: `1px solid ${T.b1}`, borderRadius: 7, padding: '8px 12px', alignItems: 'center' }}>
+              <Icon name="search" size={15} color={T.t3} />
+              <span style={{ fontSize: 13.5, color: T.tx, flex: 1, fontWeight: 450 }}>RAG reranker cost 줄이는 방법</span>
+              <Kbd>⌘K</Kbd>
+            </div>
+            <button className="btn-p">Search</button>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 9, fontSize: 11.5, color: T.t3 }}>
+            <span style={{ color: T.t2, fontWeight: 500 }}>12 results · 3 clusters</span>
+            <span style={{ color: T.t4 }}>·</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <PulseDot color={T.search} size={5} /> Scout · semantic cluster 감지됨
+            </span>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px 28px' }}>
+          {CLUSTERS.map(cl => {
+            const items = PAPERS.filter(p => p.cluster === cl.id);
+            if (!items.length) return null;
+            return (
+              <div key={cl.id} style={{ marginBottom: 26 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 4, background: cl.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em' }}>{cl.label}</span>
+                  <span style={{ fontSize: 11.5, color: T.t3, ...mono }}>· {items.length}</span>
+                  <span style={{ fontSize: 11.5, color: T.t3 }}>— {cl.desc}</span>
+                  <span style={{ flex: 1, height: 1, background: T.b1 }} />
+                </div>
+                <div className="canvas-grid">
+                  {items.map(p => {
+                    const v = VENUE[p.venue] || VENUE.arXiv;
+                    const isSel = sel === p.id;
+                    return (
+                      <div key={p.id} onClick={() => setSel(p.id)} className={`paper-card-b ${isSel ? 'sel' : ''}`}>
+                        <div style={{
+                          height: 28, background: v.c, color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '0 10px', fontSize: 10.5, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+                        }}>
+                          <span>{v.label} · {p.year}</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 500, letterSpacing: 0, textTransform: 'none' }}>
+                            <Icon name="quote" size={10} color="rgba(255,255,255,0.85)" /> {p.cites}
+                          </span>
+                        </div>
+                        <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                            <div style={{ flex: 1, fontSize: 13, fontWeight: 600, lineHeight: 1.35, letterSpacing: '-0.01em' }}>{p.title}</div>
+                            <RelevanceDonut value={p.rel} size={32} />
+                          </div>
+                          <div style={{ fontSize: 11, color: T.t3 }}>{p.auth}</div>
+                          <div style={{ fontSize: 11.5, color: T.t2, lineHeight: 1.55, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.abs}</div>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4, alignItems: 'center' }}>
+                            {p.tags.slice(0, 2).map(t => <Tag key={t} label={t} size={10.5} />)}
+                            {p.code && <Tag label="code" color={T.search} size={10.5} />}
+                            {p.saved && <Tag label="saved" color={T.read} dot size={10.5} />}
+                            <span style={{ flex: 1 }} />
+                            <span style={{ fontSize: 11, fontWeight: 600, ...mono, color: p.rel >= 90 ? T.search : p.rel >= 75 ? T.read : T.t2 }}>{p.rel}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right: related graph */}
+      <div style={{ width: 260, borderLeft: `1px solid ${T.b1}`, background: T.s1, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '16px 18px 12px', borderBottom: `1px solid ${T.b1}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+            <Icon name="network" size={11} color={T.t3} />Related graph
+          </div>
+          <div className="mini-graph">
+            <svg width="100%" height="180" viewBox="0 0 240 180">
+              <line x1="120" y1="90" x2="50" y2="40" stroke={T.b2} strokeWidth="1" />
+              <line x1="120" y1="90" x2="190" y2="40" stroke={T.b2} strokeWidth="1" />
+              <line x1="120" y1="90" x2="40" y2="140" stroke={T.b2} strokeWidth="1" />
+              <line x1="120" y1="90" x2="200" y2="150" stroke={T.b2} strokeWidth="1" />
+              <line x1="120" y1="90" x2="120" y2="20" stroke={T.b2} strokeWidth="1" strokeDasharray="2 3" />
+              <circle cx="50" cy="40" r="7" fill={T.search} />
+              <circle cx="190" cy="40" r="7" fill={T.read} />
+              <circle cx="40" cy="140" r="7" fill={T.research} />
+              <circle cx="200" cy="150" r="7" fill={T.t3} />
+              <circle cx="120" cy="20" r="5" fill={T.t4} />
+              <circle cx="120" cy="90" r="11" fill={T.tx} />
+              <text x="120" y="94" fontSize="10" fill="#fff" textAnchor="middle" fontWeight="600">★</text>
+            </svg>
+          </div>
+          <div style={{ fontSize: 10.5, color: T.t3, marginTop: -10 }}>★ 선택된 논문 · 5 citations</div>
+        </div>
+        <div style={{ padding: '14px 18px' }}>
+          <div style={{ fontSize: 10.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Similar searches</div>
+          {['reranker ablation study', 'cascade retrieval efficient', 'adaptive reranking threshold'].map(q => (
+            <div key={q} className="hov-soft" style={{
+              padding: '6px 8px', borderRadius: 5, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.t2,
+            }}>
+              <Icon name="history" size={11} color={T.t3} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q}</span>
+              <Icon name="arrowUpR" size={11} color={T.t3} />
+            </div>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ borderTop: `1px solid ${T.b1}`, padding: '12px 18px', display: 'flex', gap: 7 }}>
+          <button className="btn-s" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}><Icon name="download" size={12} /> BibTeX</button>
+          <button className="btn-p" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}><Icon name="book" size={12} /> Open</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── PROPOSAL C: STREAM SEARCH ─────────────────────────────────── */
+function StreamSearch() {
+  const [sel, setSel] = useState('p1');
+  const papers = [...PAPERS].sort((a, b) => b.rel - a.rel);
+
+  return (
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      {/* Left rail: saved searches */}
+      <div style={{ width: 200, borderRight: `1px solid ${T.b1}`, background: T.s2, flexShrink: 0, overflow: 'auto', padding: '16px 16px' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Saved queries</div>
+        {[
+          { q: 'RAG reranker cost', n: 12, active: true },
+          { q: 'cascade retrieval',  n: 6,  active: false },
+          { q: 'lightweight distill', n: 9,  active: false },
+        ].map(s => (
+          <div key={s.q} className="hov" style={{
+            padding: '7px 8px', borderRadius: 5, cursor: 'pointer',
+            background: s.active ? 'rgba(10,10,11,0.05)' : 'transparent',
+            borderLeft: s.active ? `2px solid ${T.tx}` : '2px solid transparent',
+            marginBottom: 2,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <Icon name="bookmark" size={11} color={s.active ? T.tx : T.t3} />
+              <span style={{ fontSize: 12.5, color: s.active ? T.tx : T.t2, fontWeight: s.active ? 550 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.q}</span>
+              <span style={{ fontSize: 10.5, color: T.t3, ...mono }}>{s.n}</span>
+            </div>
+          </div>
+        ))}
+
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '18px 0 10px' }}>Active filters</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {[['ACL', T.read], ['EMNLP', T.research], ['2024', T.t2], ['has code', T.search]].map(([l, c]) => (
+            <span key={l} className="tag" style={{ background: `${c}10`, color: c, borderColor: `${c}30`, padding: '1px 4px 1px 7px', fontSize: 10.5 }}>
+              {l}<Icon name="x" size={9} color={c} />
+            </span>
+          ))}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${T.b1}`, marginTop: 18, paddingTop: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Recent</div>
+          {['ablation RAG 2024', 'reranker latency benchmark', 'DPR confidence'].map(q => (
+            <div key={q} className="hov-soft" style={{
+              padding: '4px 8px', borderRadius: 5, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.t3, marginBottom: 1,
+            }}>
+              <Icon name="history" size={10} color={T.t4} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Main stream */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Hero query + refinement */}
+        <div style={{ padding: '18px 24px 14px', borderBottom: `1px solid ${T.b1}`, background: T.s1 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{
+              flex: 1, display: 'flex', gap: 10, background: '#fff',
+              border: `1.5px solid ${T.b1}`, borderRadius: 8, padding: '9px 13px',
+              alignItems: 'center', boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+            }}>
+              <Icon name="search" size={16} color={T.tx} />
+              <span style={{ fontSize: 14, color: T.tx, flex: 1, fontWeight: 500, letterSpacing: '-0.01em' }}>RAG reranker cost 줄이는 방법</span>
+              <Kbd>⌘K</Kbd>
+            </div>
+            <button className="btn-p" style={{ padding: '7px 14px' }}><Icon name="search" size={12} />Search</button>
+          </div>
+
+          {/* Refinement suggestions */}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 11, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: T.t3, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Icon name="wand" size={11} color={T.research} />
+              Refine
+            </span>
+            {['+ ablation study', '+ ACL 2024만', '+ has code', '+ cite count ≥ 50'].map(r => (
+              <button key={r} className="chip" style={{ fontSize: 11.5 }}>
+                <span style={{ color: T.research, fontWeight: 600 }}>{r.slice(0, 1)}</span>
+                <span>{r.slice(2)}</span>
+              </button>
+            ))}
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11, color: T.t3, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <PulseDot color={T.search} size={5} />
+              Scout · {papers.length} matches in 0.8s
+            </span>
+          </div>
+        </div>
+
+        {/* Stream */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          {papers.map(p => {
+            const v = VENUE[p.venue] || VENUE.arXiv;
+            const isSel = sel === p.id;
+            const initial = (p.auth || '').split(' ')[0].slice(0, 1);
+            return (
+              <div key={p.id} className={`stream-card ${isSel ? 'sel' : ''}`} onClick={() => setSel(p.id)}>
+                <div className="venue-block" style={{ background: v.c }}>
+                  <span style={{ fontSize: 11, opacity: 0.85 }}>{initial}</span>
+                  <span style={{ fontSize: 9, opacity: 0.7, marginTop: 2, ...mono, letterSpacing: 0 }}>{p.year}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, letterSpacing: '-0.012em', lineHeight: 1.35, marginBottom: 5 }}>{p.title}</div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                    <span style={{ fontSize: 11.5, color: T.t2, fontWeight: 500 }}>{p.auth}</span>
+                    <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+                    <VenueTag venue={p.venue} />
+                    <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+                    <span style={{ fontSize: 11.5, color: T.t3, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <Icon name="quote" size={11} color={T.t3} />{p.cites} cites
+                    </span>
+                    {p.code && <><span style={{ color: T.t4, fontSize: 10 }}>·</span><Tag label="code" color={T.search} /></>}
+                    {p.saved && <Tag label="saved" color={T.read} dot />}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {p.abs}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                    <div className="reasoning-line" style={{ flex: 1, minWidth: 0 }}>
+                      <Icon name="sparkles" size={10} color={T.search} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>scout · {p.reason}</span>
+                    </div>
+                    <div className="quick-action-row">
+                      <button className="qa-btn" title="Save"><Icon name="bookmark" size={12} /></button>
+                      <button className="qa-btn" title="Cite"><Icon name="quote" size={12} /></button>
+                      <button className="qa-btn" title="Open"><Icon name="ext" size={12} /></button>
+                    </div>
+                  </div>
+                </div>
+                <div className="relevance-meter">
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                    <span style={{ fontSize: 18, fontWeight: 650, letterSpacing: '-0.03em', ...mono, color: p.rel >= 90 ? T.search : p.rel >= 75 ? T.read : T.t2 }}>{p.rel}</span>
+                    <span style={{ fontSize: 10.5, color: T.t3, ...mono }}>%</span>
+                  </div>
+                  <RelevanceBar value={p.rel} width={110} height={3} />
+                  <span style={{ fontSize: 9.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {p.rel >= 90 ? 'excellent match' : p.rel >= 75 ? 'strong match' : 'partial match'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{ padding: '14px 24px', textAlign: 'center', color: T.t3, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <div className="shimmer-line" style={{ width: 120 }} />
+            <span>더 많은 논문 검색 중…</span>
+            <div className="shimmer-line" style={{ width: 120 }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Right: activity */}
+      <div style={{ width: 240, borderLeft: `1px solid ${T.b1}`, background: T.s1, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '16px 18px 10px', borderBottom: `1px solid ${T.b1}` }}>
+          <div style={{ fontSize: 10.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Relevance distribution</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 60 }}>
+            {[22, 34, 45, 60, 80, 95, 70, 40, 28, 22].map((h, i) => (
+              <div key={i} style={{
+                flex: 1, height: `${h}%`,
+                background: h >= 80 ? T.search : h >= 60 ? T.read : T.s3,
+                borderRadius: 1, transition: 'all 220ms ease',
+              }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: T.t3, ...mono, marginTop: 5 }}>
+            <span>50%</span><span>100%</span>
+          </div>
+        </div>
+        <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.b1}` }}>
+          <div style={{ fontSize: 10.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Library activity</div>
+          {[
+            { act: 'Saved', p: 'Reducing Reranker Costs…', time: '2h ago', c: T.search },
+            { act: 'Cited', p: 'FlashRAG', time: '5h ago', c: T.read },
+            { act: 'Read',  p: 'Is Reranking Necessary', time: 'yesterday', c: T.t3 },
+          ].map((a, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, padding: '5px 0', fontSize: 11.5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: a.c, marginTop: 5, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: T.t2 }}>
+                  <span style={{ fontWeight: 500, color: T.tx }}>{a.act}</span>{' '}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.p}</span>
+                </div>
+                <div style={{ fontSize: 10.5, color: T.t3, ...mono, marginTop: 1 }}>{a.time}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '14px 18px' }}>
+          <div style={{ fontSize: 10.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Suggested queries</div>
+          {['reranker efficient training', 'dense retriever BEIR'].map(q => (
+            <div key={q} className="hov-soft" style={{
+              padding: '6px 8px', borderRadius: 5, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: T.t2, marginBottom: 1,
+            }}>
+              <Icon name="wand" size={11} color={T.research} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q}</span>
+              <Icon name="arrowUpR" size={10} color={T.t3} />
+            </div>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ borderTop: `1px solid ${T.b1}`, padding: '12px 18px' }}>
+          <button className="btn-p" style={{ width: '100%', justifyContent: 'center' }}>
+            <Icon name="brain" size={12} />Ask Scout agent
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const CONCEPTS = [
+  { id: 'A', label: 'Focal',  desc: '히어로 쿼리 + 라이브 Scout',       Comp: FocalSearch,  color: T.search },
+  { id: 'B', label: 'Canvas', desc: '클러스터 그리드 + 관련 그래프',    Comp: CanvasSearch, color: T.read },
+  { id: 'C', label: 'Stream', desc: '피드 스트림 + 쿼리 리파인먼트',    Comp: StreamSearch, color: T.research },
+];
+
+/* ── APP SHELL ───────────────────────────────────────────────── */
+function App() {
+  const [concept, setConcept] = useState(() => localStorage.getItem('ares_concept') || 'A');
+  useEffect(() => { localStorage.setItem('ares_concept', concept); }, [concept]);
+
+  useEffect(() => {
+    const kb = e => {
+      if ((e.metaKey || e.ctrlKey) && /^[abc]$/i.test(e.key)) {
+        e.preventDefault();
+        setConcept(e.key.toUpperCase());
+      }
+    };
+    window.addEventListener('keydown', kb);
+    return () => window.removeEventListener('keydown', kb);
+  }, []);
+
+  const Cur = CONCEPTS.find(c => c.id === concept) || CONCEPTS[0];
+  const Comp = Cur.Comp;
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', background: T.bg, overflow: 'hidden' }}>
+      {/* Sidebar */}
+      <div className="desktop-sidebar" style={{ width: 232, background: T.sb, borderRight: `1px solid ${T.b1}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.b1}` }}>
+          <div className="hov" style={{ padding: '6px 8px', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <div style={{ width: 24, height: 24, borderRadius: 6, background: 'linear-gradient(135deg, #5e6ad2, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: '-0.02em' }}>A</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 550, letterSpacing: '-0.01em' }}>ARES</div>
+              <div style={{ fontSize: 10.5, color: T.t3 }}>Search · Refined</div>
+            </div>
+            <Icon name="chevD" size={13} color={T.t3} />
+          </div>
+        </div>
+
+        <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.b1}` }}>
+          <div className="hov-soft" style={{ padding: '5px 8px', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <Icon name="search" size={13.5} color={T.t3} />
+            <span style={{ fontSize: 12.5, color: T.t3, flex: 1 }}>Search</span>
+            <Kbd>⌘K</Kbd>
+          </div>
+          <div className="hov-soft" style={{ padding: '5px 8px', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="plus" size={13.5} color={T.t3} />
+            <span style={{ fontSize: 12.5, color: T.t3, flex: 1 }}>New paper</span>
+            <Kbd>C</Kbd>
+          </div>
+        </div>
+
+        <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.b1}` }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 8px 6px' }}>Project</div>
+          {[
+            ['RAG Reranker Study', true, '#5e6ad2'],
+            ['LLM Reasoning',       false, '#c04e68'],
+            ['Local Inference',     false, '#3aa3a3'],
+          ].map(([p, active, c], i) => (
+            <div key={i} className="hov" style={{
+              padding: '5px 8px', borderRadius: 5, cursor: 'pointer',
+              background: active ? 'rgba(0,0,0,0.045)' : 'transparent',
+              display: 'flex', alignItems: 'center', gap: 9, marginBottom: 1,
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: c, flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, color: active ? T.tx : T.t2, fontWeight: active ? 550 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '10px 12px', flex: 1, overflow: 'auto' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 8px 8px' }}>Workflow</div>
+          {SECTIONS.map(s => (
+            <div key={s.id} className="hov" style={{
+              padding: '6px 8px', borderRadius: 6, cursor: 'pointer', marginBottom: 1,
+              background: s.id === 'search' ? 'rgba(0,0,0,0.05)' : 'transparent',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                background: s.id === 'search' ? s.color : `${s.color}1a`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Icon name={s.icon} size={13} color={s.id === 'search' ? '#fff' : s.color} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: s.id === 'search' ? 550 : 450, color: s.id === 'search' ? T.tx : T.t2, letterSpacing: '-0.005em' }}>{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${T.b1}`, padding: '8px 12px' }}>
+          <div className="hov" style={{ padding: '6px 8px', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <div style={{ width: 22, height: 22, borderRadius: 11, background: '#c7b299', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.02em' }}>DK</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: T.t2 }}>Dokyung</div>
+              <div style={{ fontSize: 10, color: T.t3 }}>Pro plan</div>
+            </div>
+            <Icon name="settings" size={13} color={T.t3} />
+          </div>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div className="main-wrap" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Topbar with concept switcher */}
+        <div style={{ padding: '0 20px', borderBottom: `1px solid ${T.b1}`, background: T.s1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, height: 48 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 22, height: 22, borderRadius: 5, background: T.search, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="search" size={13} color="#fff" />
+            </div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: T.tx, letterSpacing: '-0.01em' }}>Search</div>
+            <span style={{ fontSize: 11.5, color: T.t4 }}>·</span>
+            <span style={{ fontSize: 12, color: T.t3 }}>{Cur.desc}</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div className="concept-tabs">
+              {CONCEPTS.map(c => (
+                <button key={c.id} className={`concept-tab ${concept === c.id ? 'active' : ''}`}
+                        style={{ color: concept === c.id ? c.color : undefined }}
+                        onClick={() => setConcept(c.id)}
+                        title={`${c.desc} · ⌘${c.id}`}>
+                  <span className="dot" />
+                  {c.id} · {c.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn-s" style={{ padding: '3px 8px', fontSize: 11.5 }}><Icon name="share" size={12} /> Share</button>
+              <button className="btn-s" style={{ padding: '3px 8px', fontSize: 11.5 }}><Icon name="filter" size={12} /> Filter</button>
+            </div>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} key={concept}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', animation: 'fadeIn 220ms ease', overflow: 'hidden' }}>
+            <Comp />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

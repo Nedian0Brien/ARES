@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARES — Design System</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #fbfbfa;
+  --sb: #f5f5f4;
+  --s1: #ffffff;
+  --s2: #f7f7f6;
+  --s3: #f0efed;
+  --b1: #e8e8e6;
+  --b2: #d4d4d2;
+  --tx: #0a0a0b;
+  --t2: #4a4a50;
+  --t3: #8a8a92;
+  --t4: #b0b0b8;
+  --accent: #5e6ad2;
+}
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  background: var(--bg);
+  color: var(--tx);
+  -webkit-font-smoothing: antialiased;
+  font-size: 13px;
+  letter-spacing: -0.006em;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: #d8d7d3; border-radius: 3px; border: 1px solid transparent; }
+::-webkit-scrollbar-thumb:hover { background: #b8b7b3; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.hov:hover { background: rgba(0,0,0,0.035) !important; }
+.hov-soft:hover { background: rgba(0,0,0,0.02) !important; }
+.hov-card:hover { background: var(--s2) !important; border-color: #dcdbd8 !important; }
+.hov-row:hover { background: rgba(0,0,0,0.025) !important; }
+.kbd {
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--t3);
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: 3px;
+  padding: 0 5px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0;
+}
+button { font-family: inherit; }
+.btn-p { background: #18181b; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; letter-spacing: -0.006em; }
+.btn-p:hover { background: #26262b; }
+.btn-s { background: var(--s1); color: var(--tx); border: 1px solid var(--b1); border-radius: 6px; padding: 5px 11px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; letter-spacing: -0.006em; }
+.btn-s:hover { background: var(--s2); border-color: var(--b2); }
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 500;
+  padding: 1px 7px; border-radius: 4px;
+  background: var(--s2); color: var(--t2);
+  border: 1px solid var(--b1);
+  white-space: nowrap;
+  letter-spacing: -0.003em;
+}
+/* Design system page layout */
+.ds-root { max-width: 1180px; margin: 0 auto; padding: 40px 32px 120px; }
+.ds-topnav {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(251,251,250,0.88);
+  backdrop-filter: saturate(1.4) blur(8px);
+  -webkit-backdrop-filter: saturate(1.4) blur(8px);
+  border-bottom: 1px solid var(--b1);
+}
+.ds-topnav-inner { max-width: 1180px; margin: 0 auto; padding: 10px 32px; display: flex; align-items: center; gap: 18px; overflow-x: auto; }
+.ds-topnav a { font-size: 12px; color: var(--t2); text-decoration: none; white-space: nowrap; letter-spacing: -0.005em; padding: 4px 6px; border-radius: 5px; }
+.ds-topnav a:hover { background: rgba(0,0,0,0.04); color: var(--tx); }
+.ds-section { margin-top: 64px; scroll-margin-top: 60px; }
+.ds-section:first-of-type { margin-top: 32px; }
+.ds-eyebrow { font-size: 10.5px; font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 8px; }
+.ds-h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; margin-bottom: 12px; }
+.ds-h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 6px; }
+.ds-sub { font-size: 13px; color: var(--t2); line-height: 1.6; max-width: 720px; }
+.ds-rule { height: 1px; background: var(--b1); margin: 24px 0; }
+.ds-subgrid { display: grid; grid-template-columns: 180px 1fr; gap: 20px; margin-top: 20px; }
+.ds-subgrid .label { font-size: 10.5px; font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: 0.08em; padding-top: 4px; }
+.ds-card { background: var(--s1); border: 1px solid var(--b1); border-radius: 8px; padding: 18px 20px; }
+.ds-mono { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--t2); letter-spacing: 0; }
+.ds-grid-cols-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ds-grid-cols-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.ds-grid-cols-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.ds-swatch { border: 1px solid var(--b1); border-radius: 7px; overflow: hidden; background: var(--s1); }
+.ds-swatch-face { height: 56px; }
+.ds-swatch-meta { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.ds-swatch-name { font-size: 12px; font-weight: 550; letter-spacing: -0.005em; }
+.ds-swatch-val { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--t3); }
+.ds-inline-code { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; background: var(--s2); border: 1px solid var(--b1); border-radius: 4px; padding: 1px 6px; color: var(--t2); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+/* ── SHARED TOKENS (mirror of prototype) ───────────────────────── */
+const T = {
+  bg: '#fbfbfa', sb: '#f5f5f4', s1: '#ffffff', s2: '#f7f7f6', s3: '#f0efed',
+  b1: '#e8e8e6', b2: '#d4d4d2', tx: '#0a0a0b', t2: '#4a4a50', t3: '#8a8a92', t4: '#b0b0b8',
+  search: '#5e9c6f', read: '#5e6ad2', research: '#8957c9', result: '#c07b3a',
+  insight: '#c04e68', writing: '#3aa3a3',
+};
+const mono = { fontFamily: "'JetBrains Mono', monospace", fontFeatureSettings: 'normal' };
+
+/* ── ICONS (subset of prototype, 1.75 stroke) ─────────────────── */
+const Icon = ({ name, size = 16, color = 'currentColor', style = {} }) => {
+  const s = size;
+  const p = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', style };
+  const paths = {
+    search: <><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></>,
+    book: <><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></>,
+    flask: <><path d="M9 3h6"/><path d="M10 3v6L4.5 18a2 2 0 001.7 3h11.6a2 2 0 001.7-3L14 9V3"/><path d="M7 15h10"/></>,
+    chart: <><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></>,
+    sparkles: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></>,
+    pen: <><path d="M17 3l4 4L7 21H3v-4L17 3z"/></>,
+    chevR: <path d="M9 6l6 6-6 6"/>,
+    chevD: <path d="M6 9l6 6 6-6"/>,
+    plus: <><path d="M12 5v14M5 12h14"/></>,
+    filter: <path d="M22 3H2l8 9.5V19l4 2v-8.5L22 3z"/>,
+    ext: <><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></>,
+    check: <path d="M20 6L9 17l-5-5"/>,
+    dot: <circle cx="12" cy="12" r="4" fill={color} stroke="none"/>,
+    git: <><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></>,
+    arrowR: <><path d="M5 12h14M12 5l7 7-7 7"/></>,
+    status_done: <><circle cx="12" cy="12" r="9" fill={color} stroke="none"/><path d="M8 12l3 3 5-6" stroke="#fff"/></>,
+    status_run:  <><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 019 9" stroke={color} strokeWidth="2.5"/></>,
+    status_todo: <circle cx="12" cy="12" r="9" strokeDasharray="2 3"/>,
+    status_queue:<circle cx="12" cy="12" r="9"/>,
+    moreH: <><circle cx="6" cy="12" r="1.4" fill={color} stroke="none"/><circle cx="12" cy="12" r="1.4" fill={color} stroke="none"/><circle cx="18" cy="12" r="1.4" fill={color} stroke="none"/></>,
+    dl: <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></>,
+    share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></>,
+  };
+  return <svg {...p}>{paths[name]}</svg>;
+};
+
+/* ── SHARED ATOMS ──────────────────────────────────────────────── */
+const Tag = ({ label, color, dot }) => (
+  <span className="tag" style={color ? { background: `${color}12`, color, borderColor: `${color}30` } : {}}>
+    {dot && <span style={{ width: 5, height: 5, borderRadius: '50%', background: color || T.t3 }} />}
+    {label}
+  </span>
+);
+const Kbd = ({ children }) => <span className="kbd">{children}</span>;
+const StatusIcon = ({ status }) => {
+  const map = { done: T.search, running: T.result, todo: T.t3, queue: T.t4 };
+  const color = map[status] || T.t3;
+  if (status === 'done') return <Icon name="status_done" size={14} color={color} />;
+  if (status === 'running') return (
+    <span style={{ display: 'inline-flex', animation: 'pulse 1.5s infinite' }}>
+      <Icon name="status_run" size={14} color={color} />
+    </span>
+  );
+  if (status === 'todo') return <Icon name="status_todo" size={14} color={T.t3} />;
+  return <Icon name="status_queue" size={14} color={T.t4} />;
+};
+
+/* ── SECTION META ─────────────────────────────────────────────── */
+const SECTIONS = [
+  { id: 'search',   label: 'Search',   sub: '논문 서치 및 수집',   color: T.search,   icon: 'search'   },
+  { id: 'read',     label: 'Reading',  sub: 'AI 논문 리딩',        color: T.read,     icon: 'book'     },
+  { id: 'research', label: 'Research', sub: '재현연구 및 실험',    color: T.research, icon: 'flask'    },
+  { id: 'results',  label: 'Result',   sub: '결과 도출 및 정리',   color: T.result,   icon: 'chart'    },
+  { id: 'insights', label: 'Insight',  sub: '인사이트 취합',       color: T.insight,  icon: 'sparkles' },
+  { id: 'writing',  label: 'Writing',  sub: '논문 작성 보조',      color: T.writing,  icon: 'pen'      },
+];
+
+/* ── BLOCKS ────────────────────────────────────────────────────── */
+const Section = ({ id, eyebrow, title, sub, children }) => (
+  <section id={id} className="ds-section">
+    <div className="ds-eyebrow">{eyebrow}</div>
+    <h2 className="ds-h1">{title}</h2>
+    {sub && <p className="ds-sub">{sub}</p>}
+    <div className="ds-rule" />
+    {children}
+  </section>
+);
+const Sub = ({ label, children }) => (
+  <div className="ds-subgrid">
+    <div className="label">{label}</div>
+    <div>{children}</div>
+  </div>
+);
+const Swatch = ({ name, hex, dark }) => (
+  <div className="ds-swatch">
+    <div className="ds-swatch-face" style={{ background: hex, borderBottom: `1px solid ${T.b1}` }} />
+    <div className="ds-swatch-meta">
+      <span className="ds-swatch-name" style={{ color: dark ? T.tx : T.tx }}>{name}</span>
+      <span className="ds-swatch-val">{hex.toUpperCase()}</span>
+    </div>
+  </div>
+);
+const Row = ({ children, style = {} }) => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, ...style }}>{children}</div>
+);
+
+/* ── PAGES ─────────────────────────────────────────────────────── */
+function FoundationColors() {
+  const surface = [
+    ['bg',  T.bg,  'Canvas / app background'],
+    ['sb',  T.sb,  'Sidebar background'],
+    ['s1',  T.s1,  'Card / panel surface'],
+    ['s2',  T.s2,  'Hover / muted surface'],
+    ['s3',  T.s3,  'Pressed / progress track'],
+  ];
+  const border = [
+    ['b1', T.b1, 'Hairline border (default)'],
+    ['b2', T.b2, 'Border (hover / emphasis)'],
+  ];
+  const text = [
+    ['tx', T.tx, 'Primary text'],
+    ['t2', T.t2, 'Body / secondary text'],
+    ['t3', T.t3, 'Muted / label text'],
+    ['t4', T.t4, 'Disabled / placeholder'],
+  ];
+  const accent = [
+    ['search',   T.search,   'Stage 1 · 녹색 · 수집'],
+    ['read',     T.read,     'Stage 2 · 인디고 · 리딩 / 기본 액센트'],
+    ['research', T.research, 'Stage 3 · 보라 · 재현실험'],
+    ['result',   T.result,   'Stage 4 · 주황 · 결과 (= running)'],
+    ['insight',  T.insight,  'Stage 5 · 적분홍 · 인사이트'],
+    ['writing',  T.writing,  'Stage 6 · 청록 · 작성'],
+  ];
+  const chipRow = (rows) => (
+    <div className="ds-grid-cols-6">
+      {rows.map(([n, h, desc]) => (
+        <div key={n} className="ds-swatch" title={desc}>
+          <div className="ds-swatch-face" style={{ background: h, borderBottom: `1px solid ${T.b1}` }} />
+          <div className="ds-swatch-meta">
+            <span className="ds-swatch-name">{n}</span>
+            <span className="ds-swatch-val">{h.toUpperCase()}</span>
+            {desc && <span style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>{desc}</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+  return (
+    <Section id="colors" eyebrow="Foundation" title="Color"
+      sub="ARES의 팔레트는 Linear/Notion 스타일의 따뜻한 오프화이트를 기반으로 하고, 6단계 워크플로우를 고유의 desaturated 액센트로 구분한다. 각 stage 색은 bg(12%), border(30%) opacity 규칙으로 파생된다.">
+      <Sub label="Surface">{chipRow(surface)}</Sub>
+      <Sub label="Border">{chipRow(border)}</Sub>
+      <Sub label="Text">{chipRow(text)}</Sub>
+      <Sub label="Stage accent">{chipRow(accent)}</Sub>
+      <Sub label="Derived tints">
+        <div className="ds-card">
+          <div style={{ fontSize: 12, color: T.t2, marginBottom: 10, lineHeight: 1.7 }}>
+            Stage 색은 언제나 <span className="ds-inline-code">{'${color}'}</span> 위에 opacity suffix를 붙여 파생시킨다. 새로운 색상을 임의로 만들지 않는다.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
+            {[['12%', '0a', '0f', '1a'], ['18%', '18', '2d', '55'], ['25%', '28', '3f', '60']].map(([pct, a, b, c]) => (
+              <React.Fragment key={pct}>
+                <div style={{ fontSize: 11, color: T.t3, ...mono }}>bg / text ≈ {pct}</div>
+                <div style={{ padding: '10px 14px', background: `${T.read}${a}`, color: T.read, borderRadius: 6, fontSize: 12 }}>read · {a}</div>
+                <div style={{ padding: '10px 14px', background: `${T.insight}${b}`, color: T.insight, borderRadius: 6, fontSize: 12 }}>insight · {b}</div>
+                <div style={{ padding: '10px 14px', background: `${T.writing}${c}`, color: T.writing, borderRadius: 6, fontSize: 12 }}>writing · {c}</div>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function FoundationType() {
+  const scale = [
+    ['Display',  30, 600, '-0.03em', 1.0,  '숫자 지표 (재현도/메트릭 카드)'],
+    ['H1',       24, 600, '-0.025em', 1.2,  'Writing 화면 타이틀'],
+    ['H2',       19, 600, '-0.02em', 1.35, '논문 리딩 타이틀'],
+    ['Title',    14, 600, '-0.01em', 1.4,  '카드/섹션 타이틀'],
+    ['Strong',   13.5, 550, '-0.01em', 1.4, '리스트 primary'],
+    ['Body',     14, 400, '-0.006em', 1.75, '본문 (리딩/작성)'],
+    ['UI base',  13, 450, '-0.006em', 1.5, '사이드바/버튼'],
+    ['UI small', 12.5, 450, '-0.005em', 1.5, 'secondary 리스트'],
+    ['Meta',     11.5, 500, '-0.003em', 1.4, 'author, 칩 내부'],
+    ['Label',    11, 600, '0.06em', 1.4,   'uppercase 섹션 라벨'],
+    ['Caption',  10.5, 500, '0.08em', 1.3, 'eyebrow / micro'],
+  ];
+  return (
+    <Section id="type" eyebrow="Foundation" title="Typography"
+      sub="Inter가 UI 전체를 담당하고, 메트릭과 파라미터는 JetBrains Mono로 조판한다. 모든 sans 텍스트는 feature-settings 'cv11','ss01','ss03'을 강제 적용하여 숫자/알파벳이 일관된 형태를 유지한다.">
+      <Sub label="Families">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="ds-card">
+            <div className="ds-eyebrow" style={{ marginBottom: 4 }}>Sans</div>
+            <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>Inter</div>
+            <div style={{ fontSize: 12, color: T.t3, marginTop: 4 }}>weights 400 / 450 / 500 / 550 / 600 / 650</div>
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 4, ...mono }}>cv11 · ss01 · ss03</div>
+          </div>
+          <div className="ds-card">
+            <div className="ds-eyebrow" style={{ marginBottom: 4 }}>Mono</div>
+            <div style={{ fontSize: 22, fontWeight: 500, ...mono }}>JetBrains Mono</div>
+            <div style={{ fontSize: 12, color: T.t3, marginTop: 4 }}>metrics, params, code, kbd-adjacent values</div>
+          </div>
+        </div>
+      </Sub>
+      <Sub label="Scale">
+        <div className="ds-card">
+          <div style={{ display: 'grid', gridTemplateColumns: '100px 70px 60px 90px 60px 1fr', gap: 12, fontSize: 11, color: T.t3, padding: '4px 0 10px', borderBottom: `1px solid ${T.b1}`, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            <span>Role</span><span>Size</span><span>Weight</span><span>Tracking</span><span>LH</span><span>Example</span>
+          </div>
+          {scale.map(([role, size, w, track, lh, ex], i) => (
+            <div key={role} style={{ display: 'grid', gridTemplateColumns: '100px 70px 60px 90px 60px 1fr', gap: 12, alignItems: 'baseline', padding: '10px 0', borderBottom: i < scale.length - 1 ? `1px solid ${T.b1}` : 'none' }}>
+              <span style={{ fontSize: 12, color: T.t2, fontWeight: 500 }}>{role}</span>
+              <span style={{ ...mono, fontSize: 11.5, color: T.t3 }}>{size}px</span>
+              <span style={{ ...mono, fontSize: 11.5, color: T.t3 }}>{w}</span>
+              <span style={{ ...mono, fontSize: 11.5, color: T.t3 }}>{track}</span>
+              <span style={{ ...mono, fontSize: 11.5, color: T.t3 }}>{lh}</span>
+              <span style={{ fontSize: size, fontWeight: w, letterSpacing: track, lineHeight: lh, color: T.tx }}>{ex}</span>
+            </div>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Uppercase label">
+        <div className="ds-card">
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Section Label</div>
+          <div style={{ fontSize: 12, color: T.t2, marginTop: 6, lineHeight: 1.65 }}>
+            사이드바/패널 상단의 작은 카테고리 라벨은 <span className="ds-inline-code">10.5–11px</span>, <span className="ds-inline-code">weight 500–600</span>, <span className="ds-inline-code">tracking 0.06–0.09em</span>, <span className="ds-inline-code">color t3</span> 규칙을 따른다. 절대 <span className="ds-inline-code">t2</span> 이상 밝기를 쓰지 않는다.
+          </div>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function FoundationSpacing() {
+  const steps = [2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32];
+  const radii = [['sm', 3], ['md', 5], ['lg', 6], ['xl', 7], ['2xl', 8]];
+  return (
+    <Section id="space" eyebrow="Foundation" title="Spacing · Radius"
+      sub="기본 단위는 엄격한 8배수가 아니라 UI 밀도에 맞춘 half-step(2/3/5/7)도 허용한다. 단, 컨테이너 padding은 최소 10px 이상, 카드 radius는 6–8px 범위 내로 제한한다.">
+      <Sub label="Spacing ramp">
+        <div className="ds-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {steps.map(n => (
+            <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ ...mono, fontSize: 11, color: T.t3, width: 40 }}>{n}px</span>
+              <div style={{ height: 10, width: n * 4, background: T.read, opacity: 0.85, borderRadius: 2 }} />
+            </div>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Radius">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+          {radii.map(([n, r]) => (
+            <div key={n} className="ds-card" style={{ textAlign: 'center', padding: '14px 10px' }}>
+              <div style={{ width: 64, height: 64, margin: '0 auto', background: T.s2, border: `1px solid ${T.b1}`, borderRadius: r }} />
+              <div style={{ fontSize: 12, fontWeight: 550, marginTop: 10 }}>{n}</div>
+              <div className="ds-swatch-val">{r}px</div>
+            </div>
+          ))}
+          <div className="ds-card" style={{ textAlign: 'center', padding: '14px 10px' }}>
+            <div style={{ width: 64, height: 64, margin: '0 auto', background: T.s2, border: `1px solid ${T.b1}`, borderRadius: 999 }} />
+            <div style={{ fontSize: 12, fontWeight: 550, marginTop: 10 }}>full</div>
+            <div className="ds-swatch-val">9999px</div>
+          </div>
+        </div>
+      </Sub>
+      <Sub label="Elevation">
+        <div className="ds-grid-cols-3">
+          <div className="ds-card" style={{ background: T.s1, boxShadow: 'none' }}>
+            <div className="ds-eyebrow" style={{ marginBottom: 0 }}>E0 · flat</div>
+            <div style={{ fontSize: 12, color: T.t3, marginTop: 4 }}>카드/패널 기본값. border만 사용.</div>
+          </div>
+          <div className="ds-card" style={{ boxShadow: '0 6px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div className="ds-eyebrow" style={{ marginBottom: 0 }}>E1 · float</div>
+            <div style={{ fontSize: 12, color: T.t3, marginTop: 4 }}>우하단 툴 패널, toast.</div>
+          </div>
+          <div className="ds-card" style={{ boxShadow: '0 8px 24px rgba(15,15,15,0.08), 0 1px 3px rgba(15,15,15,0.06)' }}>
+            <div className="ds-eyebrow" style={{ marginBottom: 0 }}>E2 · menu</div>
+            <div style={{ fontSize: 12, color: T.t3, marginTop: 4 }}>컨텍스트 메뉴, 드롭다운.</div>
+          </div>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function FoundationMotion() {
+  return (
+    <Section id="motion" eyebrow="Foundation" title="Motion"
+      sub="움직임은 상태 변화를 명시할 때만 사용한다. 에이전트의 작업 중 상태는 pulse로, hover/선택은 80–120ms 짧은 배경 전환으로만 표현한다. Parallax·spring·bounce은 사용하지 않는다.">
+      <Sub label="Durations">
+        <div className="ds-card" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 10, rowGap: 10, alignItems: 'center' }}>
+          {[['80ms', 'sidebar hover, tab switch'], ['120ms', 'button bg/border, icon color'], ['150–200ms', 'panel fade-in'], ['1500ms pulse', 'agent working / running status']].map(([k, v]) => (
+            <React.Fragment key={k}>
+              <span style={{ ...mono, fontSize: 11.5, color: T.t2 }}>{k}</span>
+              <span style={{ fontSize: 12.5, color: T.t2 }}>{v}</span>
+            </React.Fragment>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Easings">
+        <div className="ds-card" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 10, rowGap: 10 }}>
+          {[['ease',       '기본 — hover 전환'], ['ease-out',   'fadeIn, panel enter'], ['linear',     'progress/스켈레톤']].map(([k, v]) => (
+            <React.Fragment key={k}>
+              <span style={{ ...mono, fontSize: 11.5, color: T.t2 }}>{k}</span>
+              <span style={{ fontSize: 12.5, color: T.t2 }}>{v}</span>
+            </React.Fragment>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Pulse demo">
+        <div className="ds-card" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <span style={{ display: 'inline-flex', animation: 'pulse 1.5s infinite', alignItems: 'center', gap: 6, fontSize: 12, color: T.search }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.search }} /> Scout agent
+          </span>
+          <StatusIcon status="running" />
+          <span style={{ fontSize: 12, color: T.t3 }}>모든 long-running 상태는 동일한 1.5s pulse를 공유</span>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function Iconography() {
+  const names = ['search','book','flask','chart','sparkles','pen','chevR','chevD','plus','filter','ext','check','dot','git','arrowR','moreH','dl','share','settings'];
+  return (
+    <Section id="icons" eyebrow="Foundation" title="Iconography"
+      sub="Lucide 계열의 1.75px outline 아이콘만 사용한다. 기본 크기는 16px, 인라인 텍스트 옆은 13–14px, 사이드바는 13px, 상태 점은 6px. fill 아이콘은 status_done/dot/play 세 종류만 허용된다.">
+      <Sub label="Catalog">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+          {names.map(n => (
+            <div key={n} className="ds-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '14px 6px' }}>
+              <Icon name={n} size={18} color={T.tx} />
+              <span style={{ ...mono, fontSize: 10.5, color: T.t3 }}>{n}</span>
+            </div>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Sizing rules">
+        <div className="ds-card" style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.75 }}>
+          <div>• 기본 <span className="ds-inline-code">16px</span> · stroke <span className="ds-inline-code">1.75</span> · linecap/linejoin <span className="ds-inline-code">round</span></div>
+          <div>• 버튼 내부 <span className="ds-inline-code">12–13px</span> · Kbd와 혼용 시 13px</div>
+          <div>• 리스트 leading <span className="ds-inline-code">13–14px</span></div>
+          <div>• 상태 <span className="ds-inline-code">14px</span> · 관계 dot <span className="ds-inline-code">5–6px</span></div>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function ComponentsBasic() {
+  return (
+    <Section id="buttons" eyebrow="Components" title="Buttons · Tags · Kbd"
+      sub="트리거 우선순위는 primary (.btn-p) → secondary (.btn-s) → ghost (icon only)로 좁혀진다. 한 뷰에 primary는 1개를 원칙으로 한다.">
+      <Sub label="Buttons">
+        <div className="ds-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <button className="btn-p">Primary</button>
+          <button className="btn-p"><Icon name="plus" size={13} color="#fff" /> With icon</button>
+          <button className="btn-s">Secondary</button>
+          <button className="btn-s"><Icon name="share" size={13} /> Share</button>
+          <button className="btn-s" style={{ padding: '3px 8px', fontSize: 11.5 }}><Icon name="filter" size={12} /> Compact</button>
+          <button className="btn-s"><Icon name="sparkles" size={13} color={T.writing} /> AI draft</button>
+          <button className="btn-p" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>Disabled</button>
+        </div>
+      </Sub>
+      <Sub label="Tags">
+        <div className="ds-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <Tag label="default" />
+          <Tag label="ACL 2024" />
+          <Tag label="code" color={T.search} />
+          <Tag label="saved" color={T.read} />
+          <Tag label="running" color={T.result} dot />
+          <Tag label="done" color={T.search} dot />
+          <Tag label="insight" color={T.insight} dot />
+          <Tag label="writing" color={T.writing} dot />
+        </div>
+      </Sub>
+      <Sub label="Keyboard">
+        <div className="ds-card" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Kbd>⌘K</Kbd>
+          <Kbd>⌘1</Kbd>
+          <Kbd>C</Kbd>
+          <Kbd>N</Kbd>
+          <Kbd>⌘E</Kbd>
+          <span style={{ fontSize: 12, color: T.t3 }}>높이 18px · t3 · s1 배경. hover/active 시 색 변하지 않음.</span>
+        </div>
+      </Sub>
+      <Sub label="Inputs">
+        <div className="ds-card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 8, background: T.s1, border: `1px solid ${T.b1}`, borderRadius: 6, padding: '7px 11px', alignItems: 'center' }}>
+            <Icon name="search" size={15} color={T.t3} />
+            <input placeholder="RAG reranker cost 줄이는 방법..." style={{ border: 'none', outline: 'none', background: 'transparent', flex: 1, fontSize: 13, color: T.tx, fontFamily: 'inherit' }} />
+            <Kbd>⌘K</Kbd>
+          </div>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: T.t2 }}>
+              <div style={{ width: 13, height: 13, border: `1.5px solid ${T.tx}`, borderRadius: 3, background: T.tx, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="check" size={9} color="#fff" />
+              </div>
+              checked
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: T.t2 }}>
+              <div style={{ width: 13, height: 13, border: `1.5px solid ${T.b2}`, borderRadius: 3 }} />
+              unchecked
+            </label>
+            <div style={{ flex: 1, maxWidth: 220 }}>
+              <input type="range" min="0" max="100" defaultValue="70" style={{ width: '100%', accentColor: T.tx }} />
+              <div style={{ fontSize: 11, color: T.t2, ...mono, marginTop: 3 }}>≥ 70%</div>
+            </div>
+          </div>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function ComponentsStatus() {
+  const rows = [
+    ['done',    T.search, 'Filled · 체크마크', '완료된 subtask. 리스트에서는 취소선.'],
+    ['running', T.result, 'Stroked · 상단호 + pulse', '실행 중인 단일 작업. 반드시 pulse를 동반.'],
+    ['todo',    T.t3,     'Dashed 원',          '예정된 작업 (사용자 대기).'],
+    ['queue',   T.t4,     'Solid 원',           '대기열. 에이전트가 순차 실행.'],
+  ];
+  return (
+    <Section id="status" eyebrow="Components" title="Status system"
+      sub="4-상태(done / running / todo / queue)는 ARES 전 화면의 단일 어휘이다. 에이전트 이름 옆, 체크리스트, 실험 행, 섹션 인디케이터 모두 동일 아이콘·색을 재사용한다.">
+      <Sub label="Matrix">
+        <div className="ds-card">
+          <div style={{ display: 'grid', gridTemplateColumns: '110px 120px 1fr 1fr', gap: 14, padding: '4px 0 10px', borderBottom: `1px solid ${T.b1}`, fontSize: 11, color: T.t3, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            <span>Status</span><span>Icon</span><span>Visual</span><span>Semantic</span>
+          </div>
+          {rows.map(([st, c, vis, sem], i) => (
+            <div key={st} style={{ display: 'grid', gridTemplateColumns: '110px 120px 1fr 1fr', gap: 14, alignItems: 'center', padding: '12px 0', borderBottom: i < rows.length - 1 ? `1px solid ${T.b1}` : 'none' }}>
+              <span style={{ fontSize: 13, fontWeight: 550, color: c }}>{st}</span>
+              <StatusIcon status={st} />
+              <span style={{ fontSize: 12.5, color: T.t2 }}>{vis}</span>
+              <span style={{ fontSize: 12.5, color: T.t3 }}>{sem}</span>
+            </div>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Agent badge">
+        <div className="ds-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[
+            ['Scout agent',       T.search,   'running'],
+            ['Reader agent',      T.read,     'done'],
+            ['Reproduction agent',T.research, 'running'],
+            ['Experiment agent',  T.result,   'running'],
+            ['Analyst agent',     T.insight,  'done'],
+            ['Writing agent',     T.writing,  'todo'],
+          ].map(([label, color, st]) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: T.t2 }}>
+              <StatusIcon status={st} />
+              <span style={{ color, fontWeight: 550 }}>{label}</span>
+              <span style={{ color: T.t4 }}>·</span>
+              <span>{st}</span>
+            </div>
+          ))}
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function ComponentsStage() {
+  return (
+    <Section id="stages" eyebrow="Components" title="Stage chip · Workflow nav"
+      sub="각 stage는 고정된 아이콘 + 색 + 사용자 보조문(sub label)을 묶어 워크플로우 어디서든 동일하게 등장한다.">
+      <Sub label="Topbar heading">
+        <div className="ds-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {SECTIONS.map(s => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 5, background: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={s.icon} size={13} color="#fff" />
+              </div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.01em' }}>{s.label}</div>
+              <span style={{ fontSize: 11.5, color: T.t4 }}>·</span>
+              <span style={{ fontSize: 12, color: T.t3 }}>{s.sub}</span>
+            </div>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Sidebar row">
+        <div className="ds-card" style={{ background: T.sb, padding: '12px 10px' }}>
+          {SECTIONS.map((s, i) => (
+            <div key={s.id} className="hov" style={{
+              padding: '6px 8px', borderRadius: 6, cursor: 'pointer', marginBottom: 1,
+              background: i === 1 ? 'rgba(0,0,0,0.05)' : 'transparent',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: 5,
+                background: i === 1 ? s.color : `${s.color}1a`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Icon name={s.icon} size={13} color={i === 1 ? '#fff' : s.color} />
+              </div>
+              <div style={{ flex: 1, fontSize: 12.5, fontWeight: i === 1 ? 550 : 450, color: i === 1 ? T.tx : T.t2 }}>{s.label}</div>
+              <Kbd>⌘{i + 1}</Kbd>
+            </div>
+          ))}
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function ComponentsCards() {
+  return (
+    <Section id="cards" eyebrow="Components" title="Card · Metric · Table"
+      sub="모든 컨테이너는 s1 배경 + b1 1px border + radius 8px가 기본값이다. 강조가 필요하면 stage 색을 8%/28% 규칙으로 tint한다.">
+      <Sub label="Metric card (3-up)">
+        <div className="ds-grid-cols-3">
+          {[['Paper', '43.1', T.t2, ''], ['Reproduction', '42.3', T.tx, 'nDCG@10'], ['Delta', '−0.8', T.insight, 'within range']].map(([label, val, c, sub]) => (
+            <div key={label} style={{ background: T.s1, border: `1px solid ${T.b1}`, borderRadius: 8, padding: '16px 20px' }}>
+              <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500, marginBottom: 10 }}>{label}</div>
+              <div style={{ fontSize: 30, fontWeight: 600, color: c, letterSpacing: '-0.03em', lineHeight: 1 }}>{val}</div>
+              <div style={{ fontSize: 10.5, color: T.t3, marginTop: 6 }}>{sub || ' '}</div>
+            </div>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Data table">
+        <div style={{ background: T.s1, border: `1px solid ${T.b1}`, borderRadius: 8, padding: '18px 22px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${T.b1}` }}>
+                {['Experiment', 'Metric', 'Paper', 'Ours', 'Δ'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '8px 12px 8px 0', fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[['Baseline', 'nDCG@10', '43.1', '42.3', '-0.8'], ['τ=0.5', 'nDCG@10', '44.2', '43.5', '-0.7'], ['cascade off', 'nDCG@10', '40.1', '39.8', '-0.3']].map((row, i, arr) => (
+                <tr key={i} style={{ borderBottom: i < arr.length - 1 ? `1px solid ${T.b1}` : 'none' }}>
+                  {row.map((cell, j) => (
+                    <td key={j} style={{ padding: '10px 12px 10px 0', color: j >= 2 ? T.tx : T.t2, fontWeight: j >= 3 ? 500 : 400, ...(j >= 2 ? mono : {}) }}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Sub>
+      <Sub label="Tinted insight card">
+        <div style={{ background: `${T.insight}0a`, border: `1px solid ${T.insight}28`, borderRadius: 8, padding: '16px 20px' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 550, color: T.insight, marginBottom: 10 }}>
+            <StatusIcon status="done" />Analyst 리포트
+          </div>
+          <div style={{ fontSize: 13, color: T.t2, lineHeight: 1.75 }}>
+            성능 차이(−0.8)의 주요 원인은 <span style={{ color: T.tx, fontWeight: 550 }}>BEIR 전처리 방식 차이</span>로 추정. cascade 제거 시 <span style={{ color: T.insight, fontWeight: 600 }}>3.2% 하락</span>.
+          </div>
+          <div style={{ display: 'flex', gap: 5, marginTop: 10 }}>
+            {['cascade 필수', 'threshold 민감', '전처리 불일치'].map(t => <Tag key={t} label={t} color={T.insight} />)}
+          </div>
+        </div>
+      </Sub>
+      <Sub label="Code block">
+        <div style={{ background: '#0f0f12', borderRadius: 7, padding: '14px 18px', ...mono, fontSize: 12.5, color: '#9dd6a8', lineHeight: 1.8 }}>
+          <span style={{ color: '#565660' }}># Confidence scoring</span><br />
+          c(q) = cosine_sim(q_enc, d_enc[0]) - cosine_sim(q_enc, d_enc[1])<br />
+          skip_reranker = c(q) &gt; τ
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function ComponentsProse() {
+  return (
+    <Section id="prose" eyebrow="Components" title="Prose · Highlights"
+      sub="읽기 화면에서는 본문에 stage 색으로 4종 하이라이트를 적용한다. Method=read, Result=search, Limit=result, Claim=research. 하이라이트는 연한 배경(~10%) + 2px 하단 밑줄로 이중 코딩된다.">
+      <Sub label="Body">
+        <div className="ds-card" style={{ maxWidth: 720 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>3. Method</div>
+          <p style={{ fontSize: 14, lineHeight: 1.75, marginBottom: 14 }}>
+            <span style={{ background: `${T.read}1a`, borderBottom: `2px solid ${T.read}`, padding: '1px 0' }}>cascade confidence scoring을 통해 retriever 신뢰도가 임계값 이하인 쿼리에만 reranker를 호출하는 선택적 실행 메커니즘</span>을 도입했다.
+          </p>
+          <p style={{ fontSize: 14, lineHeight: 1.75, marginBottom: 14 }}>
+            <span style={{ background: `${T.search}18`, borderBottom: `2px solid ${T.search}`, padding: '1px 0' }}>BEIR 18 tasks 평균 nDCG@10 44.8, 기존 대비 40% 연산량 감소</span>.
+          </p>
+          <p style={{ fontSize: 14, lineHeight: 1.75 }}>
+            However, <span style={{ background: `${T.result}18`, borderBottom: `2px solid ${T.result}`, padding: '1px 0' }}>threshold 값은 데이터셋별로 수동 튜닝이 필요</span>하다.
+          </p>
+        </div>
+      </Sub>
+      <Sub label="Highlight legend">
+        <div className="ds-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {[['Method', T.read], ['Result', T.search], ['Limit', T.result], ['Claim', T.research]].map(([l, c]) => (
+            <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.t2 }}>
+              <span style={{ width: 8, height: 2, background: c, borderRadius: 1 }} />{l}
+              <span style={{ color: T.t3, fontSize: 11, marginLeft: 4 }}>bg {(c + '1a').toUpperCase()} · border 2px {c.toUpperCase()}</span>
+            </div>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="AI suggestion">
+        <div style={{ background: `${T.writing}0a`, border: `1px dashed ${T.writing}50`, borderRadius: 6, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, maxWidth: 560 }}>
+          <Icon name="sparkles" size={14} color={T.writing} />
+          <span style={{ fontSize: 12.5, color: T.t2, flex: 1 }}>AI 제안: threshold 안정 구간 분석 단락 추가</span>
+          <button className="btn-s" style={{ padding: '3px 9px', fontSize: 11.5 }}>Accept</button>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function PatternsLayout() {
+  return (
+    <Section id="layout" eyebrow="Patterns" title="Layout"
+      sub="모든 워크플로우 스테이지는 동일한 L자형 셸(사이드바 232px + 메인)을 공유한다. 메인은 상황에 따라 1열, 2열, 3열로 분할되며, 좌우 보조 패널은 각각 고정 폭을 갖는다.">
+      <Sub label="Shell dimensions">
+        <div className="ds-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', height: 220, background: T.bg }}>
+            <div style={{ width: 120, background: T.sb, borderRight: `1px solid ${T.b1}`, padding: 10, fontSize: 10.5, color: T.t3 }}>
+              <div style={{ fontWeight: 600 }}>Sidebar</div>
+              <div style={{ ...mono, color: T.t4, marginTop: 2 }}>232px</div>
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ height: 44, borderBottom: `1px solid ${T.b1}`, background: T.s1, display: 'flex', alignItems: 'center', padding: '0 14px', fontSize: 10.5, color: T.t3 }}>Topbar · 44px</div>
+              <div style={{ flex: 1, display: 'flex' }}>
+                <div style={{ width: 100, borderRight: `1px solid ${T.b1}`, background: T.s2, padding: 10, fontSize: 10, color: T.t3 }}>Filter<br/><span style={{ ...mono, color: T.t4 }}>180–340</span></div>
+                <div style={{ flex: 1, background: T.s1, padding: 10, fontSize: 10, color: T.t3 }}>Main (flex)</div>
+                <div style={{ width: 110, borderLeft: `1px solid ${T.b1}`, background: T.s1, padding: 10, fontSize: 10, color: T.t3 }}>Preview / agent<br/><span style={{ ...mono, color: T.t4 }}>300–310</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Sub>
+      <Sub label="Panel widths">
+        <div className="ds-card" style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 10, rowGap: 10 }}>
+          {[['Desktop sidebar', '232px'], ['Topbar height', '44px'], ['Filter (Search)', '200px'], ['Reading TOC', '180px'], ['Reproduction panel', '340px'], ['Writing sections', '190px'], ['Preview / agent panel', '300–310px'], ['Reading body max-width', '640px'], ['Writing body max-width', '640px']].map(([k, v]) => (
+            <React.Fragment key={k}>
+              <span style={{ fontSize: 12.5, color: T.t2 }}>{k}</span>
+              <span style={{ ...mono, fontSize: 12, color: T.tx }}>{v}</span>
+            </React.Fragment>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Responsive">
+        <div className="ds-card" style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.75 }}>
+          <div>• <span className="ds-inline-code">≤ 768px</span> — 데스크톱 사이드바 숨김, 하단 <span className="ds-inline-code">bottom-nav</span> 표시 (6 stage icons, 활성 색 tint).</div>
+          <div>• 보조 패널(필터/프리뷰)은 모바일에서 inline 순서로 stacking.</div>
+          <div>• 모바일 상태에서도 topbar / kbd hint는 그대로 유지.</div>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function PatternsShell() {
+  return (
+    <Section id="shell" eyebrow="Patterns" title="App shell preview"
+      sub="실제 프로토타입의 shell 영역을 축소된 뷰로 재현한다. 구현 시 이 비율을 기준으로 간격·정렬을 검증한다.">
+      <div className="ds-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', height: 360, background: T.bg }}>
+          {/* Sidebar */}
+          <div style={{ width: 200, background: T.sb, borderRight: `1px solid ${T.b1}`, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.b1}`, display: 'flex', alignItems: 'center', gap: 9 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 5, background: 'linear-gradient(135deg,#5e6ad2,#8b5cf6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 700 }}>A</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 550 }}>ARES</div>
+                <div style={{ fontSize: 10, color: T.t3 }}>Research workspace</div>
+              </div>
+              <Icon name="chevD" size={11} color={T.t3} />
+            </div>
+            <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.b1}` }}>
+              <div className="hov-soft" style={{ padding: '4px 8px', borderRadius: 5, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="search" size={12.5} color={T.t3} /><span style={{ fontSize: 11.5, color: T.t3, flex: 1 }}>Search</span><Kbd>⌘K</Kbd>
+              </div>
+            </div>
+            <div style={{ padding: '8px 12px', flex: 1, overflow: 'auto' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 6px 6px' }}>Workflow</div>
+              {SECTIONS.map((s, i) => (
+                <div key={s.id} style={{ padding: '5px 6px', borderRadius: 5, background: i === 1 ? 'rgba(0,0,0,0.05)' : 'transparent', display: 'flex', alignItems: 'center', gap: 9, marginBottom: 1 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: 4, background: i === 1 ? s.color : `${s.color}1a`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name={s.icon} size={11} color={i === 1 ? '#fff' : s.color} />
+                  </div>
+                  <span style={{ fontSize: 11.5, color: i === 1 ? T.tx : T.t2, fontWeight: i === 1 ? 550 : 450 }}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Main */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ height: 38, borderBottom: `1px solid ${T.b1}`, background: T.s1, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10 }}>
+              <div style={{ width: 20, height: 20, borderRadius: 5, background: T.read, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="book" size={12} color="#fff" />
+              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>Reading</div>
+              <span style={{ fontSize: 11, color: T.t4 }}>·</span>
+              <span style={{ fontSize: 11, color: T.t3 }}>AI 논문 리딩</span>
+              <div style={{ flex: 1 }} />
+              <button className="btn-s" style={{ padding: '3px 8px', fontSize: 11 }}><Icon name="share" size={11} /> Share</button>
+            </div>
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+              <div style={{ width: 140, borderRight: `1px solid ${T.b1}`, background: T.s2, padding: '12px 12px' }}>
+                <div style={{ fontSize: 10, color: T.t3, marginBottom: 4 }}>Reading</div>
+                <div style={{ fontSize: 12, fontWeight: 550, lineHeight: 1.35 }}>Adaptive Skipping</div>
+                <div style={{ height: 2, background: T.s3, borderRadius: 1, overflow: 'hidden', marginTop: 8 }}>
+                  <div style={{ width: '62%', height: '100%', background: T.read }} />
+                </div>
+                <div style={{ fontSize: 9.5, color: T.t3, marginTop: 3, ...mono }}>62%</div>
+              </div>
+              <div style={{ flex: 1, padding: '16px 18px', overflow: 'auto' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>3. Method</div>
+                <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+                  We propose an <span style={{ background: `${T.read}1a`, borderBottom: `2px solid ${T.read}`, padding: '1px 0' }}>Adaptive Skipping mechanism</span> for RAG systems, where confidence-based skipping yields <span style={{ background: `${T.search}18`, borderBottom: `2px solid ${T.search}`, padding: '1px 0' }}>40% cost reduction</span>.
+                </div>
+              </div>
+              <div style={{ width: 170, borderLeft: `1px solid ${T.b1}`, background: T.s1, padding: '12px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                  <StatusIcon status="done" />
+                  <span style={{ fontSize: 11.5, fontWeight: 550 }}>Reader agent</span>
+                </div>
+                {[['Method', T.read], ['Result', T.search], ['Limit', T.result]].map(([l, c]) => (
+                  <div key={l} style={{ borderLeft: `2px solid ${c}`, paddingLeft: 8, marginBottom: 8 }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 600, color: c, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{l}</div>
+                    <div style={{ fontSize: 10.5, color: T.t2, lineHeight: 1.5, marginTop: 2 }}>요약 텍스트가 여기에 표시됩니다.</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function Accessibility() {
+  return (
+    <Section id="a11y" eyebrow="Quality" title="Accessibility"
+      sub="라이트 팔레트 기반이기 때문에 대비를 개별 토큰 단위로 검증한다. stage 색은 본문 위에 단독 텍스트로 쓰지 않고, 배경 tint 또는 아이콘 + 라벨 조합으로만 사용한다.">
+      <Sub label="Contrast rules">
+        <div className="ds-card" style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.8 }}>
+          <div>• 본문 텍스트(t2 / tx)는 <span className="ds-inline-code">s1</span>, <span className="ds-inline-code">s2</span> 위에서 4.5:1 이상.</div>
+          <div>• t3 는 라벨/보조 텍스트에만, 3:1 이상 유지.</div>
+          <div>• stage accent 는 14px 이하에서는 bg+underline으로 이중 코딩 (색만으로 의미를 전달하지 않음).</div>
+          <div>• disabled 상태는 t4 + 50% opacity를 조합하지 않는다 (둘 중 하나만).</div>
+        </div>
+      </Sub>
+      <Sub label="Keyboard">
+        <div className="ds-card" style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10, rowGap: 8 }}>
+          {[
+            ['⌘1–⌘6', 'Workflow stage 이동 (Search → Writing)'],
+            ['⌘K',    '전역 서치 팔레트'],
+            ['C',     'New paper'],
+            ['N',     'New experiment'],
+            ['⌘E',    '메모 패널 포커스'],
+          ].map(([k, v]) => (
+            <React.Fragment key={k}>
+              <span><Kbd>{k}</Kbd></span>
+              <span style={{ fontSize: 12.5, color: T.t2 }}>{v}</span>
+            </React.Fragment>
+          ))}
+        </div>
+      </Sub>
+      <Sub label="Focus">
+        <div className="ds-card" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn-p" style={{ outline: `2px solid ${T.read}`, outlineOffset: 2 }}>Focused primary</button>
+          <button className="btn-s" style={{ outline: `2px solid ${T.read}`, outlineOffset: 2 }}>Focused secondary</button>
+          <span style={{ fontSize: 12, color: T.t3 }}>outline 2px · <span className="ds-inline-code">read</span> · offset 2</span>
+        </div>
+      </Sub>
+    </Section>
+  );
+}
+
+function Principles() {
+  return (
+    <Section id="principles" eyebrow="Do / Don't" title="Principles"
+      sub="디자인 결정에서 충돌이 생기면 다음 규칙을 따른다.">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="ds-card" style={{ borderColor: `${T.search}35`, background: `${T.search}08` }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.search, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Do</div>
+          <ul style={{ paddingLeft: 18, fontSize: 12.5, color: T.t2, lineHeight: 1.85, listStyle: 'disc' }}>
+            <li>Stage 색은 항상 아이콘/라벨과 쌍으로 등장.</li>
+            <li>Agent 가동은 <span className="ds-inline-code">pulse</span> + 상태 아이콘으로만 표현.</li>
+            <li>카드 기본은 flat (border만). 그림자는 E1/E2 한정.</li>
+            <li>숫자는 Mono, 본문은 Inter.</li>
+            <li>컨테이너 padding은 최소 10px.</li>
+          </ul>
+        </div>
+        <div className="ds-card" style={{ borderColor: `${T.insight}35`, background: `${T.insight}08` }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: T.insight, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Don't</div>
+          <ul style={{ paddingLeft: 18, fontSize: 12.5, color: T.t2, lineHeight: 1.85, listStyle: 'disc' }}>
+            <li>Stage 색을 버튼 배경으로 쓰지 않는다 (primary는 항상 #18181b).</li>
+            <li>한 화면에 primary 버튼 2개 이상.</li>
+            <li>그라디언트는 ARES 로고/워크스페이스 아바타 외 사용 금지.</li>
+            <li>stage 색을 서로 섞어 새 색을 만들지 않는다.</li>
+            <li>motion에서 bounce/spring/스케일 pop을 쓰지 않는다.</li>
+          </ul>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+/* ── APP ──────────────────────────────────────────────────────── */
+function App() {
+  const nav = [
+    ['colors', 'Color'], ['type', 'Typography'], ['space', 'Spacing'], ['motion', 'Motion'], ['icons', 'Icons'],
+    ['buttons', 'Buttons'], ['status', 'Status'], ['stages', 'Stages'], ['cards', 'Cards'], ['prose', 'Prose'],
+    ['layout', 'Layout'], ['shell', 'Shell'], ['a11y', 'Accessibility'], ['principles', 'Principles'],
+  ];
+  return (
+    <>
+      <div className="ds-topnav">
+        <div className="ds-topnav-inner">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 8 }}>
+            <div style={{ width: 20, height: 20, borderRadius: 5, background: 'linear-gradient(135deg,#5e6ad2,#8b5cf6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>A</div>
+            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em' }}>ARES · Design System</span>
+            <span style={{ fontSize: 11, color: T.t3, ...mono }}>v0.1 · locked</span>
+          </div>
+          {nav.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
+        </div>
+      </div>
+      <div className="ds-root">
+        <header style={{ marginBottom: 48 }}>
+          <div className="ds-eyebrow">Spec · 2026-04-21</div>
+          <h1 className="ds-h1" style={{ fontSize: 38, letterSpacing: '-0.035em' }}>ARES Design System</h1>
+          <p className="ds-sub" style={{ fontSize: 14, maxWidth: 680 }}>
+            ARES 프로토타입에서 파생된 디자인 언어를 단일 소스로 고정한다. 구현 단계에서는 색/간격/타입/컴포넌트 어느 것도 이 문서 밖에서 새로 만들지 않는다. 새로운 화면을 그리기 전에 반드시 여기의 토큰·패턴으로 환원 가능한지 확인한다.
+          </p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+            <Tag label="Inter + JetBrains Mono" />
+            <Tag label="6 stages" color={T.read} />
+            <Tag label="light-only" color={T.search} />
+            <Tag label="Linear-adjacent" color={T.research} dot />
+          </div>
+        </header>
+        <FoundationColors />
+        <FoundationType />
+        <FoundationSpacing />
+        <FoundationMotion />
+        <Iconography />
+        <ComponentsBasic />
+        <ComponentsStatus />
+        <ComponentsStage />
+        <ComponentsCards />
+        <ComponentsProse />
+        <PatternsLayout />
+        <PatternsShell />
+        <Accessibility />
+        <Principles />
+        <footer style={{ marginTop: 80, paddingTop: 20, borderTop: `1px solid ${T.b1}`, fontSize: 11.5, color: T.t3, display: 'flex', justifyContent: 'space-between' }}>
+          <span>ARES Design System · locked spec for implementation</span>
+          <span style={mono}>design/ARES Design System.html</span>
+        </footer>
+      </div>
+    </>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARES — Search (Focal)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #fbfbfa; --sb: #f5f5f4; --s1: #ffffff; --s2: #f7f7f6; --s3: #f0efed;
+  --b1: #e8e8e6; --b2: #d4d4d2;
+  --tx: #0a0a0b; --t2: #4a4a50; --t3: #8a8a92; --t4: #b0b0b8;
+  --search: #5e9c6f;
+  --read:   #5e6ad2;
+  --research:#8957c9;
+  --result: #c07b3a;
+  --insight:#c04e68;
+  --writing:#3aa3a3;
+}
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  background: var(--bg); color: var(--tx);
+  overflow: hidden; -webkit-font-smoothing: antialiased;
+  font-size: 13px; letter-spacing: -0.006em;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes fadeIn { from{opacity:0; transform: translateY(4px);} to{opacity:1; transform: translateY(0);} }
+@keyframes pingRing { 0%{transform:scale(0.6); opacity:0.9;} 80%,100%{transform:scale(2.2); opacity:0;} }
+@keyframes slideDown { from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: #d8d7d3; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b8b7b3; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.hov:hover { background: rgba(0,0,0,0.035) !important; }
+.hov-soft:hover { background: rgba(0,0,0,0.02) !important; }
+
+.kbd {
+  font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 500; color: var(--t3);
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 3px;
+  padding: 0 5px; min-width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+button { font-family: inherit; }
+.btn-p { background: #18181b; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn-p:hover { background: #26262b; }
+.btn-s { background: var(--s1); color: var(--tx); border: 1px solid var(--b1); border-radius: 6px; padding: 5px 11px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn-s:hover { background: var(--s2); border-color: var(--b2); }
+.btn-g { background: transparent; color: var(--t2); border: none; border-radius: 6px; padding: 5px 10px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn-g:hover { background: var(--s2); color: var(--tx); }
+
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 500;
+  padding: 1px 7px; border-radius: 4px;
+  background: var(--s2); color: var(--t2);
+  border: 1px solid var(--b1); white-space: nowrap;
+}
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.hero-wrap {
+  padding: 18px 32px 16px;
+  background: linear-gradient(180deg, rgba(94,156,111,0.045) 0%, rgba(94,156,111,0) 100%);
+  border-bottom: 1px solid var(--b1);
+  position: relative;
+}
+.hero-input {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1px solid var(--b1); border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.015), 0 4px 24px rgba(94,156,111,0.05);
+  transition: all 150ms ease;
+}
+.hero-input:focus-within { border-color: var(--search); box-shadow: 0 0 0 3px rgba(94,156,111,0.14); }
+.hero-input input {
+  flex: 1; border: none; outline: none; font: inherit; font-size: 15px;
+  letter-spacing: -0.012em; color: var(--tx); background: transparent; min-width: 0;
+}
+.hero-input input::placeholder { color: var(--t4); }
+
+/* Mode segmented */
+.mode-seg { display: inline-flex; background: var(--s2); border: 1px solid var(--b1); border-radius: 7px; padding: 2px; }
+.mode-tab {
+  background: transparent; border: none;
+  padding: 5px 10px; border-radius: 5px;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; color: var(--t3); letter-spacing: -0.008em;
+  transition: all 120ms ease;
+}
+.mode-tab.active { background: #fff; color: var(--tx); box-shadow: 0 1px 2px rgba(0,0,0,0.04); font-weight: 600; }
+.mode-tab .cost {
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500; letter-spacing: 0;
+  padding: 1px 5px; border-radius: 3px; background: var(--s3); color: var(--t3);
+}
+.mode-tab.active .cost { background: var(--s2); }
+
+/* Scope chips row */
+.scope-row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding-bottom: 10px;
+}
+.scope-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 500;
+  padding: 3px 4px 3px 8px; border-radius: 999px;
+  background: #fff; border: 1px solid var(--b1);
+  cursor: default; color: var(--t2);
+  transition: border-color 120ms ease;
+}
+.scope-chip:hover { border-color: var(--b2); }
+.scope-chip .x-btn {
+  width: 16px; height: 16px; border-radius: 50%; background: transparent; color: var(--t3);
+  border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.scope-chip .x-btn:hover { background: var(--s2); color: var(--tx); }
+
+.scope-add {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11.5px; font-weight: 500; color: var(--t3);
+  padding: 3px 9px; border-radius: 999px;
+  background: transparent; border: 1px dashed var(--b2); cursor: pointer;
+}
+.scope-add:hover { color: var(--tx); border-color: var(--t3); background: var(--s2); }
+
+/* Target picker popover */
+.popover {
+  position: absolute; z-index: 50; top: calc(100% + 4px); left: 0;
+  width: 360px; background: #fff; border: 1px solid var(--b1); border-radius: 10px;
+  box-shadow: 0 10px 32px rgba(10,10,11,0.09), 0 2px 6px rgba(10,10,11,0.05);
+  padding: 10px; animation: slideDown 140ms ease;
+}
+.popover-search {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--s2); border: 1px solid var(--b1); border-radius: 7px;
+  padding: 7px 10px; margin-bottom: 8px;
+}
+.popover-search input {
+  flex: 1; border: none; outline: none; background: transparent; font: inherit; font-size: 13px;
+}
+.popover-tabs { display: flex; gap: 2px; margin-bottom: 8px; border-bottom: 1px solid var(--b1); }
+.popover-tab {
+  flex: 1; background: transparent; border: none; padding: 7px 10px;
+  font-size: 12px; font-weight: 500; color: var(--t3); cursor: pointer;
+  border-bottom: 2px solid transparent; letter-spacing: -0.008em;
+}
+.popover-tab.active { color: var(--tx); border-bottom-color: var(--tx); font-weight: 600; }
+.popover-tab:hover:not(.active) { color: var(--t2); }
+.popover-list { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.popover-section { font-size: 10.5px; color: var(--t3); text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 8px 4px; font-weight: 600; }
+.popover-item {
+  padding: 7px 8px; border-radius: 6px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px;
+}
+.popover-item:hover { background: var(--s2); }
+.popover-item.active { background: var(--s2); }
+
+/* Status strip */
+.status-strip {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border-radius: 8px; padding: 9px 14px;
+  border: 1px solid var(--b1);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.status-strip.scout { border-color: rgba(94,156,111,0.35); background: rgba(94,156,111,0.03); }
+.status-strip.keyword { border-color: rgba(94,106,210,0.28); background: rgba(94,106,210,0.03); }
+
+/* Pulse dot */
+.pd { width: 6px; height: 6px; border-radius: 50%; display: inline-block; position: relative; }
+.pd::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit;
+  animation: pingRing 2s cubic-bezier(0,0,0.2,1) infinite;
+}
+
+/* Reasoning line */
+.reasoning-line {
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  color: var(--t3); letter-spacing: 0; line-height: 1.6;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+
+/* Scope section in filter */
+.filter-scope-type {
+  margin-bottom: 10px;
+}
+.filter-scope-type-hdr {
+  display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--t3); margin-bottom: 5px;
+}
+.filter-scope-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 4px 3px 7px; border-radius: 5px;
+  background: var(--s1); border: 1px solid var(--b1);
+  font-size: 11px; color: var(--t2); margin: 2px 3px 2px 0;
+}
+.filter-scope-chip .x {
+  width: 14px; height: 14px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--t3); cursor: pointer;
+}
+.filter-scope-chip .x:hover { background: var(--s2); color: var(--tx); }
+
+/* Result paper */
+.paper-row { animation: fadeIn 180ms ease; }
+
+/* ── Collapsible panels ──────────────────────────────── */
+.panel-toggle-btn {
+  width: 24px; height: 24px; border-radius: 5px;
+  border: 1px solid var(--b1); background: var(--s1); color: var(--t3);
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: background 120ms ease, color 120ms ease;
+  flex-shrink: 0;
+}
+.panel-toggle-btn:hover { background: var(--s2); color: var(--t2); border-color: var(--b2); }
+
+.sidebar-collapsed-strip {
+  width: 40px; border-right: 1px solid var(--b1); background: var(--s2); flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; padding: 10px 0 10px; gap: 4px;
+}
+.preview-collapsed-strip {
+  width: 40px; border-left: 1px solid var(--b1); background: var(--s1); flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 4px;
+}
+
+.sec-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; padding: 0; user-select: none;
+  font-size: 11px; font-weight: 600; color: var(--t3);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.sec-hdr:hover { color: var(--t2); }
+.sec-body { overflow: hidden; }
+.sec-body.closed { display: none; }
+
+.bottom-nav { display: none; }
+@media (max-width: 900px) {
+  .desktop-sidebar { display: none !important; }
+  .bottom-nav { display: flex !important; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--b1); z-index: 100; padding: 4px 0 6px; }
+  .main-wrap { padding-bottom: 64px !important; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Icons -->
+<script type="text/babel" data-presets="react">
+const Icon = ({ name, size = 16, color = 'currentColor', style = {} }) => {
+  const s = size;
+  const p = { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', style };
+  const paths = {
+    search: <><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></>,
+    book: <><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></>,
+    flask: <><path d="M9 3h6"/><path d="M10 3v6L4.5 18a2 2 0 001.7 3h11.6a2 2 0 001.7-3L14 9V3"/><path d="M7 15h10"/></>,
+    chart: <><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></>,
+    sparkles: <><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></>,
+    pen: <><path d="M17 3l4 4L7 21H3v-4L17 3z"/></>,
+    chevR: <path d="M9 6l6 6-6 6"/>,
+    chevD: <path d="M6 9l6 6 6-6"/>,
+    chevU: <path d="M6 15l6-6 6 6"/>,
+    chevL: <path d="M15 6l-6 6 6 6"/>,
+    plus: <><path d="M12 5v14M5 12h14"/></>,
+    filter: <path d="M22 3H2l8 9.5V19l4 2v-8.5L22 3z"/>,
+    ext: <><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></>,
+    check: <path d="M20 6L9 17l-5-5"/>,
+    dot: <circle cx="12" cy="12" r="4" fill={color} stroke="none"/>,
+    git: <><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></>,
+    code: <><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></>,
+    clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+    bookmark: <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z"/>,
+    quote: <><path d="M7 7v5H3V8a3 3 0 013-3h1zM17 7v5h-4V8a3 3 0 013-3h1z"/></>,
+    wand: <><path d="M15 4V2M15 10V8M11 6h2M17 6h2M3 21l14-14M11 11l2 2"/></>,
+    share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></>,
+    arrowR: <><path d="M5 12h14M12 5l7 7-7 7"/></>,
+    download: <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></>,
+    x: <path d="M18 6L6 18M6 6l12 12"/>,
+    history: <><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l3 2"/></>,
+    layers: <><path d="M12 3L2 8l10 5 10-5-10-5z"/><path d="M2 16l10 5 10-5"/><path d="M2 12l10 5 10-5"/></>,
+    // Scope-type icons
+    cap:        <><path d="M2 9l10-5 10 5-10 5L2 9z"/><path d="M6 11v4c0 1 3 3 6 3s6-2 6-3v-4"/></>,
+    building:   <><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 9h2M13 9h2M9 13h2M13 13h2M9 17h2M13 17h2"/></>,
+    user:       <><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></>,
+    globe:      <><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 3 4 6.5 4 9s-1.5 6-4 9c-2.5-3-4-6.5-4-9s1.5-6 4-9z"/></>,
+    coin:       <><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.7-.9-1.8-1.5-3-1.5-2 0-3 .9-3 2 0 1.2 1 1.8 3 2s3 .8 3 2-1 2-3 2c-1.4 0-2.5-.6-3-1.5M12 6v2M12 16v2"/></>,
+    zap:        <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z"/>,
+    db:         <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></>,
+  };
+  return <svg {...p}>{paths[name]}</svg>;
+};
+window.Icon = Icon;
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo } = React;
+
+/* ── TOKENS ─────────────────────────────────────────── */
+const T = {
+  bg: '#fbfbfa', sb: '#f5f5f4', s1: '#ffffff', s2: '#f7f7f6', s3: '#f0efed',
+  b1: '#e8e8e6', b2: '#d4d4d2', tx: '#0a0a0b', t2: '#4a4a50', t3: '#8a8a92', t4: '#b0b0b8',
+  search: '#5e9c6f', read: '#5e6ad2', research: '#8957c9', result: '#c07b3a',
+  insight: '#c04e68', writing: '#3aa3a3',
+};
+const mono = { fontFamily: "'JetBrains Mono', monospace", fontFeatureSettings: 'normal' };
+
+const SECTIONS = [
+  { id: 'search',   label: 'Search',   sub: '논문 서치 및 수집',   color: T.search,   icon: 'search',   kbd: '1' },
+  { id: 'read',     label: 'Reading',  sub: 'AI 논문 리딩',        color: T.read,     icon: 'book',     kbd: '2' },
+  { id: 'research', label: 'Research', sub: '재현연구 및 실험',     color: T.research, icon: 'flask',    kbd: '3' },
+  { id: 'results',  label: 'Result',   sub: '결과 도출 및 정리',    color: T.result,   icon: 'chart',    kbd: '4' },
+  { id: 'insights', label: 'Insight',  sub: '인사이트 취합',        color: T.insight,  icon: 'sparkles', kbd: '5' },
+  { id: 'writing',  label: 'Writing',  sub: '논문 작성 보조',       color: T.writing,  icon: 'pen',      kbd: '6' },
+];
+
+const VENUE = {
+  'ACL':     { c: '#5e6ad2' },
+  'EMNLP':   { c: '#8957c9' },
+  'NAACL':   { c: '#5e6ad2' },
+  'arXiv':   { c: '#8a8a92' },
+  'NeurIPS': { c: '#3aa3a3' },
+  'ICML':    { c: '#c07b3a' },
+  'ICLR':    { c: '#c04e68' },
+};
+
+/* ── TARGETS CATALOG ─────────────────────────────────── */
+const TARGET_TYPE = {
+  conference:  { label: 'Conference',  icon: 'building', color: T.read,     emoji: '🏛' },
+  institution: { label: 'Institution', icon: 'cap',      color: T.research, emoji: '🎓' },
+  author:      { label: 'Author',      icon: 'user',     color: T.insight,  emoji: '🧑' },
+};
+
+const TARGET_CATALOG = {
+  conference: {
+    popular: [
+      { id: 'acl24',    label: 'ACL 2024',    venue: 'ACL' },
+      { id: 'emnlp24',  label: 'EMNLP 2024',  venue: 'EMNLP' },
+      { id: 'neurips24',label: 'NeurIPS 2024',venue: 'NeurIPS' },
+      { id: 'iclr24',   label: 'ICLR 2024',   venue: 'ICLR' },
+      { id: 'icml24',   label: 'ICML 2024',   venue: 'ICML' },
+      { id: 'naacl24',  label: 'NAACL 2024',  venue: 'NAACL' },
+      { id: 'cikm24',   label: 'CIKM 2024',   venue: 'CIKM' },
+      { id: 'sigir24',  label: 'SIGIR 2024',  venue: 'SIGIR' },
+    ],
+    recent: [
+      { id: 'icml23', label: 'ICML 2023', venue: 'ICML' },
+    ],
+  },
+  institution: {
+    popular: [
+      { id: 'stanford_nlp', label: 'Stanford NLP Group', kind: 'lab' },
+      { id: 'mit_csail',    label: 'MIT CSAIL',          kind: 'lab' },
+      { id: 'cmu_lti',      label: 'CMU LTI',            kind: 'lab' },
+      { id: 'berkeley_bair',label: 'Berkeley AI Research', kind: 'lab' },
+      { id: 'kaist_ai',     label: 'KAIST AI',           kind: 'lab' },
+      { id: 'snu_cs',       label: 'SNU CSE',            kind: 'lab' },
+      { id: 'google_research', label: 'Google Research', kind: 'corp' },
+      { id: 'deepmind',     label: 'Google DeepMind',    kind: 'corp' },
+      { id: 'openai',       label: 'OpenAI',             kind: 'corp' },
+      { id: 'anthropic',    label: 'Anthropic',          kind: 'corp' },
+      { id: 'fair',         label: 'Meta FAIR',          kind: 'corp' },
+      { id: 'msr',          label: 'Microsoft Research', kind: 'corp' },
+    ],
+  },
+  author: {
+    popular: [
+      { id: 'cmanning', label: 'Christopher Manning', inst: 'Stanford' },
+      { id: 'pliang',   label: 'Percy Liang',         inst: 'Stanford' },
+      { id: 'jason_wei',label: 'Jason Wei',           inst: 'Anthropic' },
+      { id: 'lukez',    label: 'Luke Zettlemoyer',    inst: 'UW · FAIR' },
+      { id: 'dan_j',    label: 'Dan Jurafsky',        inst: 'Stanford' },
+    ],
+  },
+};
+
+/* ── PAPER DATA ─────────────────────────────────────── */
+const PAPERS = [
+  { id: 'p1', title: 'Reducing Reranker Costs in RAG via Adaptive Skipping',
+    auth: 'Kim, Park, Jung', authN: 3, venue: 'ACL', year: 2024,
+    rel: 98, code: true, saved: true, cites: 142,
+    abs: '모든 쿼리에 reranker를 적용하는 대신 retriever 신뢰도 기반 Adaptive Skip 메커니즘을 도입하여 40% 비용 절감, BEIR SOTA 달성.',
+    tags: ['RAG', 'Reranker', 'Efficiency'],
+    reason: 'Matched "RAG reranker cost" · cites nDCG@10',
+    inst: 'SNU', conf: 'acl24' },
+  { id: 'p2', title: 'Efficient RAG with Lightweight Rerankers',
+    auth: 'Chen, Liu, Wang', authN: 4, venue: 'EMNLP', year: 2024,
+    rel: 91, code: true, saved: false, cites: 87,
+    abs: 'Distillation 기반의 경량 reranker를 제안, 12× 속도 향상을 유지하면서 full-reranker의 96% 성능을 재현.',
+    tags: ['Distillation', 'RAG'], reason: 'Matched "lightweight" + "cost"',
+    inst: 'Stanford NLP', conf: 'emnlp24' },
+  { id: 'p3', title: 'FlashRAG: A Modular Framework for RAG Research',
+    auth: 'Jin, Yao, Chen', authN: 5, venue: 'arXiv', year: 2024,
+    rel: 87, code: true, saved: true, cites: 214,
+    abs: '6개 RAG 파이프라인을 1-line으로 swap 가능한 모듈형 프레임워크. 36개 벤치마크 shared interface 제공.',
+    tags: ['Framework', 'Reproducibility'], reason: 'High citations · framework',
+    inst: 'MIT CSAIL', conf: null },
+  { id: 'p4', title: 'Is Reranking Really Necessary for RAG?',
+    auth: 'Park, Lee', authN: 2, venue: 'ACL', year: 2024,
+    rel: 78, code: false, saved: false, cites: 54,
+    abs: 'Ablation 관점에서 reranker 생략 시의 quality-cost trade-off를 18개 도메인에서 체계적으로 분석.',
+    tags: ['Ablation', 'Analysis'], reason: 'Ablation · reranker',
+    inst: 'KAIST AI', conf: 'acl24' },
+  { id: 'p5', title: 'RAGLAB: Research-Oriented Unified Framework',
+    auth: 'Zhang, Huang, Xu', authN: 4, venue: 'arXiv', year: 2024,
+    rel: 72, code: true, saved: false, cites: 31,
+    abs: '공정한 비교를 위한 표준화된 구성요소 단위 평가 환경. 9개 알고리즘 병렬 실행을 지원.',
+    tags: ['Benchmark'], reason: 'Benchmark · comparison',
+    inst: 'DeepMind', conf: null },
+  { id: 'p6', title: 'Cascade Retrieval for Low-Latency Open-Domain QA',
+    auth: 'Watanabe et al.', authN: 3, venue: 'NeurIPS', year: 2023,
+    rel: 69, code: true, saved: false, cites: 198,
+    abs: '3-stage cascade로 retriever stage별 confidence를 집계, 평균 지연을 52% 감소시키는 학습 프레임워크.',
+    tags: ['Cascade', 'Latency'], reason: 'Cascade · confidence',
+    inst: 'Stanford NLP', conf: null },
+];
+
+/* ── ATOMS ──────────────────────────────────────────── */
+const Tag = ({ label, color, dot, size = 11 }) => (
+  <span className="tag" style={color ? { background: `${color}12`, color, borderColor: `${color}30`, fontSize: size } : { fontSize: size }}>
+    {dot && <span style={{ width: 5, height: 5, borderRadius: '50%', background: color || T.t3 }} />}
+    {label}
+  </span>
+);
+const VenueTag = ({ venue, size = 11 }) => {
+  const v = VENUE[venue] || VENUE['arXiv'];
+  return <Tag label={venue} color={v.c} size={size} />;
+};
+const Kbd = ({ children }) => <span className="kbd">{children}</span>;
+const PulseDot = ({ color = T.search, size = 6 }) => <span className="pd" style={{ background: color, width: size, height: size }} />;
+const RelevanceBar = ({ value, width = 60, height = 4 }) => {
+  const c = value >= 90 ? T.search : value >= 75 ? T.read : T.t3;
+  return (
+    <div style={{ width, height, background: T.s3, borderRadius: height / 2, overflow: 'hidden' }}>
+      <div style={{ width: `${value}%`, height: '100%', background: c }} />
+    </div>
+  );
+};
+
+/* ── SCOPE CHIP ─────────────────────────────────────── */
+const ScopeChip = ({ scope, onRemove }) => {
+  const cfg = TARGET_TYPE[scope.type];
+  return (
+    <span className="scope-chip" style={{ borderColor: `${cfg.color}40`, background: `${cfg.color}08` }}>
+      <Icon name={cfg.icon} size={11} color={cfg.color} />
+      <span style={{ color: cfg.color, fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {cfg.label.slice(0, 4)}
+      </span>
+      <span>{scope.label}</span>
+      <button className="x-btn" onClick={() => onRemove(scope.id)} aria-label="Remove scope">
+        <Icon name="x" size={10} color="currentColor" />
+      </button>
+    </span>
+  );
+};
+
+/* ── TARGET PICKER POPOVER ──────────────────────────── */
+const TargetPicker = ({ initialTab = 'conference', onClose, onAdd, activeIds }) => {
+  const [tab, setTab] = useState(initialTab);
+  const [q, setQ] = useState('');
+  const inputRef = useRef(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => {
+    const close = e => { if (!e.target.closest('.popover')) onClose(); };
+    // delay to skip the click that opened the popover
+    const t = setTimeout(() => document.addEventListener('mousedown', close), 0);
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', close); };
+  }, [onClose]);
+
+  const catalog = TARGET_CATALOG[tab] || {};
+  const ql = q.trim().toLowerCase();
+  const filter = list => (list || []).filter(it => !ql || it.label.toLowerCase().includes(ql));
+  const pop = filter(catalog.popular);
+  const rec = filter(catalog.recent);
+
+  return (
+    <div className="popover" onClick={(e) => e.stopPropagation()}>
+      <div className="popover-search">
+        <Icon name="search" size={13} color={T.t3} />
+        <input ref={inputRef} placeholder={`${TARGET_TYPE[tab].label} 이름 검색…`} value={q} onChange={e => setQ(e.target.value)} />
+      </div>
+      <div className="popover-tabs">
+        {Object.entries(TARGET_TYPE).map(([id, cfg]) => (
+          <button key={id} className={`popover-tab ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
+            <Icon name={cfg.icon} size={11} color={tab === id ? T.tx : T.t3} style={{ marginRight: 5, verticalAlign: '-1px' }} />
+            {cfg.label}
+          </button>
+        ))}
+      </div>
+      <div className="popover-list">
+        {!!pop.length && <div className="popover-section">Popular</div>}
+        {pop.map(it => {
+          const isActive = activeIds.includes(it.id);
+          return (
+            <div key={it.id} className={`popover-item ${isActive ? 'active' : ''}`}
+                 onClick={() => { if (!isActive) onAdd({ id: it.id, type: tab, label: it.label, meta: it }); }}>
+              <Icon name={TARGET_TYPE[tab].icon} size={13} color={TARGET_TYPE[tab].color} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, color: T.tx, fontWeight: 500 }}>{it.label}</div>
+                {(it.kind || it.inst || it.venue) && (
+                  <div style={{ fontSize: 10.5, color: T.t3, marginTop: 1 }}>
+                    {it.kind === 'lab' && 'Research lab'}
+                    {it.kind === 'corp' && 'Industry'}
+                    {it.inst && `@ ${it.inst}`}
+                    {it.venue && `venue: ${it.venue}`}
+                  </div>
+                )}
+              </div>
+              {isActive ? (
+                <Icon name="check" size={12} color={T.search} />
+              ) : (
+                <Icon name="plus" size={12} color={T.t3} />
+              )}
+            </div>
+          );
+        })}
+        {!!rec.length && <div className="popover-section" style={{ marginTop: 4 }}>Recent</div>}
+        {rec.map(it => (
+          <div key={it.id} className="popover-item" onClick={() => onAdd({ id: it.id, type: tab, label: it.label })}>
+            <Icon name="history" size={12} color={T.t3} />
+            <span style={{ fontSize: 12.5, color: T.t2, flex: 1 }}>{it.label}</span>
+            <Icon name="plus" size={12} color={T.t3} />
+          </div>
+        ))}
+        {!pop.length && !rec.length && (
+          <div style={{ padding: '22px 12px', textAlign: 'center', fontSize: 12, color: T.t3 }}>
+            일치하는 {TARGET_TYPE[tab].label}이 없습니다.
+          </div>
+        )}
+      </div>
+      <div style={{ borderTop: `1px solid ${T.b1}`, marginTop: 8, paddingTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10.5, color: T.t3 }}>Tip: scope을 좁힐수록 Scout 비용이 줄어듭니다</span>
+        <span style={{ flex: 1 }} />
+        <button className="btn-g" style={{ fontSize: 11.5, padding: '3px 8px' }} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+};
+
+/* ── MODE TOGGLE ────────────────────────────────────── */
+const MODES = {
+  scout:   { label: 'Agent',   icon: 'sparkles', color: T.search, desc: 'AI 에이전트가 의미 기반으로 탐색 · 유료' },
+  keyword: { label: 'Keyword', icon: 'book',     color: T.read,   desc: 'Google Scholar · Semantic Scholar API · 무료' },
+};
+
+const ModeToggle = ({ mode, setMode }) => (
+  <div className="mode-seg" role="tablist" aria-label="Search mode">
+    {Object.entries(MODES).map(([id, cfg]) => (
+      <button key={id} role="tab" aria-selected={mode === id}
+              className={`mode-tab ${mode === id ? 'active' : ''}`}
+              onClick={() => setMode(id)}
+              title={cfg.desc}
+              style={{ color: mode === id ? cfg.color : undefined }}>
+        <Icon name={cfg.icon} size={12} color={mode === id ? cfg.color : T.t3} />
+        {cfg.label}
+      </button>
+    ))}
+  </div>
+);
+
+/* ── FILTER SIDEBAR ─────────────────────────────────── */
+const SectionBlock = ({ label, icon, open, onToggle, children, activeCount }) => (
+  <div style={{ borderTop: `1px solid ${T.b1}`, marginTop: 12, paddingTop: 12 }}>
+    <div className="sec-hdr" onClick={onToggle}
+         style={{ marginBottom: open ? 8 : 0 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        {icon && <Icon name={icon} size={11} color={T.t3} />}
+        {label}
+        {activeCount > 0 && (
+          <span style={{ ...mono, fontSize: 10, color: T.search, fontWeight: 600 }}>{activeCount}</span>
+        )}
+      </span>
+      <Icon name={open ? 'chevD' : 'chevR'} size={11} color={T.t3} />
+    </div>
+    <div className={`sec-body ${open ? '' : 'closed'}`}>{children}</div>
+  </div>
+);
+
+const FilterSidebar = ({ scopes, setScopes, openPicker, venues, setVenues, years, setYears, rel, setRel, isOpen, onToggle }) => {
+  const [sec, setSec] = useState({ scope: true, venue: true, year: false, rel: false });
+  const toggle = k => setSec(s => ({ ...s, [k]: !s[k] }));
+  const byType = (type) => scopes.filter(s => s.type === type);
+
+  if (!isOpen) {
+    return (
+      <div className="sidebar-collapsed-strip">
+        <button className="panel-toggle-btn" onClick={onToggle} title="필터 펼치기">
+          <Icon name="chevR" size={13} color={T.t2} />
+        </button>
+        <div style={{ width: 20, height: 1, background: T.b1, margin: '4px 0' }} />
+        {[['globe','Scope'],['filter','Venue'],['clock','Year'],['dot','Rel']].map(([ic, lbl]) => (
+          <button key={ic} className="panel-toggle-btn" onClick={onToggle} title={lbl}
+                  style={{ opacity: 0.55 }}>
+            <Icon name={ic} size={12} color={T.t2} />
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: 208, borderRight: `1px solid ${T.b1}`, background: T.s2, flexShrink: 0, overflow: 'auto', padding: '12px 14px 20px', position: 'relative' }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filters</span>
+        <button className="panel-toggle-btn" onClick={onToggle} title="필터 접기">
+          <Icon name="chevL" size={13} color={T.t2} />
+        </button>
+      </div>
+
+      {/* SCOPE (always first, no top border) */}
+      <div>
+        <div className="sec-hdr" onClick={() => toggle('scope')}
+             style={{ marginBottom: sec.scope ? 8 : 0,
+                      fontSize: 11, fontWeight: 600, color: T.t3,
+                      textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="globe" size={11} color={T.t3} />
+            Scope
+            {scopes.length > 0 && (
+              <span style={{ ...mono, fontSize: 10, color: T.search, fontWeight: 600 }}>{scopes.length}</span>
+            )}
+          </span>
+          <Icon name={sec.scope ? 'chevD' : 'chevR'} size={11} color={T.t3} />
+        </div>
+        <div className={`sec-body ${sec.scope ? '' : 'closed'}`}>
+          {Object.entries(TARGET_TYPE).map(([type, cfg]) => {
+            const active = byType(type);
+            return (
+              <div key={type} className="filter-scope-type">
+                <div className="filter-scope-type-hdr">
+                  <Icon name={cfg.icon} size={11} color={cfg.color} />
+                  <span style={{ color: T.t2, fontWeight: 500 }}>{cfg.label}</span>
+                  {!!active.length && <span style={{ ...mono, fontSize: 10, color: cfg.color }}>· {active.length}</span>}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                  {active.map(s => (
+                    <span key={s.id} className="filter-scope-chip" style={{ borderColor: `${cfg.color}30`, background: `${cfg.color}08` }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>{s.label}</span>
+                      <button className="x" onClick={() => setScopes(ss => ss.filter(x => x.id !== s.id))}>
+                        <Icon name="x" size={9} color="currentColor" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <button className="scope-add" style={{ fontSize: 11, marginTop: active.length ? 5 : 0 }}
+                        onClick={() => openPicker(type)}>
+                  <Icon name="plus" size={10} color="currentColor" /> Add {cfg.label.toLowerCase()}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* VENUE */}
+      <SectionBlock label="Venue" open={sec.venue} onToggle={() => toggle('venue')}
+                    activeCount={venues.length}>
+        {['arXiv', 'ACL', 'EMNLP', 'NeurIPS', 'ICML', 'ICLR'].map(v => {
+          const on = venues.includes(v);
+          return (
+            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: T.t2, padding: '3px 0', cursor: 'pointer' }}
+                   onClick={() => setVenues(vs => on ? vs.filter(x => x !== v) : [...vs, v])}>
+              <div style={{ width: 13, height: 13, border: `1.5px solid ${on ? T.tx : T.b2}`, borderRadius: 3, background: on ? T.tx : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {on && <Icon name="check" size={9} color="#fff" />}
+              </div>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: (VENUE[v] || VENUE.arXiv).c, flexShrink: 0 }} />
+              {v}
+            </label>
+          );
+        })}
+      </SectionBlock>
+
+      {/* YEAR */}
+      <SectionBlock label="Year" open={sec.year} onToggle={() => toggle('year')}
+                    activeCount={years.length}>
+        {['2025', '2024', '2023', 'Earlier'].map(y => {
+          const on = years.includes(y);
+          return (
+            <label key={y} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: T.t2, padding: '3px 0', cursor: 'pointer' }}
+                   onClick={() => setYears(ys => on ? ys.filter(x => x !== y) : [...ys, y])}>
+              <div style={{ width: 13, height: 13, border: `1.5px solid ${on ? T.tx : T.b2}`, borderRadius: 3, background: on ? T.tx : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {on && <Icon name="check" size={9} color="#fff" />}
+              </div>
+              {y}
+            </label>
+          );
+        })}
+      </SectionBlock>
+
+      {/* RELEVANCE */}
+      <SectionBlock label="Relevance" open={sec.rel} onToggle={() => toggle('rel')}>
+        <input type="range" min="0" max="100" value={rel} onChange={e => setRel(+e.target.value)} style={{ width: '100%', accentColor: T.tx }} />
+        <div style={{ fontSize: 11, color: T.t2, ...mono, marginTop: 3 }}>≥ {rel}%</div>
+      </SectionBlock>
+
+      {/* LIBRARY */}
+      <div style={{ borderTop: `1px solid ${T.b1}`, marginTop: 12, paddingTop: 12 }}>
+        <div style={{ fontSize: 11, color: T.t3, marginBottom: 8 }}>Library</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+          <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.03em' }}>12</span>
+          <span style={{ fontSize: 11, color: T.t3 }}>papers</span>
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
+          <Tag label="3 saved" color={T.search} dot />
+          <Tag label="9 new" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── HERO ───────────────────────────────────────────── */
+const Hero = ({ mode, setMode, q, setQ, scopes, setScopes }) => {
+  const [picker, setPicker] = useState(null); // null | 'conference' | ...
+  const heroRef = useRef(null);
+  const modeCfg = MODES[mode];
+
+  const addScope = (s) => {
+    setScopes(prev => prev.some(x => x.id === s.id) ? prev : [...prev, s]);
+  };
+  const removeScope = (id) => setScopes(prev => prev.filter(x => x.id !== id));
+
+  const sourceLabel = mode === 'scout' ? '5 sources' : 'Google Scholar';
+
+  return (
+    <div className="hero-wrap" ref={heroRef}>
+      {/* Header row: label + mode toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <Icon name="search" size={11} color={T.search} />
+          <span style={{ fontWeight: 600, color: T.search }}>Paper Search</span>
+        </span>
+        <span style={{ flex: 1 }} />
+        <ModeToggle mode={mode} setMode={setMode} />
+      </div>
+
+      {/* Scope row */}
+      <div className="scope-row" style={{ position: 'relative' }}>
+        <span style={{ fontSize: 11, color: T.t3, display: 'inline-flex', alignItems: 'center', gap: 5, marginRight: 2 }}>
+          <Icon name="globe" size={11} color={T.t3} />
+          Searching in
+        </span>
+        {scopes.length === 0 && (
+          <span style={{ fontSize: 11.5, color: T.t4, fontStyle: 'italic', marginRight: 4 }}>everywhere</span>
+        )}
+        {scopes.map(s => <ScopeChip key={s.id} scope={s} onRemove={removeScope} />)}
+        <button className="scope-add" onClick={(e) => { e.stopPropagation(); setPicker(picker ? null : 'conference'); }}>
+          <Icon name="plus" size={10} color="currentColor" />
+          Add target
+        </button>
+        {picker && (
+          <TargetPicker initialTab={picker}
+                        activeIds={scopes.map(s => s.id)}
+                        onAdd={(s) => { addScope(s); /* keep open so user can add more */ }}
+                        onClose={() => setPicker(null)} />
+        )}
+      </div>
+
+      {/* Search input */}
+      <div className="hero-input">
+        <Icon name="search" size={18} color={T.t3} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={mode === 'scout' ? '어떤 논문을 찾으시나요? 자연어로 질문해보세요' : '키워드, 저자, 제목으로 검색'} />
+        <button className="btn-p" style={{ padding: '6px 14px' }}>
+          <Icon name={modeCfg.icon} size={13} />Search
+        </button>
+      </div>
+
+      {/* Status strip */}
+      <div className={`status-strip ${mode}`} style={{ marginTop: 10 }}>
+        {mode === 'scout' ? (
+          <>
+            <PulseDot color={T.search} size={7} />
+            <span style={{ fontSize: 12.5, color: T.tx, fontWeight: 550 }}>Agent</span>
+            <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+            <span style={{ fontSize: 11.5, color: T.t3 }}>{sourceLabel}</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11.5, color: T.t3, ...mono }}>6/12 · 0.82s · $0.028</span>
+          </>
+        ) : (
+          <>
+            <Icon name="db" size={12} color={T.read} />
+            <span style={{ fontSize: 12.5, color: T.tx, fontWeight: 550 }}>Keyword</span>
+            <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+            <span style={{ fontSize: 11.5, color: T.t3 }}>{sourceLabel}</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 11.5, color: T.t3, ...mono }}>142 · 0.21s · free</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ── RESULT LIST ────────────────────────────────────── */
+const ResultsList = ({ papers, sel, setSel, mode, scopes }) => {
+  return (
+    <div style={{ flex: 1, overflow: 'auto', padding: '18px 32px 40px' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid ${T.b1}` }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.015em' }}>{papers.length} results</span>
+            <span style={{ fontSize: 11.5, color: T.t3 }}>· Sorted by {mode === 'scout' ? 'relevance' : 'citations'}</span>
+            {!!scopes.length && (
+              <span style={{ fontSize: 11.5, color: T.t3 }}>
+                · scoped to {scopes.length} target{scopes.length > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn-g" style={{ fontSize: 11.5, padding: '4px 8px' }}><Icon name="layers" size={12} /> Group</button>
+            <button className="btn-g" style={{ fontSize: 11.5, padding: '4px 8px' }}><Icon name="download" size={12} /> Export</button>
+          </div>
+        </div>
+
+        {papers.map((p, i) => {
+          const v = VENUE[p.venue] || VENUE.arXiv;
+          const matchedInst = scopes.find(s => s.type === 'institution' && p.inst && p.inst.toLowerCase().includes(s.label.toLowerCase().split(' ')[0]));
+          const matchedConf = scopes.find(s => s.type === 'conference' && p.conf === s.id);
+          return (
+            <div key={p.id} onClick={() => setSel(i)} className="paper-row" style={{
+              display: 'flex', alignItems: 'flex-start', gap: 14,
+              padding: '14px 0', cursor: 'pointer',
+              borderBottom: `1px solid ${T.b1}`,
+            }}>
+              <div style={{
+                width: 4, alignSelf: 'stretch', borderRadius: 2,
+                background: v.c, opacity: sel === i ? 1 : 0.3, flexShrink: 0,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-0.015em', color: T.tx, lineHeight: 1.35, marginBottom: 5 }}>{p.title}</div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, color: T.t2, fontWeight: 500 }}>{p.auth}</span>
+                      <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+                      <VenueTag venue={p.venue} />
+                      <span style={{ fontSize: 12, color: T.t3, ...mono }}>{p.year}</span>
+                      <span style={{ color: T.t4, fontSize: 10 }}>·</span>
+                      <span style={{ fontSize: 11.5, color: T.t3, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                        <Icon name="quote" size={11} color={T.t3} /> {p.cites}
+                      </span>
+                      {p.inst && (
+                        <span style={{ fontSize: 11, color: matchedInst ? T.research : T.t3, display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: matchedInst ? 600 : 400 }}>
+                          <Icon name="cap" size={10} color={matchedInst ? T.research : T.t3} />
+                          {p.inst}
+                        </span>
+                      )}
+                      {p.code && <Tag label="code" color={T.search} />}
+                      {p.saved && <Tag label="saved" color={T.read} dot />}
+                      {(matchedInst || matchedConf) && (
+                        <Tag label="in scope" color={T.search} dot />
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.6, marginBottom: 6 }}>{p.abs}</div>
+                    {mode === 'scout' && (
+                      <div className="reasoning-line">
+                        <Icon name="sparkles" size={10} color={T.search} />
+                        <span>scout · {p.reason}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0, width: 80 }}>
+                    <span style={{ fontSize: 18, fontWeight: 650, letterSpacing: '-0.03em', ...mono, color: p.rel >= 90 ? T.search : p.rel >= 75 ? T.read : T.t2 }}>{p.rel}</span>
+                    <RelevanceBar value={p.rel} width={68} height={3} />
+                    <span style={{ fontSize: 10, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {mode === 'scout' ? 'relevance' : 'match'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+/* ── PREVIEW PANE ───────────────────────────────────── */
+const Preview = ({ sp, isOpen, onToggle }) => {
+  if (!isOpen) {
+    return (
+      <div className="preview-collapsed-strip">
+        <button className="panel-toggle-btn" onClick={onToggle} title="프리뷰 펼치기">
+          <Icon name="chevL" size={13} color={T.t2} />
+        </button>
+        <div style={{ width: 20, height: 1, background: T.b1, margin: '4px 0' }} />
+        <button className="panel-toggle-btn" onClick={onToggle} title="Paper preview" style={{ opacity: 0.55 }}>
+          <Icon name="book" size={12} color={T.t2} />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ width: 300, borderLeft: `1px solid ${T.b1}`, background: T.s1, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.b1}`, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Paper</div>
+          <div style={{ fontSize: 13.5, fontWeight: 550, lineHeight: 1.4, marginBottom: 8, letterSpacing: '-0.01em' }}>{sp.title}</div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            <Tag label={sp.auth} /><VenueTag venue={sp.venue} />
+            <Tag label={`${sp.cites} cites`} />
+            {sp.code && <Tag label="code" color={T.search} />}
+          </div>
+        </div>
+        <button className="panel-toggle-btn" onClick={onToggle} title="프리뷰 접기" style={{ marginTop: 2 }}>
+          <Icon name="chevR" size={13} color={T.t2} />
+        </button>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
+        <div style={{ fontSize: 11, color: T.t3, marginBottom: 6 }}>Abstract</div>
+        <div style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.65, marginBottom: 14 }}>{sp.abs}</div>
+        {sp.inst && (
+          <>
+            <div style={{ fontSize: 11, color: T.t3, marginBottom: 6 }}>Affiliation</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: T.t2, padding: '5px 8px', background: T.s2, borderRadius: 5, marginBottom: 14 }}>
+              <Icon name="cap" size={12} color={T.research} />
+              {sp.inst}
+            </div>
+          </>
+        )}
+        <div style={{ fontSize: 11, color: T.t3, marginBottom: 6 }}>Why relevant</div>
+        <div className="reasoning-line" style={{ fontSize: 11.5, marginBottom: 14 }}>
+          <Icon name="sparkles" size={11} color={T.search} /> {sp.reason}
+        </div>
+        <div style={{ fontSize: 11, color: T.t3, marginBottom: 6 }}>Tags</div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {sp.tags.map(t => <Tag key={t} label={t} />)}
+        </div>
+      </div>
+      <div style={{ padding: '12px 16px', borderTop: `1px solid ${T.b1}`, display: 'flex', gap: 7 }}>
+        <button className="btn-p" style={{ flex: 1, justifyContent: 'center' }}>
+          <Icon name="bookmark" size={12} />Save
+        </button>
+        <button className="btn-s" style={{ flex: 1, justifyContent: 'center' }}>
+          Read <Icon name="arrowR" size={12} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+/* ── SEARCH SCREEN ──────────────────────────────────── */
+function SearchScreen() {
+  const [mode, setMode] = useState('scout');
+  const [q, setQ] = useState('RAG reranker cost 줄이는 방법');
+  const [scopes, setScopes] = useState([
+    { id: 'acl24', type: 'conference', label: 'ACL 2024' },
+    { id: 'stanford_nlp', type: 'institution', label: 'Stanford NLP Group' },
+  ]);
+  const [venues, setVenues] = useState(['arXiv', 'ACL', 'EMNLP']);
+  const [years, setYears] = useState(['2024', '2023']);
+  const [rel, setRel] = useState(70);
+  const [sel, setSel] = useState(0);
+  const [pickerType, setPickerType] = useState(null);
+  const [filterOpen, setFilterOpen] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(true);
+
+  const papers = PAPERS;
+  const sp = papers[sel];
+
+  const sidebarOpenPicker = (type) => setPickerType(type);
+
+  // picker overlay left offset: workflow sidebar + filter width + padding
+  const pickerLeft = 232 + (filterOpen ? 208 : 40) + 24;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <FilterSidebar
+          scopes={scopes} setScopes={setScopes} openPicker={sidebarOpenPicker}
+          venues={venues} setVenues={setVenues}
+          years={years} setYears={setYears}
+          rel={rel} setRel={setRel}
+          isOpen={filterOpen} onToggle={() => setFilterOpen(v => !v)}
+        />
+
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <Hero mode={mode} setMode={setMode} q={q} setQ={setQ} scopes={scopes} setScopes={setScopes} />
+          <ResultsList papers={papers} sel={sel} setSel={setSel} mode={mode} scopes={scopes} />
+        </div>
+
+        <Preview sp={sp} isOpen={previewOpen} onToggle={() => setPreviewOpen(v => !v)} />
+      </div>
+
+      {pickerType && (
+        <div style={{
+          position: 'fixed', left: pickerLeft, top: 80, zIndex: 80,
+        }}>
+          <TargetPicker initialTab={pickerType}
+                        activeIds={scopes.map(s => s.id)}
+                        onAdd={(s) => { setScopes(prev => prev.some(x => x.id === s.id) ? prev : [...prev, s]); }}
+                        onClose={() => setPickerType(null)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── APP SHELL ─────────────────────────────────────── */
+function App() {
+  return (
+    <div style={{ display: 'flex', height: '100vh', background: T.bg, overflow: 'hidden' }}>
+      {/* Workflow sidebar */}
+      <div className="desktop-sidebar" style={{ width: 232, background: T.sb, borderRight: `1px solid ${T.b1}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.b1}` }}>
+          <div className="hov" style={{ padding: '6px 8px', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <div style={{ width: 24, height: 24, borderRadius: 6, background: 'linear-gradient(135deg, #5e6ad2, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: '-0.02em' }}>A</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 550, letterSpacing: '-0.01em' }}>ARES</div>
+              <div style={{ fontSize: 10.5, color: T.t3 }}>Search · Focal</div>
+            </div>
+            <Icon name="chevD" size={13} color={T.t3} />
+          </div>
+        </div>
+
+        <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.b1}` }}>
+          <div className="hov-soft" style={{ padding: '5px 8px', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <Icon name="search" size={13.5} color={T.t3} />
+            <span style={{ fontSize: 12.5, color: T.t3, flex: 1 }}>Search</span>
+            <Kbd>⌘K</Kbd>
+          </div>
+          <div className="hov-soft" style={{ padding: '5px 8px', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="plus" size={13.5} color={T.t3} />
+            <span style={{ fontSize: 12.5, color: T.t3, flex: 1 }}>New paper</span>
+            <Kbd>C</Kbd>
+          </div>
+        </div>
+
+        <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.b1}` }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 8px 6px' }}>Project</div>
+          {[
+            ['RAG Reranker Study', true, '#5e6ad2'],
+            ['LLM Reasoning',      false, '#c04e68'],
+            ['Local Inference',    false, '#3aa3a3'],
+          ].map(([p, active, c], i) => (
+            <div key={i} className="hov" style={{
+              padding: '5px 8px', borderRadius: 5, cursor: 'pointer',
+              background: active ? 'rgba(0,0,0,0.045)' : 'transparent',
+              display: 'flex', alignItems: 'center', gap: 9, marginBottom: 1,
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: c, flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, color: active ? T.tx : T.t2, fontWeight: active ? 550 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '10px 12px', flex: 1, overflow: 'auto' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 8px 8px' }}>Workflow</div>
+          {SECTIONS.map(s => (
+            <div key={s.id} className="hov" style={{
+              padding: '6px 8px', borderRadius: 6, cursor: 'pointer', marginBottom: 1,
+              background: s.id === 'search' ? 'rgba(0,0,0,0.05)' : 'transparent',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                background: s.id === 'search' ? s.color : `${s.color}1a`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Icon name={s.icon} size={13} color={s.id === 'search' ? '#fff' : s.color} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: s.id === 'search' ? 550 : 450, color: s.id === 'search' ? T.tx : T.t2 }}>{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${T.b1}`, padding: '8px 12px' }}>
+          <div className="hov" style={{ padding: '6px 8px', borderRadius: 5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <div style={{ width: 22, height: 22, borderRadius: 11, background: '#c7b299', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 600 }}>DK</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: T.t2 }}>Dokyung</div>
+              <div style={{ fontSize: 10, color: T.t3 }}>Pro plan</div>
+            </div>
+            <Icon name="settings" size={13} color={T.t3} />
+          </div>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div className="main-wrap" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '0 20px', borderBottom: `1px solid ${T.b1}`, background: T.s1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, height: 44 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 22, height: 22, borderRadius: 5, background: T.search, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="search" size={13} color="#fff" />
+            </div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: T.tx, letterSpacing: '-0.01em' }}>Search</div>
+            <span style={{ fontSize: 11.5, color: T.t4 }}>·</span>
+            <span style={{ fontSize: 12, color: T.t3 }}>논문 서치 및 수집</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button className="btn-s" style={{ padding: '3px 8px', fontSize: 11.5 }}><Icon name="share" size={12} /> Share</button>
+            <button className="btn-s" style={{ padding: '3px 8px', fontSize: 11.5 }}><Icon name="filter" size={12} /> Filter</button>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <SearchScreen />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -61,6 +61,78 @@ body {
   justify-content: center;
   letter-spacing: 0;
 }
+.workflow-item .workflow-side-actions {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.workflow-item:hover .workflow-side-actions,
+.workflow-item.is-active .workflow-side-actions {
+  opacity: 1;
+}
+.workflow-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 8px;
+  cursor: pointer;
+}
+.workflow-toggle:hover {
+  color: var(--t2);
+}
+.sidebar-icon-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--t3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.sidebar-icon-btn:hover {
+  background: rgba(0,0,0,0.045);
+  color: var(--t2);
+}
+.sidebar-menu {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  min-width: 156px;
+  padding: 6px;
+  border: 1px solid var(--b1);
+  border-radius: 8px;
+  background: var(--s1);
+  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.08), 0 1px 3px rgba(15, 15, 15, 0.06);
+  z-index: 20;
+}
+.sidebar-menu-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 7px 8px;
+  color: var(--t2);
+  font-size: 12.5px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.sidebar-menu-item:hover {
+  background: var(--s2);
+  color: var(--tx);
+}
+.sidebar-menu-divider {
+  height: 1px;
+  background: var(--b1);
+  margin: 6px 2px;
+}
 button { font-family: inherit; }
 .btn-p { background: #18181b; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; letter-spacing: -0.006em; }
 .btn-p:hover { background: #26262b; }
@@ -115,6 +187,7 @@ const Icon = ({ name, size = 16, color = 'currentColor', style = {} }) => {
     dl: <><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></>,
     share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></>,
+    moreH: <><circle cx="6" cy="12" r="1.4" fill={color} stroke="none"/><circle cx="12" cy="12" r="1.4" fill={color} stroke="none"/><circle cx="18" cy="12" r="1.4" fill={color} stroke="none"/></>,
     status_done:  <><circle cx="12" cy="12" r="9" fill={color} stroke="none"/><path d="M8 12l3 3 5-6" stroke="#fff"/></>,
     status_run:   <><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 019 9" stroke={color} strokeWidth="2.5"/></>,
     status_todo:  <><circle cx="12" cy="12" r="9" strokeDasharray="2 3"/></>,
@@ -704,6 +777,8 @@ const COMPS = { search: SearchScreen, read: ReadScreen, research: ResearchScreen
 function App() {
   const [screen, setScreen] = useState(() => localStorage.getItem('ares_sc3') || 'search');
   const [tweaks, setTweaks] = useState(false);
+  const [workflowOpen, setWorkflowOpen] = useState(true);
+  const [openWorkflowMenu, setOpenWorkflowMenu] = useState(null);
 
   useEffect(() => { localStorage.setItem('ares_sc3', screen); }, [screen]);
   useEffect(() => {
@@ -724,6 +799,11 @@ function App() {
     };
     window.addEventListener('keydown', kb);
     return () => window.removeEventListener('keydown', kb);
+  }, []);
+  useEffect(() => {
+    const closeMenu = () => setOpenWorkflowMenu(null);
+    document.addEventListener('click', closeMenu);
+    return () => document.removeEventListener('click', closeMenu);
   }, []);
 
   const Comp = COMPS[screen];
@@ -780,11 +860,12 @@ function App() {
 
         {/* Pipeline nav */}
         <div style={{ padding: '10px 12px', flex: 1, overflow: 'auto' }}>
-          <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 8px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Workflow</span>
-          </div>
-          {SECTIONS.map(s => (
-            <div key={s.id} onClick={() => setScreen(s.id)} className="hov" style={{
+          <button type="button" className="workflow-toggle" onClick={() => setWorkflowOpen(v => !v)}>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Workflow</span>
+            <Icon name={workflowOpen ? 'chevD' : 'chevR'} size={12} color={T.t3} />
+          </button>
+          {workflowOpen && SECTIONS.map(s => (
+            <div key={s.id} onClick={() => setScreen(s.id)} className={`hov workflow-item${screen === s.id ? ' is-active' : ''}`} style={{
               padding: '6px 8px', borderRadius: 6, cursor: 'pointer', marginBottom: 1,
               background: screen === s.id ? 'rgba(0,0,0,0.05)' : 'transparent',
               display: 'flex', alignItems: 'center', gap: 10,
@@ -801,7 +882,34 @@ function App() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12.5, fontWeight: screen === s.id ? 550 : 450, color: screen === s.id ? T.tx : T.t2, letterSpacing: '-0.005em' }}>{s.label}</div>
               </div>
-              <Kbd>⌘{s.kbd}</Kbd>
+              <div className="workflow-side-actions" style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 4, position: 'relative' }}>
+                <button
+                  type="button"
+                  className="sidebar-icon-btn workflow-menu"
+                  aria-label={`${s.label} context menu`}
+                  title="Open context menu"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenWorkflowMenu(cur => cur === s.id ? null : s.id);
+                  }}
+                >
+                  <Icon name="moreH" size={14} color="currentColor" />
+                </button>
+                {openWorkflowMenu === s.id && (
+                  <div className="sidebar-menu" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="sidebar-menu-item" onClick={() => { setScreen(s.id); setOpenWorkflowMenu(null); }}>
+                      Open stage
+                    </button>
+                    <button type="button" className="sidebar-menu-item" onClick={() => setOpenWorkflowMenu(null)}>
+                      Copy deep link
+                    </button>
+                    <div className="sidebar-menu-divider" />
+                    <button type="button" className="sidebar-menu-item" onClick={() => setOpenWorkflowMenu(null)}>
+                      Add note
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
