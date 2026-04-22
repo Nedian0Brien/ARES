@@ -1983,6 +1983,65 @@ function focusSearchInput({ forceSearchStage = false, select = false } = {}) {
   });
 }
 
+function syncAppActivePaperMetadata(paper) {
+  const shell = document.querySelector('[data-ares-app="true"]');
+  if (!shell) {
+    return;
+  }
+
+  shell.dataset.activePaperId = paper?.paperId || "";
+  shell.dataset.activePaperTitle = paper?.title || "";
+}
+
+function replaceSearchPreviewSurface(markup) {
+  const stage = document.querySelector('[data-ares-surface="search-stage"]');
+  const currentPreview = stage?.querySelector('[data-ares-surface="search-preview"]');
+  if (!stage || !currentPreview) {
+    return false;
+  }
+
+  stage.querySelector(".preview-backdrop")?.remove();
+
+  const template = document.createElement("template");
+  template.innerHTML = markup.trim();
+  const nextNodes = Array.from(template.content.children);
+  currentPreview.replaceWith(...nextNodes);
+  return true;
+}
+
+function patchSearchSelectionUI() {
+  if (state.activeStage !== "search") {
+    return false;
+  }
+
+  const stage = document.querySelector('[data-ares-surface="search-stage"]');
+  if (!stage) {
+    return false;
+  }
+
+  const rows = stage.querySelectorAll('[data-action="select-paper"]');
+  if (!rows.length) {
+    return false;
+  }
+
+  rows.forEach((row) => {
+    const isSelected = row.dataset.paperId === state.selectedPaperId;
+    row.classList.toggle("is-selected", isSelected);
+    const venueBar = row.querySelector(".paper-venue-bar");
+    if (venueBar) {
+      venueBar.style.opacity = isSelected ? "1" : "0.32";
+    }
+  });
+
+  const paper = selectedPaper();
+  if (!replaceSearchPreviewSurface(renderSearchPreview(paper))) {
+    return false;
+  }
+
+  syncAppActivePaperMetadata(paper);
+  return true;
+}
+
 function previewSearchModeSwitch(nextMode) {
   const hero = document.querySelector(".hero-input");
   if (!hero) {
@@ -2102,9 +2161,16 @@ document.addEventListener("click", async (event) => {
 
   if (action === "select-paper") {
     if (modalClosing) return;
-    state.selectedPaperId = trigger.dataset.paperId;
+    const nextPaperId = trigger.dataset.paperId || "";
+    if (state.selectedPaperId === nextPaperId && state.previewPanelOpen) {
+      return;
+    }
+
+    state.selectedPaperId = nextPaperId;
     state.previewPanelOpen = true;
-    render();
+    if (!patchSearchSelectionUI()) {
+      render();
+    }
     return;
   }
 
