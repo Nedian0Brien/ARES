@@ -142,6 +142,8 @@ function resolveAppBaseUrl(locationLike = window.location) {
 
 const APP_BASE_URL = resolveAppBaseUrl();
 const INITIAL_SEARCH_LAYOUT = detectSearchLayout();
+const INITIAL_FILTER_PANEL_OPEN = INITIAL_SEARCH_LAYOUT === "desktop";
+const INITIAL_PREVIEW_PANEL_OPEN = false;
 
 const state = {
   booting: true,
@@ -164,8 +166,8 @@ const state = {
   sort: "relevance",
   searchMode: "keyword",
   searchLayout: INITIAL_SEARCH_LAYOUT,
-  filterPanelOpen: false,
-  previewPanelOpen: INITIAL_SEARCH_LAYOUT !== "tablet",
+  filterPanelOpen: INITIAL_FILTER_PANEL_OPEN,
+  previewPanelOpen: INITIAL_PREVIEW_PANEL_OPEN,
   scopePicker: null,
   scopePickerQuery: "",
   searchScopes: [],
@@ -240,6 +242,14 @@ function isTabletSearchLayout() {
   return state.searchLayout === "tablet";
 }
 
+function defaultFilterPanelOpen(layout = state.searchLayout) {
+  return layout === "desktop";
+}
+
+function defaultPreviewPanelOpen() {
+  return false;
+}
+
 function syncResponsiveSearchLayout(nextLayout = detectSearchLayout()) {
   const previousLayout = state.searchLayout;
   if (previousLayout === nextLayout) {
@@ -247,27 +257,10 @@ function syncResponsiveSearchLayout(nextLayout = detectSearchLayout()) {
   }
 
   state.searchLayout = nextLayout;
-
-  if (nextLayout === "tablet") {
-    state.filterPanelOpen = false;
-    state.previewPanelOpen = false;
-    state.scopePicker = null;
-    state.scopePickerQuery = "";
-    return true;
-  }
-
-  if (previousLayout === "tablet" && nextLayout === "desktop") {
-    state.filterPanelOpen = false;
-    state.previewPanelOpen = true;
-    return true;
-  }
-
-  if (previousLayout === "tablet" && nextLayout === "mobile") {
-    state.filterPanelOpen = false;
-    state.previewPanelOpen = Boolean(state.selectedPaperId);
-    return true;
-  }
-
+  state.filterPanelOpen = defaultFilterPanelOpen(nextLayout);
+  state.previewPanelOpen = defaultPreviewPanelOpen();
+  state.scopePicker = null;
+  state.scopePickerQuery = "";
   return true;
 }
 
@@ -674,11 +667,8 @@ function resetSearchState() {
     agentRuntime: "",
   };
   state.filters.venues = new Set();
-  state.filterPanelOpen = false;
-
-  if (isTabletSearchLayout()) {
-    state.previewPanelOpen = false;
-  }
+  state.filterPanelOpen = defaultFilterPanelOpen();
+  state.previewPanelOpen = defaultPreviewPanelOpen();
 }
 
 async function runSearch({ preserveSelection = false } = {}) {
