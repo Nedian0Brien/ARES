@@ -2554,9 +2554,9 @@ function renderReadingStage(project) {
             ${icon("sparkles", { size: 13, color: TOKENS.read })}
             <span>${summarized ? "Re-summarize" : "Summarize"}</span>
           </button>
-          <button type="button" class="btn-s" data-action="open-reading-workbench" data-reading-workbench-tab="assets">
+          <button type="button" class="btn-s" data-action="set-reading-document-tab" data-reading-document-tab="assets">
             ${icon("grid", { size: 13, color: "currentColor" })}
-            <span>Extract</span>
+            <span>Assets</span>
           </button>
           <div class="reading-metabar-divider"></div>
           <button type="button" class="btn-ghost">${icon("bookmark", { size: 14, color: "currentColor" })}</button>
@@ -2631,6 +2631,16 @@ function renderReadingStage(project) {
                 <span>PDF Document</span>
                 <span class="reading-pane-meta mono">14p</span>
               </button>
+              <button
+                type="button"
+                class="pane-tab ${state.readingDocumentTab === "assets" ? "active" : ""}"
+                data-action="set-reading-document-tab"
+                data-reading-document-tab="assets"
+              >
+                ${icon("grid", { size: 13, color: state.readingDocumentTab === "assets" ? TOKENS.tx : TOKENS.t3 })}
+                <span>Assets</span>
+                <span class="reading-pane-meta mono">${assets.length}</span>
+              </button>
 
               <div class="pane-actions">
                 <div class="reading-orient-group" title="Pane orientation">
@@ -2660,7 +2670,33 @@ function renderReadingStage(project) {
 
             <div class="pane-body">
               ${
-                state.readingDocumentTab === "pdf"
+                state.readingDocumentTab === "assets"
+                  ? `
+                      <div class="reading-assets-wrap">
+                        <div class="reading-assets-toolbar">
+                          <button type="button" class="${state.readingAssetsFilter === "all" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="all">All ${assets.length}</button>
+                          <button type="button" class="${state.readingAssetsFilter === "figure" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="figure">${icon("image", { size: 11, color: "currentColor" })}<span>Figures ${figureCount}</span></button>
+                          <button type="button" class="${state.readingAssetsFilter === "table" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="table">${icon("table", { size: 11, color: "currentColor" })}<span>Tables ${tableCount}</span></button>
+                        </div>
+                        <div class="reading-asset-grid">
+                          ${visibleAssets
+                            .map(
+                              (asset) => `
+                                <article class="reading-asset-card">
+                                  <div class="reading-asset-thumb">${renderReadingAssetThumb(asset)}</div>
+                                  <div class="reading-asset-meta">
+                                    <div class="reading-asset-kind" style="color:${asset.kind === "Figure" ? TOKENS.research : TOKENS.writing}">${escapeHtml(asset.kind)} ${asset.number}</div>
+                                    <div class="reading-asset-caption">${escapeHtml(asset.caption)}</div>
+                                    <div class="reading-asset-page mono">p.${escapeHtml(String(asset.page))}</div>
+                                  </div>
+                                </article>
+                              `,
+                            )
+                            .join("")}
+                        </div>
+                      </div>
+                    `
+                  : state.readingDocumentTab === "pdf"
                   ? `
                       <div class="reading-pdf">
                         <article class="reading-pdf-page">
@@ -2764,7 +2800,6 @@ function renderReadingStage(project) {
                       ${[
                         ["chat", "Chat", "chat", messages.length],
                         ["notes", "Notes", "note", notes.length],
-                        ["assets", "Assets", "grid", assets.length],
                       ]
                         .map(
                           ([id, label, iconName, count]) => `
@@ -2903,35 +2938,6 @@ function renderReadingStage(project) {
                           : ""
                       }
 
-                      ${
-                        state.readingWorkbenchTab === "assets"
-                          ? `
-                              <div class="reading-assets-wrap">
-                                <div class="reading-assets-toolbar">
-                                  <button type="button" class="${state.readingAssetsFilter === "all" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="all">All ${assets.length}</button>
-                                  <button type="button" class="${state.readingAssetsFilter === "figure" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="figure">${icon("image", { size: 11, color: "currentColor" })}<span>Figures ${figureCount}</span></button>
-                                  <button type="button" class="${state.readingAssetsFilter === "table" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="table">${icon("table", { size: 11, color: "currentColor" })}<span>Tables ${tableCount}</span></button>
-                                </div>
-                                <div class="reading-asset-grid">
-                                  ${visibleAssets
-                                    .map(
-                                      (asset) => `
-                                        <article class="reading-asset-card">
-                                          <div class="reading-asset-thumb">${renderReadingAssetThumb(asset)}</div>
-                                          <div class="reading-asset-meta">
-                                            <div class="reading-asset-kind" style="color:${asset.kind === "Figure" ? TOKENS.research : TOKENS.writing}">${escapeHtml(asset.kind)} ${asset.number}</div>
-                                            <div class="reading-asset-caption">${escapeHtml(asset.caption)}</div>
-                                            <div class="reading-asset-page mono">p.${escapeHtml(String(asset.page))}</div>
-                                          </div>
-                                        </article>
-                                      `,
-                                    )
-                                    .join("")}
-                                </div>
-                              </div>
-                            `
-                          : ""
-                      }
                     </div>
                   </section>
                 `
@@ -2945,7 +2951,6 @@ function renderReadingStage(project) {
                   ${[
                     ["chat", "chat", messages.length],
                     ["notes", "note", notes.length],
-                    ["assets", "grid", assets.length],
                   ]
                     .map(
                       ([id, iconName, count]) => `
