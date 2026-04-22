@@ -109,6 +109,11 @@ const SEARCH_LAYOUT_BREAKPOINTS = {
   mobileMax: 900,
   tabletMax: 1279,
 };
+const READING_ORIENTATION_BREAKPOINT = 1180;
+
+function defaultReadingOrientation(width = window.innerWidth) {
+  return width <= READING_ORIENTATION_BREAKPOINT ? "vertical" : "horizontal";
+}
 
 const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
 const PROXY_DEV_PATH_PATTERN = /^\/proxy\/\d+(?:\/|$)/;
@@ -162,6 +167,17 @@ const state = {
   readingSessions: [],
   activeReadingSessionId: "",
   activeReadingRunId: "",
+  readingDocumentTab: "pdf",
+  readingWorkbenchTab: "chat",
+  readingRailOpen: "overview",
+  readingWorkbenchCollapsed: false,
+  readingOrientation: defaultReadingOrientation(),
+  readingSplitHorizontal: 62,
+  readingSplitVertical: 62,
+  readingRailQuery: "",
+  readingAssetsFilter: "all",
+  readingParsedSessionIds: new Set(),
+  readingSummarizedSessionIds: new Set(),
   selectedPaperId: "",
   sort: "relevance",
   searchMode: "keyword",
@@ -200,6 +216,8 @@ const state = {
 const app = document.querySelector("#app");
 let modalClosing = false;
 let activeRunPollTimer = 0;
+let readingResizeDrag = null;
+let readingResizeFrame = 0;
 
 function loadStorage(key, fallback) {
   try {
@@ -282,6 +300,18 @@ function icon(name, { size = 16, color = "currentColor", className = "" } = {}) 
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="M7 14l4-4 4 4 5-5"></path></svg>',
     sparkles:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"></path></svg>',
+    pdf:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"></path><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M9 14h6"></path><path d="M9 17h6"></path><path d="M9 11h2"></path></svg>',
+    chat:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+    note:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12l4 4v12H4z"></path><path d="M16 4v4h4"></path><path d="M8 12h8"></path><path d="M8 16h5"></path></svg>',
+    grid:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>',
+    send:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path></svg>',
+    highlight:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20l9-9-4-4-9 9v4z"></path><path d="M14 7l4 4"></path><path d="M3 21h7"></path></svg>',
     pen:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z"></path></svg>',
     chevR:
@@ -330,6 +360,22 @@ function icon(name, { size = 16, color = "currentColor", className = "" } = {}) 
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>',
     share:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"></path></svg>',
+    download:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>',
+    columns:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="16" rx="1"></rect><rect x="14" y="4" width="7" height="16" rx="1"></rect></svg>',
+    rows:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="1"></rect><rect x="3" y="14" width="18" height="7" rx="1"></rect></svg>',
+    table:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M3 15h18"></path><path d="M9 5v14"></path><path d="M15 5v14"></path></svg>',
+    image:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="M21 15l-5-5-11 11"></path></svg>',
+    info:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>',
+    list:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path></svg>',
+    sidebar:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18"></path></svg>',
     settings:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>',
     moreH:
@@ -1652,6 +1698,360 @@ function readingProgress(session) {
   return Math.round((doneCount / sections.length) * 100);
 }
 
+function clampValue(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readingText(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function readingExcerpt(value, fallback = "", limit = 220) {
+  const text = readingText(value, fallback).replace(/\s+/g, " ").trim();
+  if (!text) {
+    return "";
+  }
+
+  if (text.length <= limit) {
+    return text;
+  }
+
+  return `${text.slice(0, limit - 1).trimEnd()}…`;
+}
+
+function readingSentence(value, fallback = "") {
+  const text = readingText(value, fallback).replace(/\s+/g, " ").trim();
+  if (!text) {
+    return "";
+  }
+
+  const match = text.match(/^(.{0,240}?[.!?])(?:\s|$)/);
+  return match ? match[1] : text;
+}
+
+function readingCategoryMeta(type) {
+  const key = String(type || "note").trim().toLowerCase();
+  return {
+    claim: { label: "Claim", color: TOKENS.research },
+    method: { label: "Method", color: TOKENS.read },
+    result: { label: "Result", color: TOKENS.search },
+    limit: { label: "Limit", color: TOKENS.result },
+    note: { label: "Note", color: TOKENS.writing },
+    summary: { label: "Summary", color: TOKENS.read },
+  }[key] || { label: "Note", color: TOKENS.writing };
+}
+
+function readingSectionPage(index) {
+  return Math.max(1, index + 1);
+}
+
+function readingIsParsed(session) {
+  if (!session) {
+    return false;
+  }
+
+  if (state.readingParsedSessionIds.has(session.id)) {
+    return true;
+  }
+
+  return Boolean(
+    (Array.isArray(session.sections) && session.sections.length) ||
+      (Array.isArray(session.highlights) && session.highlights.length) ||
+      (Array.isArray(session.reproParams) && session.reproParams.length) ||
+      (Array.isArray(session.notes) && session.notes.length),
+  );
+}
+
+function readingIsSummarized(session) {
+  if (!session) {
+    return false;
+  }
+
+  if (state.readingSummarizedSessionIds.has(session.id)) {
+    return true;
+  }
+
+  return Boolean(
+    readingText(session.summary) ||
+      (Array.isArray(session.keyPoints) && session.keyPoints.length) ||
+      (Array.isArray(session.highlights) && session.highlights.length),
+  );
+}
+
+function filterReadingSessions(sessions = []) {
+  const query = state.readingRailQuery.trim().toLowerCase();
+  if (!query) {
+    return sessions;
+  }
+
+  return sessions.filter((session) =>
+    `${session.title || ""} ${(session.authors || []).join(" ")} ${session.venue || ""}`.toLowerCase().includes(query),
+  );
+}
+
+function readingActiveSectionIndex(sections = []) {
+  const methodIndex = sections.findIndex((section) => /method|approach|architecture/i.test(section.label || ""));
+  if (methodIndex >= 0) {
+    return methodIndex;
+  }
+
+  const pendingIndex = sections.findIndex((section) => section.status === "running" || section.status === "queue");
+  if (pendingIndex >= 0) {
+    return pendingIndex;
+  }
+
+  return Math.min(2, Math.max(sections.length - 1, 0));
+}
+
+function readingMatchSectionIndex(sections = [], value = "") {
+  const lowered = String(value || "").trim().toLowerCase();
+  if (!lowered) {
+    return -1;
+  }
+
+  return sections.findIndex((section) => {
+    const id = String(section.id || "").toLowerCase();
+    const label = String(section.label || "").toLowerCase();
+    return id === lowered || label === lowered || label.includes(lowered) || lowered.includes(id);
+  });
+}
+
+function deriveReadingSummary(session) {
+  const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
+  const reproParams = Array.isArray(session?.reproParams) ? session.reproParams : [];
+  const notes = Array.isArray(session?.notes) ? session.notes : [];
+  const sections = Array.isArray(session?.sections) ? session.sections : [];
+  const keyPoints =
+    (Array.isArray(session?.keyPoints) ? session.keyPoints : [])
+      .map((entry) => readingSentence(entry))
+      .filter(Boolean)
+      .slice(0, 4) ||
+    [];
+
+  if (!keyPoints.length) {
+    highlights
+      .map((entry) => readingSentence(entry.text))
+      .filter(Boolean)
+      .slice(0, 4)
+      .forEach((entry) => keyPoints.push(entry));
+  }
+
+  if (!keyPoints.length) {
+    sections
+      .map((entry) => readingSentence(entry.summary))
+      .filter(Boolean)
+      .slice(0, 4)
+      .forEach((entry) => keyPoints.push(entry));
+  }
+
+  const methodHighlight =
+    highlights.find((entry) => String(entry.type || "").toLowerCase() === "method") ||
+    highlights[0] ||
+    reproParams[0] ||
+    null;
+  const limitHighlight =
+    highlights.find((entry) => String(entry.type || "").toLowerCase() === "limit") ||
+    notes.find((entry) => /limit|warning|risk/i.test(entry.label || "")) ||
+    notes[0] ||
+    null;
+
+  return {
+    tldr: readingExcerpt(session?.summary || session?.abstract, "요약이 아직 준비되지 않았습니다.", 260),
+    keyPoints: keyPoints.slice(0, 4),
+    method: readingExcerpt(
+      methodHighlight?.text || methodHighlight?.value || sections[0]?.summary || session?.abstract,
+      "핵심 방법 설명이 준비되면 여기에 표시됩니다.",
+      220,
+    ),
+    limit: readingExcerpt(
+      limitHighlight?.text || limitHighlight?.value || session?.warning || sections.at(-1)?.summary || session?.summary,
+      "한계점과 주의사항은 추가 파싱 후 표시됩니다.",
+      220,
+    ),
+  };
+}
+
+function deriveReadingNotes(session) {
+  const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
+  const notes = Array.isArray(session?.notes) ? session.notes : [];
+  const sections = Array.isArray(session?.sections) ? session.sections : [];
+  const cards = [];
+  const seen = new Set();
+
+  highlights.forEach((highlight, index) => {
+    const text = readingExcerpt(highlight.text, "", 170);
+    if (!text) {
+      return;
+    }
+
+    const key = text.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    const meta = readingCategoryMeta(highlight.type);
+    const sectionIndex = readingMatchSectionIndex(sections, highlight.section);
+    cards.push({
+      id: highlight.id || `${session?.id || "reading"}-highlight-${index}`,
+      cat: meta.label,
+      color: meta.color,
+      text,
+      memo: readingExcerpt(
+        notes[index]?.value || (sectionIndex >= 0 ? sections[sectionIndex]?.summary : session?.summary),
+        "Reader note is being refined.",
+        180,
+      ),
+      pg: readingSectionPage(sectionIndex >= 0 ? sectionIndex + 2 : index + 3),
+    });
+    seen.add(key);
+  });
+
+  notes.forEach((note, index) => {
+    const text = readingExcerpt(note.value || note.text, "", 170);
+    if (!text) {
+      return;
+    }
+
+    const key = text.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    const meta = readingCategoryMeta(note.label);
+    cards.push({
+      id: note.id || `${session?.id || "reading"}-note-${index}`,
+      cat: meta.label,
+      color: meta.color,
+      text,
+      memo: readingExcerpt(sections[index]?.summary || session?.summary, "추가 메모가 이어질 예정입니다.", 180),
+      pg: readingSectionPage(index + 4),
+    });
+    seen.add(key);
+  });
+
+  if (!cards.length) {
+    cards.push({
+      id: `${session?.id || "reading"}-fallback-note`,
+      cat: "Summary",
+      color: TOKENS.read,
+      text: readingExcerpt(session?.summary || session?.abstract, "Reader note is being prepared.", 170),
+      memo: readingExcerpt(session?.warning || session?.abstract, "구조화 노트가 생성되면 이 영역을 채웁니다.", 180),
+      pg: 1,
+    });
+  }
+
+  return cards.slice(0, 6);
+}
+
+function deriveReadingMessages(session) {
+  const summary = deriveReadingSummary(session);
+  const notes = deriveReadingNotes(session);
+  const sections = Array.isArray(session?.sections) ? session.sections : [];
+  const leadSection = sections[0]?.label || "Abstract";
+  const methodSection = sections[readingActiveSectionIndex(sections)]?.label || "Method";
+
+  return [
+    {
+      id: `${session?.id || "reading"}-msg-1`,
+      role: "user",
+      text: "핵심 기여를 한 문장으로 정리해줘.",
+    },
+    {
+      id: `${session?.id || "reading"}-msg-2`,
+      role: "assistant",
+      text: summary.tldr,
+      cites: [{ label: leadSection, pg: 1 }],
+    },
+    {
+      id: `${session?.id || "reading"}-msg-3`,
+      role: "user",
+      text: "재현 실험에서 먼저 체크할 설정은 뭐야?",
+    },
+    {
+      id: `${session?.id || "reading"}-msg-4`,
+      role: "assistant",
+      text: readingExcerpt(notes[0]?.memo || summary.method || summary.limit, "핵심 설정이 정리되면 이곳에 답변이 누적됩니다.", 220),
+      cites: [{ label: methodSection, pg: Math.max(readingActiveSectionIndex(sections) + 1, 2) }],
+    },
+  ];
+}
+
+function deriveReadingAssets(session) {
+  const sections = Array.isArray(session?.sections) ? session.sections : [];
+  const reproParams = Array.isArray(session?.reproParams) ? session.reproParams : [];
+  const assets = [];
+
+  sections.slice(0, 3).forEach((section, index) => {
+    assets.push({
+      id: `${session?.id || "reading"}-figure-${index}`,
+      kind: "Figure",
+      number: index + 1,
+      caption: readingExcerpt(section.label || `Section ${index + 1}`, "", 64),
+      detail: readingExcerpt(section.summary, session?.summary || "Section preview", 120),
+      page: readingSectionPage(index + 2),
+    });
+  });
+
+  reproParams.slice(0, 3).forEach((param, index) => {
+    assets.push({
+      id: `${session?.id || "reading"}-table-${index}`,
+      kind: "Table",
+      number: index + 1,
+      caption: readingExcerpt(param.label || `Param ${index + 1}`, "", 64),
+      detail: readingExcerpt(param.value, "No value", 120),
+      page: readingSectionPage(index + 6),
+    });
+  });
+
+  if (!assets.length) {
+    assets.push({
+      id: `${session?.id || "reading"}-figure-fallback`,
+      kind: "Figure",
+      number: 1,
+      caption: "Paper overview",
+      detail: readingExcerpt(session?.summary || session?.abstract, "Asset preview will appear after extraction.", 120),
+      page: 1,
+    });
+  }
+
+  return assets.slice(0, 6);
+}
+
+function renderReadingAssetThumb(asset) {
+  if (asset.kind === "Table") {
+    return `
+      <div class="reading-asset-thumb-table">
+        <div class="reading-asset-thumb-table-head">
+          <span>${escapeHtml(readingExcerpt(asset.caption, "Field", 14))}</span>
+          <span>Value</span>
+          <span>Note</span>
+        </div>
+        <div class="reading-asset-thumb-table-row">
+          <span>${escapeHtml(readingExcerpt(asset.caption, "Field", 14))}</span>
+          <span>${escapeHtml(readingExcerpt(asset.detail, "Value", 14))}</span>
+          <span>ref</span>
+        </div>
+        <div class="reading-asset-thumb-table-row">
+          <span>status</span>
+          <span>ready</span>
+          <span>v1</span>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="reading-asset-thumb-figure">
+      <span class="reading-asset-thumb-bar" style="height:34%"></span>
+      <span class="reading-asset-thumb-bar" style="height:58%"></span>
+      <span class="reading-asset-thumb-bar" style="height:74%"></span>
+      <span class="reading-asset-thumb-bar" style="height:46%"></span>
+      <span class="reading-asset-thumb-axis"></span>
+    </div>
+  `;
+}
+
 function renderReadingStage(project) {
   const sessions = sortReadingSessions(state.readingSessions);
   const session = selectedReadingSession();
@@ -1690,173 +2090,689 @@ function renderReadingStage(project) {
     `;
   }
 
+  const filteredSessions = filterReadingSessions(sessions);
   const sections = Array.isArray(session?.sections) ? session.sections : [];
-  const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
   const reproParams = Array.isArray(session?.reproParams) ? session.reproParams : [];
-  const notes = Array.isArray(session?.notes) ? session.notes : [];
   const progress = readingProgress(session);
+  const notes = deriveReadingNotes(session);
+  const messages = deriveReadingMessages(session);
+  const assets = deriveReadingAssets(session);
+  const summary = deriveReadingSummary(session);
+  const parsed = readingIsParsed(session);
+  const summarized = readingIsSummarized(session);
+  const split = state.readingOrientation === "vertical" ? state.readingSplitVertical : state.readingSplitHorizontal;
+  const activeSectionIndex = readingActiveSectionIndex(sections);
+  const docPaneStyle = state.readingWorkbenchCollapsed ? "flex:1 1 auto" : `flex:0 0 calc(${split}% - 2.5px)`;
+  const wbPaneStyle = `flex:0 0 calc(${100 - split}% - 2.5px)`;
   const statusTag = renderTag(session?.status || "queue", statusColor(session?.status || "queue"), session?.status === "done");
+  const figureCount = assets.filter((entry) => entry.kind === "Figure").length;
+  const tableCount = assets.filter((entry) => entry.kind === "Table").length;
+  const visibleAssets =
+    state.readingAssetsFilter === "all"
+      ? assets
+      : assets.filter((entry) => entry.kind.toLowerCase() === state.readingAssetsFilter);
+  const categoryRows = [
+    readingCategoryMeta("method"),
+    readingCategoryMeta("result"),
+    readingCategoryMeta("limit"),
+    readingCategoryMeta("claim"),
+    readingCategoryMeta("note"),
+  ].map((entry) => ({
+    ...entry,
+    count: notes.filter((note) => note.cat === entry.label).length,
+  }));
+  const railTitle = {
+    overview: "Overview",
+    library: "Library",
+    outline: "Outline",
+    highlight: "Highlights",
+  }[state.readingRailOpen] || "Overview";
+  const railIcon = {
+    overview: "layers",
+    library: "book",
+    outline: "list",
+    highlight: "highlight",
+  }[state.readingRailOpen] || "layers";
+
+  const renderLibraryItems = (items) => {
+    if (!items.length) {
+      return '<div class="reading-compact-empty">조건에 맞는 논문이 없습니다.</div>';
+    }
+
+    return items
+      .map((entry) => {
+        const active = entry.id === session?.id;
+        const entryProgress = readingProgress(entry);
+        return `
+          <button
+            type="button"
+            class="reading-lib-item ${active ? "is-active" : ""}"
+            data-action="select-reading-session"
+            data-reading-session-id="${escapeHtml(entry.id)}"
+          >
+            <div class="reading-lib-title">${escapeHtml(entry.title || "Untitled paper")}</div>
+            <div class="reading-lib-meta">
+              <span>${escapeHtml(formatAuthors(entry.authors || []))}</span>
+              <span style="color:${TOKENS.t4}">·</span>
+              <span>${escapeHtml(entry.venue || "Unknown venue")}</span>
+            </div>
+            ${entryProgress > 0 && entryProgress < 100 ? `<div class="reading-lib-bar"><i style="width:${entryProgress}%"></i></div>` : ""}
+            ${
+              entryProgress === 100
+                ? `<div class="reading-lib-status">${icon("check", { size: 10, color: TOKENS.search })}<span>done</span></div>`
+                : ""
+            }
+          </button>
+        `;
+      })
+      .join("");
+  };
+
+  const renderOutlineItems = (items, { compact = false } = {}) => {
+    if (!items.length) {
+      return '<div class="reading-compact-empty">섹션 구조가 아직 준비되지 않았습니다.</div>';
+    }
+
+    return items
+      .map((entry, index) => {
+        const active = index === activeSectionIndex;
+        return `
+          <button type="button" class="reading-outline-item ${active ? "is-active" : ""}">
+            <span class="reading-outline-icon">${statusIcon(entry.status || "todo")}</span>
+            <span>${escapeHtml(entry.label || `Section ${index + 1}`)}</span>
+            ${compact ? "" : `<span class="reading-outline-progress mono">${escapeHtml(String(readingSectionPage(index + 2)).padStart(2, "0"))}</span>`}
+          </button>
+        `;
+      })
+      .join("");
+  };
+
+  const renderHighlightItems = (items) => {
+    if (!items.length) {
+      return '<div class="reading-compact-empty">노트가 아직 생성되지 않았습니다.</div>';
+    }
+
+    return items
+      .map(
+        (entry) => `
+          <button type="button" class="reading-highlight-item">
+            <span class="reading-highlight-rail" style="background:${entry.color}"></span>
+            <span class="reading-highlight-copy">
+              <span class="reading-highlight-text">${escapeHtml(entry.text)}</span>
+              <span class="reading-highlight-page mono">p.${escapeHtml(String(entry.pg))}</span>
+            </span>
+          </button>
+        `,
+      )
+      .join("");
+  };
+
+  const floatPanel =
+    state.readingRailOpen
+      ? `
+          <aside class="reading-float-panel ${state.readingRailOpen === "overview" ? "is-wide" : ""}">
+            <div class="reading-float-panel-head">
+              <div class="reading-float-panel-title">
+                ${icon(railIcon, { size: 14, color: TOKENS.read })}
+                <span>${escapeHtml(railTitle)}</span>
+              </div>
+              <button type="button" class="reading-float-panel-close" data-action="close-reading-rail">
+                ${icon("x", { size: 13, color: "currentColor" })}
+              </button>
+            </div>
+
+            ${
+              state.readingRailOpen === "overview"
+                ? `
+                    <div class="reading-float-panel-body is-overview">
+                      <section class="reading-float-section">
+                        <div class="reading-float-section-head">
+                          ${icon("book", { size: 11, color: TOKENS.read })}
+                          <span>Library</span>
+                          <span class="count">${sessions.length}</span>
+                          <button type="button" class="more" data-action="set-reading-rail" data-reading-rail="library">All →</button>
+                        </div>
+                        ${renderLibraryItems(filteredSessions.slice(0, 3))}
+                      </section>
+
+                      <section class="reading-float-section">
+                        <div class="reading-float-section-head">
+                          ${icon("list", { size: 11, color: TOKENS.read })}
+                          <span>Outline</span>
+                          <span class="count" style="color:${TOKENS.read};font-weight:600">${progress}%</span>
+                          <button type="button" class="more" data-action="set-reading-rail" data-reading-rail="outline">Full →</button>
+                        </div>
+                        <div class="reading-mini-progress"><i style="width:${progress}%"></i></div>
+                        ${renderOutlineItems(sections.slice(0, 5), { compact: true })}
+                      </section>
+
+                      <section class="reading-float-section">
+                        <div class="reading-float-section-head">
+                          ${icon("highlight", { size: 11, color: TOKENS.read })}
+                          <span>Highlights</span>
+                          <span class="count">${notes.length}</span>
+                          <button type="button" class="more" data-action="set-reading-rail" data-reading-rail="highlight">All →</button>
+                        </div>
+                        <div class="reading-highlight-category-row">
+                          ${categoryRows
+                            .map(
+                              (entry) => `
+                                <span class="reading-highlight-chip" style="background:${entry.color}12;color:${entry.color};border-color:${entry.color}30">
+                                  <span class="dot" style="background:${entry.color}"></span>
+                                  <span>${escapeHtml(entry.label)}</span>
+                                  <span class="mono">${entry.count}</span>
+                                </span>
+                              `,
+                            )
+                            .join("")}
+                        </div>
+                        ${renderHighlightItems(notes.slice(0, 3))}
+                      </section>
+                    </div>
+                  `
+                : ""
+            }
+
+            ${
+              state.readingRailOpen === "library"
+                ? `
+                    <div class="reading-float-search">
+                      ${icon("search", { size: 12, color: "currentColor" })}
+                      <input type="text" name="readingRailQuery" value="${escapeHtml(state.readingRailQuery)}" placeholder="Filter papers…" />
+                      ${renderKbd("⌘K")}
+                    </div>
+                    <div class="reading-float-panel-body">${renderLibraryItems(filteredSessions)}</div>
+                  `
+                : ""
+            }
+
+            ${
+              state.readingRailOpen === "outline"
+                ? `
+                    <div class="reading-outline-panel-meta">
+                      <div class="reading-outline-panel-label">Reading progress</div>
+                      <div class="reading-mini-progress"><i style="width:${progress}%"></i></div>
+                      <div class="reading-outline-progress mono">${progress}%</div>
+                    </div>
+                    <div class="reading-float-panel-body">${renderOutlineItems(sections)}</div>
+                  `
+                : ""
+            }
+
+            ${
+              state.readingRailOpen === "highlight"
+                ? `
+                    <div class="reading-float-panel-body reading-highlight-panel">
+                      <div class="reading-highlight-panel-label">Categories</div>
+                      ${categoryRows
+                        .map(
+                          (entry) => `
+                            <button type="button" class="reading-highlight-category-btn">
+                              <span class="swatch" style="background:${entry.color}"></span>
+                              <span>${escapeHtml(entry.label)}</span>
+                              <span class="mono">${entry.count}</span>
+                            </button>
+                          `,
+                        )
+                        .join("")}
+                      <div class="reading-highlight-divider"></div>
+                      <div class="reading-highlight-panel-label">Recent</div>
+                      ${renderHighlightItems(notes.slice(0, 3))}
+                    </div>
+                  `
+                : ""
+            }
+          </aside>
+        `
+      : "";
 
   return `
-    <div class="reading-stage" data-ares-surface="reading-stage" data-ares-stage="reading">
-      <aside class="reading-rail" data-ares-surface="reading-rail" data-ares-stage="reading">
-        <div class="reading-rail-card">
-          <div class="reading-rail-eyebrow">Reading queue</div>
-          <div class="reading-rail-title">${escapeHtml(project.name)}</div>
-          <div class="reading-rail-meta">
-            <span>${sessions.length} session${sessions.length > 1 ? "s" : ""}</span>
-            ${state.activeReadingRunId ? '<span class="pd" style="background:var(--result)"></span><span>agent running</span>' : ""}
+    <div
+      class="reading-stage"
+      data-ares-surface="reading-stage"
+      data-ares-stage="reading"
+      data-reading-orientation="${escapeHtml(state.readingOrientation)}"
+    >
+      <span class="reading-variant">Final · Unified Workbench<span style="opacity:0.7;margin-left:6px">· ${escapeHtml(state.readingOrientation)}</span></span>
+
+      <div class="reading-metabar">
+        <div class="reading-crumb-group">
+          ${icon("book", { size: 13, color: TOKENS.read })}
+          <span style="color:${TOKENS.read};font-weight:550">Reading</span>
+        </div>
+
+        <div class="reading-metabar-copy">
+          <div class="reading-metabar-title">${escapeHtml(session?.title || "Untitled paper")}</div>
+          <div class="reading-metabar-byline">
+            <span>${escapeHtml(formatAuthors(session?.authors || []))}</span>
+            <span style="color:${TOKENS.t4}">·</span>
+            ${renderTag(session?.venue || "Unknown venue")}
+            ${renderTag(parsed ? "parsed" : "raw PDF", parsed ? TOKENS.read : "", parsed)}
+            ${summarized ? renderTag("summary ready", TOKENS.read, true) : ""}
           </div>
         </div>
 
-        <div class="reading-session-list">
-          ${sessions
-            .map((entry) => {
-              const active = entry.id === session?.id;
-              return `
+        <div class="reading-metabar-actions">
+          <span class="reading-narrow-tip">${icon("rows", { size: 11, color: "currentColor" })}<span>태블릿: 세로 분할 권장</span></span>
+          <button type="button" class="${parsed ? "btn-s" : "btn-p"}" data-action="reading-parse-session">
+            ${icon(parsed ? "check" : "sparkles", { size: 13, color: parsed ? "currentColor" : "#fff" })}
+            <span>${parsed ? "Parsed" : "Parse paper"}</span>
+          </button>
+          <button type="button" class="btn-s" data-action="reading-summarize-session">
+            ${icon("sparkles", { size: 13, color: TOKENS.read })}
+            <span>${summarized ? "Re-summarize" : "Summarize"}</span>
+          </button>
+          <button type="button" class="btn-s" data-action="open-reading-workbench" data-reading-workbench-tab="assets">
+            ${icon("grid", { size: 13, color: "currentColor" })}
+            <span>Extract</span>
+          </button>
+          <div class="reading-metabar-divider"></div>
+          <button type="button" class="btn-ghost">${icon("bookmark", { size: 14, color: "currentColor" })}</button>
+          <button type="button" class="btn-ghost">${icon("share", { size: 14, color: "currentColor" })}</button>
+          <button type="button" class="btn-ghost">${icon("moreH", { size: 14, color: "currentColor" })}</button>
+        </div>
+      </div>
+
+      <div class="reading-shell-main">
+        <div class="reading-icon-rail">
+          ${[
+            { id: "overview", iconName: "layers", label: "Overview" },
+            { id: "library", iconName: "book", label: "Library", count: sessions.length },
+            { id: "outline", iconName: "list", label: "Outline" },
+            { id: "highlight", iconName: "highlight", label: "Notes", count: notes.length },
+          ]
+            .map(
+              (entry, index) => `
                 <button
                   type="button"
-                  class="reading-session-item ${active ? "is-active" : ""}"
-                  data-action="select-reading-session"
-                  data-reading-session-id="${escapeHtml(entry.id)}"
+                  class="reading-rail-btn ${state.readingRailOpen === entry.id ? "is-active" : ""}"
+                  data-action="set-reading-rail"
+                  data-reading-rail="${escapeHtml(entry.id)}"
+                  title="${escapeHtml(entry.label)}"
                 >
-                  <div class="reading-session-item-top">
-                    <span class="reading-session-status">${statusIcon(entry.status)}</span>
-                    <span class="reading-session-progress mono">${readingProgress(entry)}%</span>
-                  </div>
-                  <div class="reading-session-item-title">${escapeHtml(entry.title)}</div>
-                  <div class="reading-session-item-meta">
-                    <span>${escapeHtml(entry.venue || "Unknown venue")}</span>
-                    <span>·</span>
-                    <span>${escapeHtml(String(entry.year || "n/a"))}</span>
-                  </div>
+                  ${icon(entry.iconName, { size: 16, color: "currentColor" })}
+                  <span class="lbl">${escapeHtml(entry.label)}</span>
+                  ${entry.count ? `<span class="badge mono">${entry.count}</span>` : ""}
                 </button>
-              `;
-            })
+                ${index === 0 ? '<div class="reading-rail-divider"></div>' : ""}
+              `,
+            )
             .join("")}
+          <div class="reading-rail-spacer"></div>
+          <button
+            type="button"
+            class="reading-rail-btn ${state.readingWorkbenchCollapsed ? "is-active" : ""}"
+            data-action="toggle-reading-workbench-collapse"
+            title="${state.readingWorkbenchCollapsed ? "Show workbench" : "Hide workbench"}"
+          >
+            ${icon("sidebar", {
+              size: 16,
+              color: "currentColor",
+              className: state.readingWorkbenchCollapsed ? "" : "reading-sidebar-flip",
+            })}
+            <span class="lbl reading-small-label">${state.readingWorkbenchCollapsed ? "show" : "hide"}</span>
+          </button>
         </div>
-      </aside>
 
-      <section class="reading-main" data-ares-surface="reading-main" data-ares-stage="reading">
-        <div class="reading-hero">
-          <div>
-            <div class="placeholder-eyebrow">Reader session</div>
-            <h1 class="reading-title">${escapeHtml(session?.title || "Untitled paper")}</h1>
-            <p class="reading-summary">${escapeHtml(session?.summary || "Reader summary is being prepared.")}</p>
-          </div>
-          <div class="reading-hero-meta">
-            ${statusTag}
-            <div class="reading-progress-ring">
-              <span class="mono">${progress}%</span>
-              <div class="reading-progress-bar"><span style="width:${progress}%"></span></div>
+        ${floatPanel}
+
+        <div class="reading-split ${state.readingOrientation === "vertical" ? "is-vertical" : ""}">
+          <section class="reading-pane reading-doc-pane" style="${docPaneStyle}">
+            <div class="pane-hdr">
+              <button
+                type="button"
+                class="pane-tab ${state.readingDocumentTab === "summary" ? "active" : ""}"
+                data-action="set-reading-document-tab"
+                data-reading-document-tab="summary"
+              >
+                ${icon("sparkles", { size: 13, color: state.readingDocumentTab === "summary" ? TOKENS.read : TOKENS.t3 })}
+                <span>Summary</span>
+                ${summarized ? '<span class="reading-pane-dot"></span>' : ""}
+              </button>
+              <button
+                type="button"
+                class="pane-tab ${state.readingDocumentTab === "pdf" ? "active" : ""}"
+                data-action="set-reading-document-tab"
+                data-reading-document-tab="pdf"
+              >
+                ${icon("pdf", { size: 13, color: state.readingDocumentTab === "pdf" ? TOKENS.tx : TOKENS.t3 })}
+                <span>PDF Document</span>
+                <span class="reading-pane-meta mono">14p</span>
+              </button>
+
+              <div class="pane-actions">
+                <div class="reading-orient-group" title="Pane orientation">
+                  <button
+                    type="button"
+                    class="reading-orient-btn ${state.readingOrientation === "horizontal" ? "is-on" : ""}"
+                    data-action="set-reading-orientation"
+                    data-reading-orientation="horizontal"
+                    title="Side by side"
+                  >
+                    ${icon("columns", { size: 13, color: "currentColor" })}
+                  </button>
+                  <button
+                    type="button"
+                    class="reading-orient-btn ${state.readingOrientation === "vertical" ? "is-on" : ""}"
+                    data-action="set-reading-orientation"
+                    data-reading-orientation="vertical"
+                    title="Stacked"
+                  >
+                    ${icon("rows", { size: 13, color: "currentColor" })}
+                  </button>
+                </div>
+                <button type="button" class="pane-icon-btn">${icon("plus", { size: 13, color: "currentColor" })}</button>
+                <button type="button" class="pane-icon-btn">${icon("download", { size: 13, color: "currentColor" })}</button>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div class="reading-grid">
-          <section class="reading-card">
-            <div class="reading-card-title">Section progress</div>
-            <div class="reading-section-list">
-              ${sections
-                .map(
-                  (entry) => `
-                    <article class="reading-section-item">
-                      <div class="reading-section-head">
-                        <span class="reading-section-label">${escapeHtml(entry.label)}</span>
-                        ${renderTag(entry.status, statusColor(entry.status), entry.status === "done")}
+            <div class="pane-body">
+              ${
+                state.readingDocumentTab === "pdf"
+                  ? `
+                      <div class="reading-pdf">
+                        <article class="reading-pdf-page">
+                          <h1>${escapeHtml(session?.title || "Untitled paper")}</h1>
+                          <div class="reading-pdf-author">${escapeHtml((session?.authors || []).join(" · ") || "Unknown authors")}</div>
+                          <div class="reading-pdf-author" style="margin-bottom:14px">${escapeHtml(session?.venue || "Unknown venue")} · ${escapeHtml(String(session?.year || "n/a"))}</div>
+                          <div class="reading-pdf-heading">Abstract</div>
+                          <p>${escapeHtml(readingExcerpt(session?.abstract || session?.summary, "Abstract is being prepared.", 460))}</p>
+                          <p>${escapeHtml(readingExcerpt(session?.summary || session?.abstract, "Reader summary is being prepared.", 420))}</p>
+                          ${
+                            sections[0]
+                              ? `<h2>${escapeHtml(sections[0].label || "1. Introduction")}</h2><p>${escapeHtml(readingExcerpt(sections[0].summary, "Section summary pending.", 360))}</p>`
+                              : ""
+                          }
+                          <div class="reading-pdf-page-number">1 / 14</div>
+                        </article>
+
+                        <div class="reading-pdf-separator">Page 2</div>
+
+                        <article class="reading-pdf-page">
+                          ${sections
+                            .slice(1, 4)
+                            .map(
+                              (entry, index) => `
+                                <h2>${escapeHtml(entry.label || `Section ${index + 2}`)}</h2>
+                                <p>${escapeHtml(readingExcerpt(entry.summary, "Summary pending.", 340))}</p>
+                              `,
+                            )
+                            .join("")}
+                          ${
+                            !sections.slice(1, 4).length
+                              ? `<h2>2. Key Notes</h2><p>${escapeHtml(summary.method)}</p><p>${escapeHtml(summary.limit)}</p>`
+                              : ""
+                          }
+                          <div class="reading-pdf-page-number">2 / 14</div>
+                        </article>
                       </div>
-                      <p>${escapeHtml(entry.summary || "Summary pending.")}</p>
-                    </article>
-                  `,
-                )
-                .join("")}
-            </div>
-          </section>
+                    `
+                  : summarized
+                    ? `
+                        <div class="reading-summary-wrap">
+                          <section class="reading-summary-block">
+                            <div class="reading-summary-label">${icon("sparkles", { size: 11, color: TOKENS.read })}<span>TL;DR</span></div>
+                            <div class="reading-summary-body">${escapeHtml(summary.tldr)}</div>
+                          </section>
 
-          <section class="reading-card">
-            <div class="reading-card-title">Highlights</div>
-            <div class="reading-highlight-list">
-              ${highlights.length
-                ? highlights
-                    .map(
-                      (highlight) => `
-                        <article class="reading-highlight">
-                          <div class="reading-highlight-meta">
-                            ${renderTag(highlight.type || "note", TOKENS.read, true)}
-                            <span>${escapeHtml(highlight.section || "paper")}</span>
-                          </div>
-                          <p>${escapeHtml(highlight.text || "")}</p>
-                        </article>
-                      `,
-                    )
-                    .join("")
-                : '<div class="empty-state compact-empty">핵심 하이라이트가 생성되면 여기에 표시됩니다.</div>'}
-            </div>
-          </section>
-        </div>
-      </section>
+                          <section class="reading-summary-block">
+                            <div class="reading-summary-label" style="color:${TOKENS.search}">${icon("dot", { size: 8, color: TOKENS.search })}<span>Key points</span></div>
+                            <ul class="reading-summary-list">
+                              ${summary.keyPoints
+                                .map(
+                                  (entry) => `
+                                    <li>
+                                      <span class="bullet" style="background:${TOKENS.search}"></span>
+                                      <span>${escapeHtml(entry)}</span>
+                                    </li>
+                                  `,
+                                )
+                                .join("")}
+                            </ul>
+                          </section>
 
-      <aside class="reader-agent-panel" data-ares-surface="reader-agent-panel" data-ares-stage="reading">
-        <div class="agent-panel-header">
-          <div class="agent-panel-status">
-            ${statusIcon(session?.status || "queue")}
-            <span>Reader agent</span>
-          </div>
-          ${statusTag}
-        </div>
+                          <section class="reading-summary-block">
+                            <div class="reading-summary-label" style="color:${TOKENS.read}">${icon("dot", { size: 8, color: TOKENS.read })}<span>Method</span></div>
+                            <div class="reading-summary-body">${escapeHtml(summary.method)}</div>
+                          </section>
 
-        <div class="agent-panel-body">
-          <section class="agent-panel-section" style="border-left-color:${TOKENS.read}">
-            <div class="agent-panel-eyebrow" style="color:${TOKENS.read};margin-bottom:4px">Reproduction params</div>
-            <div class="reading-param-list">
-              ${reproParams.length
-                ? reproParams
-                    .map(
-                      (param) => `
-                        <div class="reading-param-row">
-                          <span>${escapeHtml(param.label || "Param")}</span>
-                          <span class="mono">${escapeHtml(param.value || "n/a")}</span>
+                          <section class="reading-summary-block">
+                            <div class="reading-summary-label" style="color:${TOKENS.result}">${icon("dot", { size: 8, color: TOKENS.result })}<span>Limit</span></div>
+                            <div class="reading-summary-body">${escapeHtml(summary.limit)}</div>
+                          </section>
                         </div>
-                      `,
-                    )
-                    .join("")
-                : '<div class="empty-state compact-empty">아직 추출된 재현 파라미터가 없습니다.</div>'}
+                      `
+                    : `
+                        <div class="reading-empty-view">
+                          <div class="reading-empty-icon">${icon("sparkles", { size: 24, color: TOKENS.read })}</div>
+                          <div class="reading-empty-title">요약이 아직 생성되지 않았습니다</div>
+                          <div class="reading-empty-copy">상단의 <strong>Summarize</strong> 버튼을 누르면 AI가 TL;DR, Key Points, Method, Limit 순으로 요약을 정리합니다.</div>
+                          <button type="button" class="btn-p" data-action="reading-summarize-session">
+                            ${icon("sparkles", { size: 13, color: "#fff" })}
+                            <span>Generate summary</span>
+                          </button>
+                        </div>
+                      `
+              }
             </div>
           </section>
 
-          <section class="agent-panel-section" style="border-left-color:${TOKENS.result}">
-            <div class="agent-panel-eyebrow" style="color:${TOKENS.result};margin-bottom:4px">Reader notes</div>
-            <div class="reading-note-list">
-              ${notes.length
-                ? notes
+          ${
+            state.readingWorkbenchCollapsed
+              ? ""
+              : `
+                  <div
+                    class="reading-resize-handle ${state.readingOrientation === "vertical" ? "is-vertical" : "is-horizontal"}"
+                    data-action="start-reading-resize"
+                    data-reading-resize-axis="${escapeHtml(state.readingOrientation)}"
+                  ></div>
+
+                  <section class="reading-pane reading-workbench-pane" style="${wbPaneStyle}">
+                    <div class="pane-hdr">
+                      ${[
+                        ["chat", "Chat", "chat", messages.length],
+                        ["notes", "Notes", "note", notes.length],
+                        ["assets", "Assets", "grid", assets.length],
+                      ]
+                        .map(
+                          ([id, label, iconName, count]) => `
+                            <button
+                              type="button"
+                              class="pane-tab ${state.readingWorkbenchTab === id ? "active" : ""}"
+                              data-action="set-reading-workbench-tab"
+                              data-reading-workbench-tab="${id}"
+                            >
+                              ${icon(iconName, {
+                                size: 13,
+                                color: state.readingWorkbenchTab === id ? TOKENS.tx : TOKENS.t3,
+                              })}
+                              <span>${label}</span>
+                              <span class="reading-pane-meta mono">${count}</span>
+                            </button>
+                          `,
+                        )
+                        .join("")}
+
+                      <div class="pane-actions">
+                        <button type="button" class="pane-icon-btn">${icon("plus", { size: 13, color: "currentColor" })}</button>
+                        <button type="button" class="pane-icon-btn" data-action="toggle-reading-workbench-collapse">
+                          ${icon("chevR", { size: 13, color: "currentColor" })}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="pane-body">
+                      ${
+                        state.readingWorkbenchTab === "chat"
+                          ? `
+                              <div class="reading-chat-wrap">
+                                <div class="reading-chat-body">
+                                  ${
+                                    parsed
+                                      ? ""
+                                      : `
+                                          <div class="reading-chat-warning">
+                                            ${icon("info", { size: 13, color: TOKENS.result })}
+                                            <div>파싱된 본문 없이도 채팅 가능하지만, <strong>Parse paper</strong> 후에는 섹션 단위 문맥이 더 자연스럽게 연결됩니다.</div>
+                                          </div>
+                                        `
+                                  }
+                                  ${messages
+                                    .map(
+                                      (message) => `
+                                        <div class="reading-bubble ${message.role}">
+                                          ${
+                                            message.role === "assistant"
+                                              ? `<div class="reading-bubble-avatar">${icon("sparkles", { size: 12, color: TOKENS.read })}</div>`
+                                              : ""
+                                          }
+                                          <div class="reading-bubble-content">
+                                            ${escapeHtml(message.text)}
+                                            ${
+                                              message.cites
+                                                ? `<div class="reading-cite-row">${message.cites
+                                                    .map(
+                                                      (cite) => `
+                                                        <span class="reading-cite">
+                                                          <span class="dot"></span>
+                                                          <span>${escapeHtml(cite.label)}</span>
+                                                          <span class="mono">p.${escapeHtml(String(cite.pg))}</span>
+                                                        </span>
+                                                      `,
+                                                    )
+                                                    .join("")}</div>`
+                                                : ""
+                                            }
+                                          </div>
+                                        </div>
+                                      `,
+                                    )
+                                    .join("")}
+                                </div>
+
+                                <div class="reading-chat-input">
+                                  <div class="reading-chat-chips">
+                                    <span class="reading-chip">${icon("pdf", { size: 10, color: "currentColor" })}<span>${escapeHtml(sections[activeSectionIndex]?.label || "Current section")}</span><span class="x">×</span></span>
+                                    <span class="reading-chip">${icon("quote", { size: 10, color: "currentColor" })}<span>selected (${Math.min(notes[0]?.text.length || 84, 84)}w)</span><span class="x">×</span></span>
+                                  </div>
+                                  <div class="reading-chat-input-box">
+                                    <textarea rows="1" placeholder="논문에게 질문하기… (⌘↩ 전송)"></textarea>
+                                    <button type="button" class="reading-chat-send">${icon("send", { size: 13, color: "#fff" })}</button>
+                                  </div>
+                                  <div class="reading-chat-footer">
+                                    <span>Context: 현재 섹션 + 선택 텍스트 자동 포함</span>
+                                    <span class="mono">reader-agent</span>
+                                  </div>
+                                </div>
+                              </div>
+                            `
+                          : ""
+                      }
+
+                      ${
+                        state.readingWorkbenchTab === "notes"
+                          ? `
+                              <div class="reading-notes-wrap">
+                                <div class="reading-notes-toolbar">
+                                  <span class="reading-mini-label">All notes</span>
+                                  <button type="button" class="btn-s" style="padding:3px 8px;font-size:11.5px">${icon("highlight", { size: 11, color: "currentColor" })}<span>Category</span></button>
+                                  <button type="button" class="btn-s" style="padding:3px 8px;font-size:11.5px"><span>Sort</span></button>
+                                </div>
+
+                                ${notes
+                                  .map(
+                                    (note) => `
+                                      <article class="reading-note-card">
+                                        <div class="reading-note-head">
+                                          ${renderTag(note.cat, note.color, true)}
+                                          <span class="reading-note-page mono">p.${escapeHtml(String(note.pg))}</span>
+                                        </div>
+                                        <div class="reading-note-quote">"${escapeHtml(note.text)}"</div>
+                                        <div class="reading-note-memo">${escapeHtml(note.memo)}</div>
+                                        <div class="reading-note-actions">
+                                          <button type="button" class="btn-ghost" style="padding:2px 6px;font-size:11px">${icon("pen", { size: 11, color: "currentColor" })}<span>Edit</span></button>
+                                          <button type="button" class="btn-ghost" style="padding:2px 6px;font-size:11px">${icon("chat", { size: 11, color: "currentColor" })}<span>Ask AI</span></button>
+                                          <button type="button" class="btn-ghost" style="padding:2px 6px;font-size:11px;margin-left:auto;color:${TOKENS.research}" data-action="select-stage" data-stage-id="research">
+                                            ${icon("flask", { size: 11, color: "currentColor" })}
+                                            <span>Send to Research</span>
+                                          </button>
+                                        </div>
+                                      </article>
+                                    `,
+                                  )
+                                  .join("")}
+
+                                <button type="button" class="btn-s reading-note-create">
+                                  ${icon("plus", { size: 12, color: "currentColor" })}
+                                  <span>New manual note</span>
+                                </button>
+                              </div>
+                            `
+                          : ""
+                      }
+
+                      ${
+                        state.readingWorkbenchTab === "assets"
+                          ? `
+                              <div class="reading-assets-wrap">
+                                <div class="reading-assets-toolbar">
+                                  <button type="button" class="${state.readingAssetsFilter === "all" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="all">All ${assets.length}</button>
+                                  <button type="button" class="${state.readingAssetsFilter === "figure" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="figure">${icon("image", { size: 11, color: "currentColor" })}<span>Figures ${figureCount}</span></button>
+                                  <button type="button" class="${state.readingAssetsFilter === "table" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="table">${icon("table", { size: 11, color: "currentColor" })}<span>Tables ${tableCount}</span></button>
+                                </div>
+                                <div class="reading-asset-grid">
+                                  ${visibleAssets
+                                    .map(
+                                      (asset) => `
+                                        <article class="reading-asset-card">
+                                          <div class="reading-asset-thumb">${renderReadingAssetThumb(asset)}</div>
+                                          <div class="reading-asset-meta">
+                                            <div class="reading-asset-kind" style="color:${asset.kind === "Figure" ? TOKENS.research : TOKENS.writing}">${escapeHtml(asset.kind)} ${asset.number}</div>
+                                            <div class="reading-asset-caption">${escapeHtml(asset.caption)}</div>
+                                            <div class="reading-asset-page mono">p.${escapeHtml(String(asset.page))}</div>
+                                          </div>
+                                        </article>
+                                      `,
+                                    )
+                                    .join("")}
+                                </div>
+                              </div>
+                            `
+                          : ""
+                      }
+                    </div>
+                  </section>
+                `
+          }
+        </div>
+
+        ${
+          state.readingWorkbenchCollapsed
+            ? `
+                <div class="reading-wb-strip">
+                  ${[
+                    ["chat", "chat", messages.length],
+                    ["notes", "note", notes.length],
+                    ["assets", "grid", assets.length],
+                  ]
                     .map(
-                      (note) => `
-                        <article class="reading-note">
-                          <div class="reading-note-label">${escapeHtml(note.label || "Note")}</div>
-                          <p>${escapeHtml(note.value || "")}</p>
-                        </article>
+                      ([id, iconName, count]) => `
+                        <button type="button" class="reading-rail-btn" data-action="open-reading-workbench" data-reading-workbench-tab="${id}">
+                          ${icon(iconName, { size: 15, color: "currentColor" })}
+                          ${count ? `<span class="badge mono">${count}</span>` : ""}
+                        </button>
                       `,
                     )
-                    .join("")
-                : '<div class="empty-state compact-empty">요약 노트가 준비되면 여기에 쌓입니다.</div>'}
-            </div>
-          </section>
-
-          <section class="agent-panel-metrics">
-            <div class="agent-panel-eyebrow" style="margin-bottom:8px">Paper links</div>
-            <div class="reading-link-list">
-              ${session?.paperUrl ? `<a class="reading-link" href="${escapeHtml(session.paperUrl)}" target="_blank" rel="noreferrer">Paper · ${escapeHtml(compactLink(session.paperUrl))}</a>` : ""}
-              ${session?.pdfUrl ? `<a class="reading-link" href="${escapeHtml(session.pdfUrl)}" target="_blank" rel="noreferrer">PDF · ${escapeHtml(compactLink(session.pdfUrl))}</a>` : ""}
-              ${!session?.paperUrl && !session?.pdfUrl ? '<div class="empty-state compact-empty">외부 링크가 없습니다.</div>' : ""}
-            </div>
-          </section>
-        </div>
-
-        <div class="agent-panel-footer">
-          <button type="button" class="btn-s" data-action="select-stage" data-stage-id="search">Back to Search</button>
-          <button type="button" class="btn-p" data-action="select-stage" data-stage-id="research">Send to Research</button>
-        </div>
-      </aside>
+                    .join("")}
+                  <div class="reading-rail-spacer"></div>
+                  <button type="button" class="reading-rail-btn" data-action="toggle-reading-workbench-collapse">
+                    ${icon("chevL", { size: 15, color: "currentColor" })}
+                  </button>
+                </div>
+              `
+            : ""
+        }
+      </div>
     </div>
   `;
 }
@@ -2147,6 +3063,63 @@ function focusScopePickerInput() {
   });
 }
 
+function startReadingResize(axis, event) {
+  if (state.readingWorkbenchCollapsed) {
+    return;
+  }
+
+  readingResizeDrag = {
+    axis,
+    startX: event.clientX,
+    startY: event.clientY,
+    startSplit: axis === "vertical" ? state.readingSplitVertical : state.readingSplitHorizontal,
+  };
+  document.body.classList.add("reading-resize-active");
+}
+
+function stopReadingResize() {
+  readingResizeDrag = null;
+  if (readingResizeFrame) {
+    window.cancelAnimationFrame(readingResizeFrame);
+    readingResizeFrame = 0;
+  }
+  document.body.classList.remove("reading-resize-active");
+}
+
+function updateReadingSplitFromPointer(clientX, clientY) {
+  if (!readingResizeDrag) {
+    return;
+  }
+
+  const split = document.querySelector(".reading-split");
+  if (!split) {
+    return;
+  }
+
+  const rect = split.getBoundingClientRect();
+  const axis = readingResizeDrag.axis;
+  const bounds = axis === "vertical" ? { min: 32, max: 82 } : { min: 30, max: 82 };
+
+  if (axis === "vertical") {
+    const delta = clientY - readingResizeDrag.startY;
+    const total = Math.max(rect.height, 1);
+    const next = clampValue(readingResizeDrag.startSplit + (delta / total) * 100, bounds.min, bounds.max);
+    if (Math.abs(next - state.readingSplitVertical) >= 0.1) {
+      state.readingSplitVertical = Number(next.toFixed(2));
+      render();
+    }
+    return;
+  }
+
+  const delta = clientX - readingResizeDrag.startX;
+  const total = Math.max(rect.width, 1);
+  const next = clampValue(readingResizeDrag.startSplit + (delta / total) * 100, bounds.min, bounds.max);
+  if (Math.abs(next - state.readingSplitHorizontal) >= 0.1) {
+    state.readingSplitHorizontal = Number(next.toFixed(2));
+    render();
+  }
+}
+
 function openScopePickerFromTrigger(trigger, tab) {
   const rect = trigger.getBoundingClientRect();
   const left = Math.max(12, Math.min(rect.left, window.innerWidth - 384));
@@ -2274,6 +3247,78 @@ document.addEventListener("click", async (event) => {
   if (action === "select-reading-session") {
     state.activeReadingSessionId = trigger.dataset.readingSessionId || "";
     render();
+    return;
+  }
+
+  if (action === "set-reading-rail") {
+    const nextRail = trigger.dataset.readingRail || "overview";
+    state.readingRailOpen = state.readingRailOpen === nextRail ? "" : nextRail;
+    render();
+    return;
+  }
+
+  if (action === "close-reading-rail") {
+    state.readingRailOpen = "";
+    render();
+    return;
+  }
+
+  if (action === "set-reading-document-tab") {
+    state.readingDocumentTab = trigger.dataset.readingDocumentTab || "pdf";
+    render();
+    return;
+  }
+
+  if (action === "set-reading-workbench-tab") {
+    state.readingWorkbenchTab = trigger.dataset.readingWorkbenchTab || "chat";
+    state.readingWorkbenchCollapsed = false;
+    render();
+    return;
+  }
+
+  if (action === "open-reading-workbench") {
+    state.readingWorkbenchTab = trigger.dataset.readingWorkbenchTab || state.readingWorkbenchTab;
+    state.readingWorkbenchCollapsed = false;
+    render();
+    return;
+  }
+
+  if (action === "toggle-reading-workbench-collapse") {
+    state.readingWorkbenchCollapsed = !state.readingWorkbenchCollapsed;
+    render();
+    return;
+  }
+
+  if (action === "set-reading-assets-filter") {
+    state.readingAssetsFilter = trigger.dataset.readingAssetsFilter || "all";
+    render();
+    return;
+  }
+
+  if (action === "set-reading-orientation") {
+    const nextOrientation = trigger.dataset.readingOrientation === "vertical" ? "vertical" : "horizontal";
+    state.readingOrientation = nextOrientation;
+    render();
+    return;
+  }
+
+  if (action === "reading-parse-session") {
+    const currentSession = selectedReadingSession();
+    if (currentSession?.id) {
+      state.readingParsedSessionIds.add(currentSession.id);
+      render();
+    }
+    return;
+  }
+
+  if (action === "reading-summarize-session") {
+    const currentSession = selectedReadingSession();
+    if (currentSession?.id) {
+      state.readingSummarizedSessionIds.add(currentSession.id);
+      state.readingParsedSessionIds.add(currentSession.id);
+      state.readingDocumentTab = "summary";
+      render();
+    }
     return;
   }
 
@@ -2415,6 +3460,38 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+document.addEventListener("mousedown", (event) => {
+  const handle = event.target.closest('[data-action="start-reading-resize"]');
+  if (!handle) {
+    return;
+  }
+
+  event.preventDefault();
+  startReadingResize(handle.dataset.readingResizeAxis === "vertical" ? "vertical" : "horizontal", event);
+});
+
+document.addEventListener("mousemove", (event) => {
+  if (!readingResizeDrag) {
+    return;
+  }
+
+  event.preventDefault();
+  if (readingResizeFrame) {
+    return;
+  }
+
+  readingResizeFrame = window.requestAnimationFrame(() => {
+    readingResizeFrame = 0;
+    updateReadingSplitFromPointer(event.clientX, event.clientY);
+  });
+});
+
+document.addEventListener("mouseup", () => {
+  if (readingResizeDrag) {
+    stopReadingResize();
+  }
+});
+
 document.addEventListener("submit", async (event) => {
   const form = event.target.closest('[data-action="submit-search"]');
   if (!form) {
@@ -2437,6 +3514,12 @@ document.addEventListener("input", (event) => {
     state.scopePickerQuery = event.target.value;
     render();
     focusScopePickerInput();
+    return;
+  }
+
+  if (event.target.name === "readingRailQuery") {
+    state.readingRailQuery = event.target.value;
+    render();
     return;
   }
 
@@ -2528,6 +3611,11 @@ document.addEventListener("keydown", (event) => {
         state.previewPanelOpen = false;
         needsRender = true;
       }
+    }
+
+    if (state.activeStage === "reading" && state.readingRailOpen) {
+      state.readingRailOpen = "";
+      needsRender = true;
     }
 
     if (needsRender) {
