@@ -118,5 +118,12 @@
     "rag-reranker": [],
     "llm-reasoning": [],
     "local-inference": []
-  }
+  },
+  "agentRuns": [],
+  "readingSessions": [],
+  "reproChecklistItems": [],
+  "experimentRuns": [],
+  "resultComparisons": [],
+  "insightNotes": [],
+  "writingDrafts": []
 }

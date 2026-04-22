@@ -3,14 +3,15 @@ import path from 'node:path';
 import { promises as fs, watch as watchDirectory } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { createAgentRunService } from './lib/agent-runs.mjs';
 import { normalizeRequestPath } from './lib/path-utils.mjs';
 import { createScoutSearchService } from './lib/scout-search.mjs';
-import { parseSearchPayload, parseSearchQuery } from './lib/search-contract.mjs';
+import { parseSearchPayload, parseSearchQuery, sanitisePaperRecord } from './lib/search-contract.mjs';
 import { createStore } from './lib/store.mjs';
 import { normaliseVenueLabel } from './lib/search-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = path.resolve(__dirname, '..');
+const ROOT_DIR = path.resolve(__dirname, '..', '..');
 const WEB_DIR = path.join(ROOT_DIR, 'web');
 const SEED_FILE = path.join(ROOT_DIR, 'data', 'store.seed.json');
 const RUNTIME_FILE = path.join(ROOT_DIR, 'data', 'runtime', 'store.json');
@@ -47,7 +48,7 @@ async function ensureEnvLoaded(filePath) {
     const content = await fs.readFile(filePath, 'utf8');
     const parsed = parseEnv(content);
     for (const [key, value] of Object.entries(parsed)) {
-      if (!(key in process.env)) {
+      if (!(key in process.env) || process.env[key] === '') {
         process.env[key] = value;
       }
     }
@@ -62,7 +63,11 @@ const PORT = Number(process.env.PORT || 3100);
 const HOST = process.env.HOST || '0.0.0.0';
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || '';
 const OPENALEX_MAILTO = process.env.OPENALEX_MAILTO || '';
+const STORE_BACKEND = process.env.ARES_STORE_BACKEND || '';
+const DATABASE_URL = process.env.ARES_DATABASE_URL || process.env.DATABASE_URL || '';
+const DATABASE_SSL = process.env.ARES_DATABASE_SSL || '';
 const SCOUT_AGENT_RUNTIME = process.env.SCOUT_AGENT_RUNTIME || 'codex';
+const ARES_AGENT_RUNTIME = process.env.ARES_AGENT_RUNTIME || SCOUT_AGENT_RUNTIME;
 const SCOUT_AGENT_TIMEOUT_MS = Math.max(1000, Number(process.env.SCOUT_AGENT_TIMEOUT_MS) || 45000);
 const LIVE_RELOAD_ENABLED = process.env.WATCH_REPORT_DEPENDENCIES === '1' || process.env.ARES_LIVE_RELOAD === '1';
 
@@ -71,8 +76,16 @@ let liveReloadTimer = null;
 let lastLiveReloadAt = 0;
 
 const store = await createStore({
+  backend: STORE_BACKEND,
+  databaseSsl: DATABASE_SSL,
+  databaseUrl: DATABASE_URL,
   seedFile: SEED_FILE,
   runtimeFile: RUNTIME_FILE,
+});
+const agentRunService = createAgentRunService({
+  rootDir: ROOT_DIR,
+  runtimeName: ARES_AGENT_RUNTIME,
+  store,
 });
 const searchService = createScoutSearchService({
   agentRuntime: SCOUT_AGENT_RUNTIME,
@@ -80,7 +93,17 @@ const searchService = createScoutSearchService({
   apiKey: OPENALEX_API_KEY,
   mailto: OPENALEX_MAILTO,
   rootDir: ROOT_DIR,
+  runStore: store,
 });
+
+const PROJECT_ASSET_PATHS = {
+  'experiment-runs': 'experimentRuns',
+  'insight-notes': 'insightNotes',
+  'reading-sessions': 'readingSessions',
+  'repro-checklist': 'reproChecklistItems',
+  'result-comparisons': 'resultComparisons',
+  'writing-drafts': 'writingDrafts',
+};
 
 function json(response, statusCode, payload) {
   response.writeHead(statusCode, {
@@ -276,6 +299,81 @@ function enrichSearchResponse(projectId, payload) {
   };
 }
 
+function parseProjectRoute(requestPath, tail) {
+  const parts = requestPath.split('/').filter(Boolean);
+  if (parts.length < 4) {
+    return null;
+  }
+
+  if (parts[0] !== 'api' || parts[1] !== 'projects') {
+    return null;
+  }
+
+  if (parts.slice(3).join('/') !== tail) {
+    return null;
+  }
+
+  return decodeURIComponent(parts[2]);
+}
+
+function parseProjectAssetRoute(requestPath) {
+  const parts = requestPath.split('/').filter(Boolean);
+  if (parts.length !== 4 || parts[0] !== 'api' || parts[1] !== 'projects') {
+    return null;
+  }
+
+  const assetPath = parts[3];
+  const collection = PROJECT_ASSET_PATHS[assetPath];
+  if (!collection) {
+    return null;
+  }
+
+  return {
+    collection,
+    projectId: decodeURIComponent(parts[2]),
+  };
+}
+
+function parseAgentRunId(requestPath) {
+  const match = requestPath.match(/^\/api\/agent-runs\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+function parseAgentRunActionId(requestPath) {
+  const match = requestPath.match(/^\/api\/agent-runs\/([^/]+)\/actions$/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+function buildReadingSessionSeed(projectId, paper, extras = {}) {
+  return {
+    abstract: paper.abstract || '',
+    authors: paper.authors || [],
+    citedByCount: Number(paper.citedByCount) || 0,
+    keyPoints: paper.keyPoints || [],
+    keywords: paper.keywords || [],
+    matchedKeywords: paper.matchedKeywords || [],
+    openAccess: Boolean(paper.openAccess),
+    paperId: paper.paperId,
+    paperUrl: paper.paperUrl || null,
+    pdfUrl: paper.pdfUrl || null,
+    projectId,
+    relevance: Number(paper.relevance) || 0,
+    reproParams: extras.reproParams || [],
+    runId: extras.runId || '',
+    sections: extras.sections || [],
+    sourceName: paper.sourceName || 'ARES',
+    sourceProvider: paper.sourceProvider || 'manual',
+    sourceRefs: extras.sourceRefs || [{ id: paper.paperId, type: 'paper', label: paper.title }],
+    startedAt: extras.startedAt || null,
+    status: extras.status || 'queue',
+    summary: extras.summary || paper.summary || paper.abstract || '',
+    title: paper.title,
+    venue: paper.venue,
+    warning: extras.warning || '',
+    year: paper.year ?? null,
+  };
+}
+
 function filterSavedLibrary(projectId, query) {
   const library = store.getLibrary(projectId);
   if (!query) {
@@ -289,33 +387,7 @@ function filterSavedLibrary(projectId, query) {
 }
 
 function sanitisePaperPayload(payload) {
-  if (!payload || typeof payload !== 'object') {
-    throw new Error('Paper payload is required.');
-  }
-
-  if (!payload.paperId || !payload.title) {
-    throw new Error('Paper payload must include paperId and title.');
-  }
-
-  return {
-    paperId: String(payload.paperId),
-    title: String(payload.title),
-    authors: Array.isArray(payload.authors) ? payload.authors.slice(0, 8).map(String) : [],
-    venue: String(payload.venue || 'Unknown'),
-    year: payload.year ? Number(payload.year) : null,
-    abstract: String(payload.abstract || ''),
-    summary: String(payload.summary || ''),
-    keyPoints: Array.isArray(payload.keyPoints) ? payload.keyPoints.slice(0, 6).map(String) : [],
-    keywords: Array.isArray(payload.keywords) ? payload.keywords.slice(0, 8).map(String) : [],
-    matchedKeywords: Array.isArray(payload.matchedKeywords) ? payload.matchedKeywords.slice(0, 8).map(String) : [],
-    citedByCount: Number(payload.citedByCount) || 0,
-    openAccess: Boolean(payload.openAccess),
-    paperUrl: payload.paperUrl ? String(payload.paperUrl) : null,
-    pdfUrl: payload.pdfUrl ? String(payload.pdfUrl) : null,
-    sourceName: String(payload.sourceName || 'Unknown provider'),
-    sourceProvider: String(payload.sourceProvider || 'manual'),
-    relevance: Number(payload.relevance) || 0,
-  };
+  return sanitisePaperRecord(payload);
 }
 
 async function serveStatic(requestPath, response) {
@@ -398,9 +470,16 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && requestPath === '/api/health') {
+      const codexAvailable = await agentRunService.checkAvailability();
+      const profiles = agentRunService.getProfiles();
+      const storage = typeof store.getBackendInfo === 'function' ? store.getBackendInfo() : { backend: store.backend || 'unknown' };
       json(response, 200, {
+        codexAvailable,
         ok: true,
+        profileDetails: profiles,
+        profiles: profiles.map((profile) => profile.id),
         providerConfigured: Boolean(OPENALEX_API_KEY),
+        storage,
       });
       return;
     }
@@ -423,6 +502,57 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'POST' && requestPath === '/api/agent-runs') {
+      const body = await readJsonBody(request);
+      const projectId = String(body.projectId || '').trim();
+      const stage = String(body.stage || '').trim();
+      if (!projectId || !stage) {
+        sendError(response, new Error('projectId and stage are required.'), 400);
+        return;
+      }
+
+      const run = await agentRunService.createRun({
+        assetRefs: Array.isArray(body.assetRefs) ? body.assetRefs : [],
+        input: body.input && typeof body.input === 'object' ? body.input : {},
+        projectId,
+        stage,
+        taskKind: String(body.taskKind || '').trim() || undefined,
+      });
+
+      json(response, 202, {
+        run,
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && /^\/api\/agent-runs\/[^/]+$/.test(requestPath)) {
+      const runId = parseAgentRunId(requestPath);
+      const payload = agentRunService.getRun(runId);
+      if (!payload) {
+        notFound(response);
+        return;
+      }
+
+      json(response, 200, payload);
+      return;
+    }
+
+    if (request.method === 'POST' && /^\/api\/agent-runs\/[^/]+\/actions$/.test(requestPath)) {
+      const runId = parseAgentRunActionId(requestPath);
+      const body = await readJsonBody(request);
+      const action = String(body.action || '').trim().toLowerCase();
+
+      if (action !== 'abort' && action !== 'retry') {
+        sendError(response, new Error('Unsupported action. Use abort or retry.'), 400);
+        return;
+      }
+
+      const payload =
+        action === 'abort' ? await agentRunService.abortRun(runId) : await agentRunService.retryRun(runId);
+      json(response, 200, payload);
+      return;
+    }
+
     if (request.method === 'GET' && requestPath === '/api/library') {
       const projectId = url.searchParams.get('projectId');
       const query = (url.searchParams.get('q') || '').trim();
@@ -433,6 +563,63 @@ const server = http.createServer(async (request, response) => {
 
       json(response, 200, {
         results: filterSavedLibrary(projectId, query),
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && requestPath === '/api/agent-runs') {
+      const projectId = String(url.searchParams.get('projectId') || '').trim();
+      const stage = String(url.searchParams.get('stage') || '').trim();
+      json(response, 200, {
+        runs: store.listAgentRuns({
+          projectId: projectId || undefined,
+          stage: stage || undefined,
+        }),
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/[a-z-]+$/.test(requestPath)) {
+      const assetRoute = parseProjectAssetRoute(requestPath);
+      if (assetRoute) {
+        json(response, 200, {
+          results:
+            assetRoute.collection === 'readingSessions'
+              ? store.getReadingSessions(assetRoute.projectId)
+              : store.listProjectAssets(assetRoute.projectId, assetRoute.collection),
+        });
+        return;
+      }
+    }
+
+    if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/reading-sessions$/.test(requestPath)) {
+      const projectId = parseProjectRoute(requestPath, 'reading-sessions');
+      const body = await readJsonBody(request);
+      const paper = body.paper
+        ? sanitisePaperPayload(body.paper)
+        : store.getPaper(projectId, String(body.paperId || '').trim());
+      if (!paper) {
+        sendError(response, new Error('paper or paperId is required.'), 400);
+        return;
+      }
+
+      const session = await store.upsertReadingSession(
+        buildReadingSessionSeed(projectId, paper, {
+          runId: String(body.runId || '').trim(),
+          status: String(body.status || 'queue'),
+          summary: String(body.summary || paper.summary || ''),
+        }),
+      );
+      const queued = await store.queuePaper(projectId, paper, {
+        runId: session.runId,
+        sessionId: session.id,
+        status: session.status,
+      });
+
+      json(response, 200, {
+        project: store.getProject(projectId),
+        queued,
+        readingSession: session,
       });
       return;
     }
@@ -467,11 +654,24 @@ const server = http.createServer(async (request, response) => {
       const [, , , projectId] = requestPath.split('/');
       const body = await readJsonBody(request);
       const paper = sanitisePaperPayload(body.paper);
-      const queued = await store.queuePaper(projectId, paper);
+      const session =
+        (await store.getReadingSessionByPaper(projectId, paper.paperId)) ||
+        (await store.upsertReadingSession(
+          buildReadingSessionSeed(projectId, paper, {
+            runId: String(body.runId || '').trim(),
+            status: String(body.status || 'queue'),
+          }),
+        ));
+      const queued = await store.queuePaper(projectId, paper, {
+        runId: String(body.runId || '').trim(),
+        sessionId: session.id,
+        status: body.status || session.status,
+      });
 
       json(response, 200, {
-        queued,
         project: store.getProject(projectId),
+        queued,
+        readingSession: session,
       });
       return;
     }

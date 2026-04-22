@@ -8,7 +8,7 @@ import { decodeAbstract } from '../lib/search-utils.mjs';
 import { normalizeRequestPath } from '../lib/path-utils.mjs';
 import { parseSearchPayload } from '../lib/search-contract.mjs';
 import { searchSeedPapers } from '../lib/seed-data.mjs';
-import { createStore } from '../lib/store.mjs';
+import { createStore, resolveStoreBackend } from '../lib/store.mjs';
 
 test('decodeAbstract rebuilds text from OpenAlex inverted index', () => {
   const abstract = decodeAbstract({
@@ -76,6 +76,26 @@ test('normalizeRequestPath strips proxy path prefixes', () => {
   assert.equal(normalizeRequestPath('/api/projects'), '/api/projects');
 });
 
+test('resolveStoreBackend prefers explicit backend and otherwise infers postgres from database url', () => {
+  assert.equal(resolveStoreBackend({ backend: 'postgres' }), 'postgres');
+  assert.equal(resolveStoreBackend({ backend: 'pg' }), 'postgres');
+  assert.equal(resolveStoreBackend({ backend: 'file', databaseUrl: 'postgres://demo:demo@localhost:5432/ares' }), 'file');
+  assert.equal(resolveStoreBackend({ databaseUrl: 'postgres://demo:demo@localhost:5432/ares' }), 'postgres');
+  assert.equal(resolveStoreBackend({}), 'file');
+});
+
+test('createStore rejects postgres backend without a database url', async () => {
+  await assert.rejects(
+    () =>
+      createStore({
+        backend: 'postgres',
+        runtimeFile: '/tmp/unused-runtime.json',
+        seedFile: '/tmp/unused-seed.json',
+      }),
+    /DATABASE_URL or ARES_DATABASE_URL/i,
+  );
+});
+
 test('createStore persists saved papers and queue entries', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ares-store-'));
   const seedFile = path.join(tempDir, 'seed.json');
@@ -108,6 +128,7 @@ test('createStore persists saved papers and queue entries', async () => {
   );
 
   const store = await createStore({ seedFile, runtimeFile });
+  assert.equal(store.backend, 'file');
   await store.savePaper('demo', {
     paperId: 'paper-1',
     title: 'Paper 1',
@@ -137,4 +158,63 @@ test('createStore persists saved papers and queue entries', async () => {
   assert.equal(savedProject.libraryCount, 1);
   assert.equal(savedProject.queueCount, 1);
   assert.deepEqual(store.getLibrary('demo').map((paper) => paper.paperId), ['paper-1']);
+});
+
+test('createStore migrates and persists reading sessions plus agent runs', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ares-store-'));
+  const seedFile = path.join(tempDir, 'seed.json');
+  const runtimeFile = path.join(tempDir, 'runtime', 'store.json');
+
+  await fs.writeFile(
+    seedFile,
+    JSON.stringify(
+      {
+        projects: [
+          {
+            id: 'demo',
+            name: 'Demo',
+            color: '#000000',
+            focus: 'Demo focus',
+            defaultQuery: 'demo query',
+            keywords: ['demo'],
+          },
+        ],
+        library: {
+          demo: [],
+        },
+        readingQueue: {
+          demo: [],
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  const store = await createStore({ seedFile, runtimeFile });
+  await store.upsertReadingSession({
+    paperId: 'paper-2',
+    projectId: 'demo',
+    sections: [{ id: 'abstract', label: 'Abstract', status: 'done', summary: 'Summary' }],
+    status: 'queue',
+    summary: 'Reader summary',
+    title: 'Paper 2',
+  });
+  const run = await store.createAgentRun({
+    agent: 'Reader agent',
+    input: { paperId: 'paper-2' },
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'running',
+    taskKind: 'create-reading-session',
+  });
+  await store.updateAgentRun(run.id, {
+    finishedAt: '2026-04-22T00:00:00.000Z',
+    outputSummary: 'Reading session ready.',
+    status: 'done',
+  });
+
+  assert.equal(store.getReadingSessions('demo').length, 1);
+  assert.equal(store.listAgentRuns({ projectId: 'demo' }).length, 1);
+  assert.equal(store.getProject('demo').readingSessionCount, 1);
 });

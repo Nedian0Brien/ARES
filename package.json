@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server/index.mjs",
-    "dev": "node --watch server/index.mjs",
-    "test": "node --test server/tests/*.test.mjs"
+    "start": "node services/backend/index.mjs",
+    "dev": "node --watch services/backend/index.mjs",
+    "test": "node --test services/backend/tests/*.test.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
   }
 }

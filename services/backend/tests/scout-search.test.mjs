@@ -40,16 +40,12 @@ function demoPaper(id) {
 test('buildCodexExecArgs pins required non-interactive Scout flags', () => {
   const args = buildCodexExecArgs({
     cwd: '/workspace',
-    schemaPath: '/tmp/schema.json',
-    outputPath: '/tmp/output.json',
     prompt: 'search prompt',
   });
 
-  assert.deepEqual(args.slice(0, 7), ['exec', '--ephemeral', '--skip-git-repo-check', '-s', 'read-only', '-C', '/workspace']);
-  assert.ok(args.includes('--output-schema'));
-  assert.ok(args.includes('/tmp/schema.json'));
-  assert.ok(args.includes('-o'));
-  assert.ok(args.includes('/tmp/output.json'));
+  assert.deepEqual(args.slice(0, 8), ['exec', '--json', '--ephemeral', '--skip-git-repo-check', '-s', 'read-only', '-C', '/workspace']);
+  assert.ok(args.includes('--color'));
+  assert.ok(args.includes('never'));
   assert.equal(args.at(-1), 'search prompt');
 });
 

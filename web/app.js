@@ -100,15 +100,45 @@ const STORAGE_KEYS = {
   project: "ares.project",
 };
 
-const APP_BASE_URL = new URL("./", window.location.href);
 const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
 const PROXY_DEV_PATH_PATTERN = /^\/proxy\/\d+(?:\/|$)/;
 
+function resolveAppBaseUrl(locationLike = window.location) {
+  const current = new URL(locationLike.href);
+  const proxyPath = current.pathname.match(PROXY_DEV_PATH_PATTERN)?.[0];
+
+  if (proxyPath) {
+    const normalizedProxyPath = proxyPath.endsWith("/") ? proxyPath : `${proxyPath}/`;
+    return new URL(normalizedProxyPath, current.origin);
+  }
+
+  if (current.pathname.endsWith("/index.html")) {
+    const basePath = current.pathname.replace(/index\.html$/, "") || "/";
+    return new URL(basePath, current.origin);
+  }
+
+  const hasFileExtension = /\.[a-z0-9]+$/i.test(current.pathname);
+  if (
+    LOCAL_GRAB_HOSTS.has(current.hostname) &&
+    current.pathname !== "/" &&
+    !current.pathname.endsWith("/") &&
+    !hasFileExtension
+  ) {
+    return new URL(`${current.pathname}/`, current.origin);
+  }
+
+  return new URL("./", current);
+}
+
+const APP_BASE_URL = resolveAppBaseUrl();
+
 const state = {
   booting: true,
+  hasSearched: false,
   loading: false,
+  readingLoading: false,
   savingPaperId: "",
-  queueingPaperId: "",
+  readingStartingPaperId: "",
   error: "",
   activeStage: normalizeStage(loadStorage(STORAGE_KEYS.stage, "search")),
   activeProjectId: loadStorage(STORAGE_KEYS.project, ""),
@@ -116,9 +146,12 @@ const state = {
   projects: [],
   results: [],
   availableVenues: [],
+  readingSessions: [],
+  activeReadingSessionId: "",
+  activeReadingRunId: "",
   selectedPaperId: "",
   sort: "relevance",
-  searchMode: "scout",
+  searchMode: "keyword",
   filterPanelOpen: true,
   previewPanelOpen: true,
   scopePicker: null,
@@ -138,7 +171,7 @@ const state = {
     total: 0,
     query: "",
     warning: "",
-    searchMode: "scout",
+    searchMode: "keyword",
     agentRuntime: "",
   },
   filters: {
@@ -151,6 +184,8 @@ const state = {
 };
 
 const app = document.querySelector("#app");
+let modalClosing = false;
+let activeRunPollTimer = 0;
 
 function loadStorage(key, fallback) {
   try {
@@ -419,6 +454,52 @@ function syncSelectedPaper() {
   }
 }
 
+function readingStatusRank(status) {
+  return {
+    running: 0,
+    queue: 1,
+    todo: 2,
+    done: 3,
+  }[status] ?? 4;
+}
+
+function sortReadingSessions(sessions = []) {
+  return [...sessions].sort((left, right) => {
+    const statusDelta = readingStatusRank(left.status) - readingStatusRank(right.status);
+    if (statusDelta) {
+      return statusDelta;
+    }
+
+    const leftStamp = Date.parse(left.updatedAt || left.createdAt || 0) || 0;
+    const rightStamp = Date.parse(right.updatedAt || right.createdAt || 0) || 0;
+    return rightStamp - leftStamp;
+  });
+}
+
+function selectedReadingSession() {
+  const sessions = sortReadingSessions(state.readingSessions);
+  return sessions.find((session) => session.id === state.activeReadingSessionId) || sessions[0] || null;
+}
+
+function syncSelectedReadingSession() {
+  const sessions = sortReadingSessions(state.readingSessions);
+  if (!sessions.length) {
+    state.activeReadingSessionId = "";
+    return;
+  }
+
+  if (!sessions.some((session) => session.id === state.activeReadingSessionId)) {
+    state.activeReadingSessionId = sessions[0].id;
+  }
+}
+
+function clearActiveRunPoll() {
+  if (activeRunPollTimer) {
+    window.clearTimeout(activeRunPollTimer);
+    activeRunPollTimer = 0;
+  }
+}
+
 function setProjects(projects) {
   state.projects = projects;
 
@@ -438,12 +519,103 @@ async function loadProjects() {
   setProjects(payload.projects || []);
 }
 
+async function loadReadingSessions({ preserveSelection = true } = {}) {
+  const project = activeProject();
+  if (!project) {
+    state.readingSessions = [];
+    state.activeReadingSessionId = "";
+    return;
+  }
+
+  state.readingLoading = true;
+  try {
+    const payload = await api(`api/projects/${encodeURIComponent(project.id)}/reading-sessions`);
+    state.readingSessions = sortReadingSessions(payload.results || []);
+    if (!preserveSelection) {
+      state.activeReadingSessionId = state.readingSessions[0]?.id || "";
+    }
+    syncSelectedReadingSession();
+  } catch (error) {
+    state.error = error.message;
+    state.readingSessions = [];
+    state.activeReadingSessionId = "";
+  } finally {
+    state.readingLoading = false;
+  }
+}
+
+async function pollAgentRun(runId) {
+  clearActiveRunPoll();
+  if (!runId) {
+    state.activeReadingRunId = "";
+    return;
+  }
+
+  state.activeReadingRunId = runId;
+
+  try {
+    const payload = await api(`api/agent-runs/${encodeURIComponent(runId)}`);
+    const run = payload.run || null;
+    if (!run) {
+      state.activeReadingRunId = "";
+      return;
+    }
+
+    if (run.stage === "reading") {
+      await loadProjects();
+      await loadReadingSessions({ preserveSelection: true });
+      if (payload.assets?.length) {
+        const readingAsset = payload.assets.find((entry) => entry.collection === "readingSessions");
+        if (readingAsset?.item?.id) {
+          state.activeReadingSessionId = readingAsset.item.id;
+        }
+      }
+    }
+
+    if (run.status !== "done") {
+      activeRunPollTimer = window.setTimeout(() => {
+        void pollAgentRun(runId);
+      }, 1200);
+      return;
+    }
+
+    state.activeReadingRunId = "";
+  } catch (error) {
+    state.error = error.message;
+    activeRunPollTimer = window.setTimeout(() => {
+      void pollAgentRun(runId);
+    }, 1800);
+  } finally {
+    render();
+  }
+}
+
+function resetSearchState() {
+  state.hasSearched = false;
+  state.loading = false;
+  state.error = "";
+  state.results = [];
+  state.availableVenues = [];
+  state.selectedPaperId = "";
+  state.searchMeta = {
+    provider: "",
+    live: false,
+    total: 0,
+    query: "",
+    warning: "",
+    searchMode: state.searchMode,
+    agentRuntime: "",
+  };
+  state.filters.venues = new Set();
+}
+
 async function runSearch({ preserveSelection = false } = {}) {
   const project = activeProject();
   if (!project) {
     return;
   }
 
+  state.hasSearched = true;
   state.loading = true;
   state.error = "";
   render();
@@ -523,8 +695,8 @@ async function savePaper(paper) {
   }
 }
 
-async function queuePaper(paper) {
-  state.queueingPaperId = paper.paperId;
+async function startReadingSession(paper) {
+  state.readingStartingPaperId = paper.paperId;
   render();
 
   try {
@@ -533,22 +705,29 @@ async function queuePaper(paper) {
       return;
     }
 
-    const payload = await api(`api/projects/${encodeURIComponent(project.id)}/queue`, {
+    const payload = await api("api/agent-runs", {
       method: "POST",
-      body: JSON.stringify({ paper }),
+      body: JSON.stringify({
+        projectId: project.id,
+        stage: "reading",
+        taskKind: "create-reading-session",
+        assetRefs: [{ type: "paper", id: paper.paperId, label: paper.title }],
+        input: {
+          paper,
+          paperId: paper.paperId,
+        },
+      }),
     });
-    replaceProject(payload.project);
     state.results = state.results.map((entry) => (entry.paperId === paper.paperId ? { ...entry, queued: true } : entry));
-
-    if (paper.paperUrl) {
-      window.open(paper.paperUrl, "_blank", "noopener,noreferrer");
-    } else if (paper.pdfUrl) {
-      window.open(paper.pdfUrl, "_blank", "noopener,noreferrer");
-    }
+    state.activeStage = "reading";
+    saveStorage(STORAGE_KEYS.stage, state.activeStage);
+    await loadProjects();
+    await loadReadingSessions({ preserveSelection: false });
+    await pollAgentRun(payload.run?.id || "");
   } catch (error) {
     state.error = error.message;
   } finally {
-    state.queueingPaperId = "";
+    state.readingStartingPaperId = "";
     render();
   }
 }
@@ -781,6 +960,10 @@ function resolveScopeCatalogItem(type, id) {
 }
 
 function searchProviderLabel() {
+  if (!state.hasSearched) {
+    return "Ready";
+  }
+
   const provider = String(state.searchMeta.provider || "");
   if (provider === "scout-agent") {
     const runtime = String(state.searchMeta.agentRuntime || "scout").trim().toLowerCase();
@@ -1054,8 +1237,9 @@ function renderSearchFilterPanel(project, visible) {
 function renderSearchHero(visible, totalResults) {
   const modeConfig = SEARCH_MODES[state.searchMode];
   const providerLabel = searchProviderLabel();
-  const statusMeta =
-    state.searchMode === "scout"
+  const statusMeta = !state.hasSearched
+    ? "Press Search to start"
+    : state.searchMode === "scout"
       ? `${visible.length}/${Math.max(totalResults, visible.length)} · ${state.searchMeta.live ? "live" : "seed"} · ${state.searchMeta.live ? "$live" : "free"}`
       : `${Math.max(totalResults, visible.length)} · ${state.searchMeta.live ? "live" : "cached"} · free`;
 
@@ -1169,6 +1353,10 @@ function renderSearchResultsList(visible) {
       : '<div class="loading-state search-results-empty">OpenAlex에서 논문 후보를 불러오는 중입니다...</div>';
   }
 
+  if (!state.hasSearched) {
+    return '<div class="empty-state search-results-empty">검색어를 입력하고 Search를 눌러 논문을 찾아보세요.</div>';
+  }
+
   if (!visible.length) {
     return '<div class="empty-state search-results-empty">현재 필터 조건에 맞는 논문이 없습니다. venue, year, relevance 조건을 조금 넓혀보세요.</div>';
   }
@@ -1211,9 +1399,10 @@ function renderSearchPreview(paper) {
 
   const previewTags = uniqueValues([...(paper.matchedKeywords || []).slice(0, 4), paper.openAccess ? "open access" : ""]).filter(Boolean);
   const saveLabel = paper.saved ? "Remove" : state.savingPaperId === paper.paperId ? "Saving..." : "Save";
-  const readLabel = state.queueingPaperId === paper.paperId ? "Queueing..." : "Read";
+  const readLabel = state.readingStartingPaperId === paper.paperId ? "Starting..." : "Read";
 
   return `
+    <div class="preview-backdrop" data-action="close-preview-modal" aria-hidden="true"></div>
     <aside class="search-preview search-preview-focal" data-ares-surface="search-preview" data-ares-stage="search" data-ares-paper-id="${escapeHtml(paper.paperId)}" data-ares-paper-title="${escapeHtml(paper.title)}">
       <div class="search-preview-header search-preview-header-focal">
         <div class="preview-heading">
@@ -1226,8 +1415,11 @@ function renderSearchPreview(paper) {
             ${paper.openAccess ? renderTag("open access", TOKENS.search) : ""}
           </div>
         </div>
-        <button type="button" class="panel-toggle-btn" data-action="toggle-preview-panel" title="프리뷰 접기">
+        <button type="button" class="panel-toggle-btn preview-close-desktop" data-action="toggle-preview-panel" title="프리뷰 접기">
           ${icon("chevR", { size: 13, color: TOKENS.t2 })}
+        </button>
+        <button type="button" class="panel-toggle-btn preview-close-mobile" data-action="close-preview-modal" title="닫기" aria-label="닫기">
+          ${icon("x", { size: 14, color: TOKENS.t2 })}
         </button>
       </div>
 
@@ -1269,7 +1461,7 @@ function renderSearchPreview(paper) {
           class="btn-s"
           data-action="queue-paper"
           data-paper-id="${escapeHtml(paper.paperId)}"
-          ${state.queueingPaperId === paper.paperId ? "disabled" : ""}
+          ${state.readingStartingPaperId === paper.paperId ? "disabled" : ""}
         >
           <span>${escapeHtml(readLabel)}</span>
           ${icon("arrowR", { size: 12, color: "currentColor" })}
@@ -1414,6 +1606,225 @@ function renderSearchStage(project) {
   `;
 }
 
+function readingProgress(session) {
+  const sections = Array.isArray(session?.sections) ? session.sections : [];
+  if (!sections.length) {
+    return 0;
+  }
+
+  const doneCount = sections.filter((section) => section.status === "done").length;
+  return Math.round((doneCount / sections.length) * 100);
+}
+
+function renderReadingStage(project) {
+  const sessions = sortReadingSessions(state.readingSessions);
+  const session = selectedReadingSession();
+
+  if (state.readingLoading && !sessions.length) {
+    return `
+      <div class="reading-stage" data-ares-surface="reading-stage" data-ares-stage="reading">
+        <section class="reading-empty">
+          <div class="placeholder-eyebrow">Reading</div>
+          <h1 class="placeholder-title">Reader agent가 세션을 준비 중입니다</h1>
+          <p class="placeholder-copy">논문 메타데이터와 요약을 구조화해 ReadingSession으로 정리하고 있습니다.</p>
+        </section>
+      </div>
+    `;
+  }
+
+  if (!sessions.length) {
+    return `
+      <div class="reading-stage" data-ares-surface="reading-stage" data-ares-stage="reading">
+        <section class="reading-empty">
+          <div class="placeholder-eyebrow">Reading</div>
+          <h1 class="placeholder-title">구조화 리딩 세션이 아직 없습니다</h1>
+          <p class="placeholder-copy">
+            Search 탭에서 <strong>Read</strong>를 누르면 논문별 ReadingSession이 생성되고,
+            여기에서 섹션 진행도와 Reader agent 요약을 이어서 볼 수 있습니다.
+          </p>
+          <div class="tag-row" style="margin-top:16px">
+            ${renderTag(`${project.libraryCount} saved`, TOKENS.search, true)}
+            ${renderTag(`${project.queueCount} queued`, TOKENS.result, true)}
+          </div>
+          <div style="margin-top:20px">
+            <button type="button" class="btn-p" data-action="select-stage" data-stage-id="search">Back to Search</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  const sections = Array.isArray(session?.sections) ? session.sections : [];
+  const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
+  const reproParams = Array.isArray(session?.reproParams) ? session.reproParams : [];
+  const notes = Array.isArray(session?.notes) ? session.notes : [];
+  const progress = readingProgress(session);
+  const statusTag = renderTag(session?.status || "queue", statusColor(session?.status || "queue"), session?.status === "done");
+
+  return `
+    <div class="reading-stage" data-ares-surface="reading-stage" data-ares-stage="reading">
+      <aside class="reading-rail" data-ares-surface="reading-rail" data-ares-stage="reading">
+        <div class="reading-rail-card">
+          <div class="reading-rail-eyebrow">Reading queue</div>
+          <div class="reading-rail-title">${escapeHtml(project.name)}</div>
+          <div class="reading-rail-meta">
+            <span>${sessions.length} session${sessions.length > 1 ? "s" : ""}</span>
+            ${state.activeReadingRunId ? '<span class="pd" style="background:var(--result)"></span><span>agent running</span>' : ""}
+          </div>
+        </div>
+
+        <div class="reading-session-list">
+          ${sessions
+            .map((entry) => {
+              const active = entry.id === session?.id;
+              return `
+                <button
+                  type="button"
+                  class="reading-session-item ${active ? "is-active" : ""}"
+                  data-action="select-reading-session"
+                  data-reading-session-id="${escapeHtml(entry.id)}"
+                >
+                  <div class="reading-session-item-top">
+                    <span class="reading-session-status">${statusIcon(entry.status)}</span>
+                    <span class="reading-session-progress mono">${readingProgress(entry)}%</span>
+                  </div>
+                  <div class="reading-session-item-title">${escapeHtml(entry.title)}</div>
+                  <div class="reading-session-item-meta">
+                    <span>${escapeHtml(entry.venue || "Unknown venue")}</span>
+                    <span>·</span>
+                    <span>${escapeHtml(String(entry.year || "n/a"))}</span>
+                  </div>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      </aside>
+
+      <section class="reading-main" data-ares-surface="reading-main" data-ares-stage="reading">
+        <div class="reading-hero">
+          <div>
+            <div class="placeholder-eyebrow">Reader session</div>
+            <h1 class="reading-title">${escapeHtml(session?.title || "Untitled paper")}</h1>
+            <p class="reading-summary">${escapeHtml(session?.summary || "Reader summary is being prepared.")}</p>
+          </div>
+          <div class="reading-hero-meta">
+            ${statusTag}
+            <div class="reading-progress-ring">
+              <span class="mono">${progress}%</span>
+              <div class="reading-progress-bar"><span style="width:${progress}%"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="reading-grid">
+          <section class="reading-card">
+            <div class="reading-card-title">Section progress</div>
+            <div class="reading-section-list">
+              ${sections
+                .map(
+                  (entry) => `
+                    <article class="reading-section-item">
+                      <div class="reading-section-head">
+                        <span class="reading-section-label">${escapeHtml(entry.label)}</span>
+                        ${renderTag(entry.status, statusColor(entry.status), entry.status === "done")}
+                      </div>
+                      <p>${escapeHtml(entry.summary || "Summary pending.")}</p>
+                    </article>
+                  `,
+                )
+                .join("")}
+            </div>
+          </section>
+
+          <section class="reading-card">
+            <div class="reading-card-title">Highlights</div>
+            <div class="reading-highlight-list">
+              ${highlights.length
+                ? highlights
+                    .map(
+                      (highlight) => `
+                        <article class="reading-highlight">
+                          <div class="reading-highlight-meta">
+                            ${renderTag(highlight.type || "note", TOKENS.read, true)}
+                            <span>${escapeHtml(highlight.section || "paper")}</span>
+                          </div>
+                          <p>${escapeHtml(highlight.text || "")}</p>
+                        </article>
+                      `,
+                    )
+                    .join("")
+                : '<div class="empty-state compact-empty">핵심 하이라이트가 생성되면 여기에 표시됩니다.</div>'}
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="reader-agent-panel" data-ares-surface="reader-agent-panel" data-ares-stage="reading">
+        <div class="agent-panel-header">
+          <div class="agent-panel-status">
+            ${statusIcon(session?.status || "queue")}
+            <span>Reader agent</span>
+          </div>
+          ${statusTag}
+        </div>
+
+        <div class="agent-panel-body">
+          <section class="agent-panel-section" style="border-left-color:${TOKENS.read}">
+            <div class="agent-panel-eyebrow" style="color:${TOKENS.read};margin-bottom:4px">Reproduction params</div>
+            <div class="reading-param-list">
+              ${reproParams.length
+                ? reproParams
+                    .map(
+                      (param) => `
+                        <div class="reading-param-row">
+                          <span>${escapeHtml(param.label || "Param")}</span>
+                          <span class="mono">${escapeHtml(param.value || "n/a")}</span>
+                        </div>
+                      `,
+                    )
+                    .join("")
+                : '<div class="empty-state compact-empty">아직 추출된 재현 파라미터가 없습니다.</div>'}
+            </div>
+          </section>
+
+          <section class="agent-panel-section" style="border-left-color:${TOKENS.result}">
+            <div class="agent-panel-eyebrow" style="color:${TOKENS.result};margin-bottom:4px">Reader notes</div>
+            <div class="reading-note-list">
+              ${notes.length
+                ? notes
+                    .map(
+                      (note) => `
+                        <article class="reading-note">
+                          <div class="reading-note-label">${escapeHtml(note.label || "Note")}</div>
+                          <p>${escapeHtml(note.value || "")}</p>
+                        </article>
+                      `,
+                    )
+                    .join("")
+                : '<div class="empty-state compact-empty">요약 노트가 준비되면 여기에 쌓입니다.</div>'}
+            </div>
+          </section>
+
+          <section class="agent-panel-metrics">
+            <div class="agent-panel-eyebrow" style="margin-bottom:8px">Paper links</div>
+            <div class="reading-link-list">
+              ${session?.paperUrl ? `<a class="reading-link" href="${escapeHtml(session.paperUrl)}" target="_blank" rel="noreferrer">Paper · ${escapeHtml(compactLink(session.paperUrl))}</a>` : ""}
+              ${session?.pdfUrl ? `<a class="reading-link" href="${escapeHtml(session.pdfUrl)}" target="_blank" rel="noreferrer">PDF · ${escapeHtml(compactLink(session.pdfUrl))}</a>` : ""}
+              ${!session?.paperUrl && !session?.pdfUrl ? '<div class="empty-state compact-empty">외부 링크가 없습니다.</div>' : ""}
+            </div>
+          </section>
+        </div>
+
+        <div class="agent-panel-footer">
+          <button type="button" class="btn-s" data-action="select-stage" data-stage-id="search">Back to Search</button>
+          <button type="button" class="btn-p" data-action="select-stage" data-stage-id="research">Send to Research</button>
+        </div>
+      </aside>
+    </div>
+  `;
+}
+
 function renderPlaceholderStage(project) {
   const stage = stageById(state.activeStage);
   const meta = placeholderMeta(project, stage);
@@ -1545,7 +1956,12 @@ function render() {
   }
 
   const selected = state.activeStage === "search" ? selectedPaper() : null;
-  const stageContent = state.activeStage === "search" ? renderSearchStage(project) : renderPlaceholderStage(project);
+  const stageContent =
+    state.activeStage === "search"
+      ? renderSearchStage(project)
+      : state.activeStage === "reading"
+        ? renderReadingStage(project)
+        : renderPlaceholderStage(project);
 
   app.innerHTML = `
     <div
@@ -1650,22 +2066,39 @@ document.addEventListener("click", async (event) => {
     state.activeStage = normalizeStage(trigger.dataset.stageId);
     state.scopePicker = null;
     saveStorage(STORAGE_KEYS.stage, state.activeStage);
+    if (state.activeStage === "reading") {
+      await loadReadingSessions({ preserveSelection: true });
+    }
     render();
     return;
   }
 
   if (action === "select-project") {
+    clearActiveRunPoll();
     state.activeProjectId = trigger.dataset.projectId;
     state.scopePicker = null;
     saveStorage(STORAGE_KEYS.project, state.activeProjectId);
     state.searchInput = activeProject()?.defaultQuery || "";
-    await runSearch();
+    resetSearchState();
+    await loadReadingSessions({ preserveSelection: false });
+    render();
     return;
   }
 
   if (action === "select-paper") {
+    if (modalClosing) return;
     state.selectedPaperId = trigger.dataset.paperId;
+    state.previewPanelOpen = true;
     render();
+    return;
+  }
+
+  if (action === "close-preview-modal") {
+    state.selectedPaperId = "";
+    state.previewPanelOpen = false;
+    modalClosing = true;
+    render();
+    setTimeout(() => { modalClosing = false; }, 350);
     return;
   }
 
@@ -1680,8 +2113,14 @@ document.addEventListener("click", async (event) => {
   if (action === "queue-paper") {
     const paper = state.results.find((entry) => entry.paperId === trigger.dataset.paperId);
     if (paper) {
-      await queuePaper(paper);
+      await startReadingSession(paper);
     }
+    return;
+  }
+
+  if (action === "select-reading-session") {
+    state.activeReadingSessionId = trigger.dataset.readingSessionId || "";
+    render();
     return;
   }
 
@@ -1915,7 +2354,13 @@ async function boot() {
     await loadProjects();
     const project = activeProject();
     state.searchInput = project?.defaultQuery || "";
-    await runSearch();
+    resetSearchState();
+    await loadReadingSessions({ preserveSelection: false });
+    const pendingSession = state.readingSessions.find((session) => session.runId && session.status !== "done");
+    if (pendingSession?.runId) {
+      void pollAgentRun(pendingSession.runId);
+    }
+    render();
   } catch (error) {
     state.error = error.message;
     render();

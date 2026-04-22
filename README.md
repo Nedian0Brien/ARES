@@ -71,12 +71,13 @@ ARES는 역할 기반 에이전트 구조를 전제로 설계되어 있다.
 - 프로토타입 기준 기능 명세 문서
 - Search 탭 MVP를 위한 로컬 Node 서비스
 - 프로젝트별 논문 검색 / 필터링 / 스크랩 저장 / reading queue API
+- 파일 기반 fallback과 PostgreSQL backend를 모두 지원하는 런타임 저장소
 - 실제 API 사용이 불가능할 때도 화면이 유지되도록 하는 seed fallback 데이터
 
 아직 포함되지 않은 내용:
 
 - Reading 이후 단계의 실제 서비스 구현
-- 데이터베이스 및 사용자 인증
+- 사용자 인증
 - 실제 에이전트 실행 인프라
 - 재현 실험 실행 파이프라인
 
@@ -98,10 +99,11 @@ ARES/
 │   ├── specification.md
 │   ├── 구현 기획서.md
 │   └── 구현 기획서 - 원본.md
-├── server/
-│   ├── index.mjs
-│   ├── lib/
-│   └── tests/
+├── services/
+│   └── backend/
+│       ├── index.mjs
+│       ├── lib/
+│       └── tests/
 ├── web/
 │   ├── app.js
 │   ├── index.html
@@ -123,15 +125,24 @@ ARES/
 
 ## Run The Search MVP
 
-Search 탭 서비스는 별도 의존성 없이 Node만 있으면 바로 실행할 수 있다.
+ARES 서비스는 Node 환경에서 실행되며, 의존성 설치 후 바로 실행할 수 있다.
 
-1. `.env.example`을 참고해 필요하면 `.env`를 만든다.
-2. `npm start` 또는 개발 중에는 `npm run dev`를 실행한다.
-3. 브라우저에서 `http://127.0.0.1:3100`을 연다.
+1. `npm install --package-lock=false`
+2. `.env.example`을 참고해 필요하면 `.env`를 만든다.
+3. `npm start` 또는 개발 중에는 `npm run dev`를 실행한다.
+4. 브라우저에서 `http://127.0.0.1:3100`을 연다.
+
+저장소 백엔드:
+
+- 기본값은 파일 기반 store이며 `data/runtime/store.json`에 영속화된다.
+- `ARES_DATABASE_URL` 또는 `DATABASE_URL`이 설정되면 store backend는 자동으로 PostgreSQL로 전환된다.
+- 강제로 지정하려면 `ARES_STORE_BACKEND=file` 또는 `ARES_STORE_BACKEND=postgres`를 사용한다.
+- PostgreSQL backend는 첫 기동 시 DB가 비어 있으면 `data/runtime/store.json`을 우선 가져오고, 없으면 `data/store.seed.json`으로 초기 데이터를 채운다.
+- TLS가 필요한 환경이면 `ARES_DATABASE_SSL=1`을 사용한다. 더 엄격한 검증이 필요하면 `ARES_DATABASE_SSL=strict`를 사용할 수 있다.
 
 개발 모드 자동 리로드:
 
-- `npm run dev`는 `node --watch`로 서버 코드를 감시하므로 `server/` 변경 시 프로세스가 자동 재시작된다.
+- `npm run dev`는 `node --watch`로 백엔드 코드를 감시하므로 `services/backend/` 변경 시 프로세스가 자동 재시작된다.
 - 같은 모드에서 `web/` 아래 HTML/CSS/JS가 바뀌면 브라우저가 자동 새로고침된다.
 - 이는 현재 구조에 맞춘 live reload이며, 상태를 유지한 채 일부 모듈만 바꾸는 Vite-style HMR은 아니다.
 
@@ -163,8 +174,43 @@ OpenAlex 연동:
 검증:
 
 - `npm test`
-- `node --check server/index.mjs`
+- `node --check services/backend/index.mjs`
 - `node --check web/app.js`
+
+## Dev Deploy
+
+개발 서버를 공유 환경에 안정적으로 올릴 때는 수동 `npm run dev` 대신 배포 스크립트를 사용하는 편이 안전하다.
+
+```bash
+bash deploy/deploy-dev-web.sh main
+```
+
+스크립트가 수행하는 일:
+
+- 지정한 ref로 `.worktrees/dev-web-live` worktree를 준비
+- `npm install --package-lock=false`
+- `node --check services/backend/index.mjs`
+- `node --check web/app.js`
+- `npm test`
+- `.runtime/dev-web/current` 심링크 전환
+- PM2 프로세스 `ares-web-dev`를 `HOST=0.0.0.0`, `PORT=3100`으로 재기동
+- `/api/health`, `/proxy/3100/`, 주요 정적 자산까지 스모크 테스트
+- 실패 시 이전 runtime 심링크로 자동 롤백
+
+자주 쓰는 환경 변수:
+
+- `WEB_PORT`: 기본 `3100`
+- `APP_HOST`: 기본 `0.0.0.0`
+- `PM2_NAME`: 기본 `ares-web-dev`
+- `ARES_LIVE_RELOAD`: 기본 `0`
+- `SKIP_GIT_FETCH=1`: 원격 fetch 생략
+- `SKIP_VALIDATION=1`: 테스트 및 `node --check` 생략
+
+배포 후 상태만 다시 확인하고 싶다면:
+
+```bash
+bash deploy/smoke-dev-web.sh
+```
 
 프로토타입 자체만 빠르게 보고 싶다면 기존처럼 `design/ARES Prototype.html`을 브라우저에서 직접 열어도 된다.
 

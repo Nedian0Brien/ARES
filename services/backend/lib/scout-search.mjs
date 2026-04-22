@@ -1,14 +1,9 @@
-import os from 'node:os';
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
+import { buildCodexExecArgs, createAgentRuntime } from './agent-runtime.mjs';
 import { searchOpenAlex } from './openalex.mjs';
 import { sanitiseSearchResultsPayload } from './search-contract.mjs';
 import { searchSeedPapers } from './seed-data.mjs';
-
-const execFileAsync = promisify(execFile);
 const DEFAULT_RESULTS_PER_PAGE = 24;
 const DEFAULT_SCOUT_TIMEOUT_MS = 45000;
 const OPENALEX_API_KEY_REQUIRED_MESSAGE =
@@ -177,73 +172,12 @@ Page:
 `.trim();
 }
 
-function buildCodexExecArgs({ cwd, schemaPath, outputPath, prompt }) {
-  return [
-    'exec',
-    '--ephemeral',
-    '--skip-git-repo-check',
-    '-s',
-    'read-only',
-    '-C',
-    cwd,
-    '--color',
-    'never',
-    '--output-schema',
-    schemaPath,
-    '-o',
-    outputPath,
-    prompt,
-  ];
-}
-
-async function runCodexRuntime({ runtimeName, cwd, prompt, timeoutMs, execFileImpl }) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ares-scout-'));
-  const schemaPath = path.join(tempDir, 'scout-output-schema.json');
-  const outputPath = path.join(tempDir, 'scout-output.json');
-
-  await fs.writeFile(schemaPath, JSON.stringify(buildScoutOutputSchema(), null, 2), 'utf8');
-
-  try {
-    const { stderr } = await execFileImpl(runtimeName, buildCodexExecArgs({ cwd, schemaPath, outputPath, prompt }), {
-      cwd,
-      timeout: timeoutMs,
-      maxBuffer: 4 * 1024 * 1024,
-    });
-
-    const rawOutput = await fs.readFile(outputPath, 'utf8');
-    if (!rawOutput.trim()) {
-      throw new Error('Scout runtime returned an empty response.');
-    }
-
-    const parsed = JSON.parse(rawOutput);
-    const payload = sanitiseSearchResultsPayload(parsed);
-
-    if (stderr && stderr.trim()) {
-      payload.warning = combineWarnings(payload.warning, stderr.trim());
-    }
-
-    return payload;
-  } catch (error) {
-    if (error?.name === 'TimeoutError' || error?.code === 'ETIMEDOUT' || error?.killed) {
-      throw new Error(`Scout runtime timed out after ${timeoutMs}ms.`);
-    }
-
-    if (error instanceof SyntaxError) {
-      throw new Error(`Scout runtime returned invalid JSON: ${error.message}`);
-    }
-
-    throw new Error(error instanceof Error ? error.message : String(error));
-  } finally {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
 export function createScoutRuntimeAdapter({
   runtime = 'codex',
   rootDir,
-  helperPath = path.join(rootDir, 'server', 'bin', 'openalex-helper.mjs'),
+  helperPath = path.join(rootDir, 'services', 'backend', 'bin', 'openalex-helper.mjs'),
   timeoutMs = DEFAULT_SCOUT_TIMEOUT_MS,
-  execFileImpl = execFileAsync,
+  spawnImpl,
 } = {}) {
   const runtimeName = String(runtime || 'codex').trim().toLowerCase();
 
@@ -254,6 +188,12 @@ export function createScoutRuntimeAdapter({
   if (runtimeName !== 'codex') {
     throw new Error(`Unsupported Scout runtime: ${runtimeName}`);
   }
+
+  const runtimeAdapter = createAgentRuntime({
+    cwd: rootDir,
+    runtimeName,
+    spawnImpl,
+  });
 
   return {
     name: runtimeName,
@@ -268,13 +208,29 @@ export function createScoutRuntimeAdapter({
         scopes,
       });
 
-      return runCodexRuntime({
-        runtimeName,
-        cwd: rootDir,
+      const execution = await runtimeAdapter.runJsonTask({
         prompt,
         timeoutMs,
-        execFileImpl,
+        sandbox: 'read-only',
       });
+
+      let parsed;
+      try {
+        parsed = runtimeAdapter.parseJsonFromMessages(execution);
+      } catch (error) {
+        throw new Error(`Scout runtime returned invalid JSON: ${error.message}`);
+      }
+
+      const payload = sanitiseSearchResultsPayload(parsed);
+      if (execution.rawStderr) {
+        payload.warning = combineWarnings(payload.warning, execution.rawStderr);
+      }
+
+      return payload;
+    },
+
+    async checkAvailability() {
+      return runtimeAdapter.checkAvailability();
     },
   };
 }
@@ -285,10 +241,11 @@ function ensureOpenAlexConfigured(apiKey) {
   }
 }
 
-function withSearchMeta(payload, { agentRuntime = '', searchMode = 'keyword', warning = '', provider } = {}) {
+function withSearchMeta(payload, { agentRuntime = '', searchMode = 'keyword', warning = '', provider, query = '' } = {}) {
   const resultsPayload = sanitiseSearchResultsPayload({
     ...payload,
     provider: provider || payload.provider,
+    query: query || payload.query,
     warning: combineWarnings(payload.warning, warning),
     searchMode,
     agentRuntime,
@@ -308,6 +265,7 @@ export function createScoutSearchService({
   apiKey = '',
   mailto = '',
   rootDir,
+  runStore,
   scoutRuntimeAdapter,
   searchOpenAlexImpl = searchOpenAlex,
   searchSeedPapersImpl = searchSeedPapers,
@@ -325,8 +283,28 @@ export function createScoutSearchService({
       const warnings = [];
       const runtimeLabel = runtimeAdapter?.name || String(agentRuntime || '').trim().toLowerCase();
       const perPage = DEFAULT_RESULTS_PER_PAGE;
+      let searchRun = null;
 
       if (mode === 'scout') {
+        if (runStore) {
+          searchRun = await runStore.createAgentRun({
+            agent: describeScoutRuntime(runtimeLabel),
+            assetRefs: [],
+            input: {
+              page,
+              query,
+              scopes,
+            },
+            outputSummary: '',
+            profileId: 'scout',
+            projectId: project.id,
+            stage: 'search',
+            startedAt: new Date().toISOString(),
+            status: 'running',
+            taskKind: 'scout-search',
+          });
+        }
+
         try {
           const runtimePayload = await runtimeAdapter.search({
             project,
@@ -336,11 +314,23 @@ export function createScoutSearchService({
             perPage,
           });
 
-          return withSearchMeta(runtimePayload, {
+          const payload = withSearchMeta(runtimePayload, {
             provider: 'scout-agent',
+            query,
             searchMode: mode,
             agentRuntime: runtimeLabel,
           });
+
+          if (searchRun) {
+            await runStore.updateAgentRun(searchRun.id, {
+              finishedAt: new Date().toISOString(),
+              outputSummary: `Scout returned ${payload.results.length} result(s).`,
+              status: 'done',
+              warning: payload.warning || '',
+            });
+          }
+
+          return payload;
         } catch (error) {
           warnings.push(`Scout agent fallback: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -359,11 +349,23 @@ export function createScoutSearchService({
           scopes,
         });
 
-        return withSearchMeta(directPayload, {
+        const payload = withSearchMeta(directPayload, {
+          query,
           searchMode: mode,
           agentRuntime: mode === 'scout' ? runtimeLabel : '',
           warning: warnings,
         });
+
+        if (searchRun) {
+          await runStore.updateAgentRun(searchRun.id, {
+            finishedAt: new Date().toISOString(),
+            outputSummary: `Scout fell back to OpenAlex with ${payload.results.length} result(s).`,
+            status: 'done',
+            warning: payload.warning || '',
+          });
+        }
+
+        return payload;
       } catch (error) {
         warnings.push(error instanceof Error ? error.message : String(error));
       }
@@ -376,11 +378,23 @@ export function createScoutSearchService({
         scopes,
       });
 
-      return withSearchMeta(seedPayload, {
+      const payload = withSearchMeta(seedPayload, {
+        query,
         searchMode: mode,
         agentRuntime: mode === 'scout' ? runtimeLabel : '',
         warning: warnings,
       });
+
+      if (searchRun) {
+        await runStore.updateAgentRun(searchRun.id, {
+          finishedAt: new Date().toISOString(),
+          outputSummary: `Scout fell back to ${payload.provider || 'seed'}.`,
+          status: 'done',
+          warning: payload.warning || '',
+        });
+      }
+
+      return payload;
     },
   };
 }
