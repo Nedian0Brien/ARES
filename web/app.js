@@ -582,13 +582,207 @@ function sortReadingSessions(sessions = []) {
   });
 }
 
+function buildPreviewReadingPaper(project) {
+  const keywords = Array.isArray(project?.keywords) ? project.keywords.filter(Boolean).slice(0, 6) : [];
+  const focus = readingText(project?.focus, `${project?.name || "Project"} reading workspace`);
+  const query = readingText(project?.defaultQuery, keywords.join(", "));
+  const timestamp = new Date().toISOString();
+
+  return {
+    paperId: `preview-paper-${project?.id || "project"}`,
+    title: `${project?.name || "Project"} reading workspace`,
+    authors: ["ARES Reader"],
+    venue: "Preview session",
+    year: new Date().getFullYear(),
+    abstract: focus,
+    summary: `${focus} Search 탭에서 논문을 저장하면 이 Reading 워크벤치가 실제 구조화 세션으로 이어집니다.`,
+    keyPoints: (() => {
+      const previewPoints = keywords.slice(0, 3).map((keyword) => `${keyword} 관점에서 핵심 주장과 재현 포인트를 우선 정리합니다.`);
+      return previewPoints.length
+        ? previewPoints
+        : [`${project?.name || "현재 프로젝트"}의 reading workflow를 바로 확인할 수 있는 starter session입니다.`];
+    })(),
+    keywords,
+    matchedKeywords: keywords.slice(0, 4),
+    paperUrl: "",
+    pdfUrl: "",
+    sourceName: "ARES preview",
+    sourceProvider: "preview",
+    citedByCount: 0,
+    openAccess: true,
+    relevance: 91,
+    savedAt: timestamp,
+    updatedAt: timestamp,
+    query,
+  };
+}
+
+function buildPreviewReadingSections(project, paper) {
+  const focus = readingSentence(project?.focus, `${paper?.title || "Paper"} overview`);
+  const summary = readingSentence(paper?.summary || paper?.abstract, focus);
+  const keyPoints = Array.isArray(paper?.keyPoints) ? paper.keyPoints.filter(Boolean) : [];
+  const keywords = Array.isArray(paper?.keywords) ? paper.keywords.filter(Boolean) : [];
+
+  return [
+    {
+      id: "overview",
+      label: "1. Overview",
+      status: "done",
+      summary: focus,
+    },
+    {
+      id: "method",
+      label: "2. Method / Setup",
+      status: "done",
+      summary: readingSentence(keyPoints[0], summary || focus),
+    },
+    {
+      id: "result",
+      label: "3. Result Snapshot",
+      status: "done",
+      summary: readingSentence(
+        keyPoints[1],
+        `${paper?.title || "This work"}의 주요 결과와 효율 포인트를 빠르게 비교할 수 있도록 정리합니다.`,
+      ),
+    },
+    {
+      id: "limit",
+      label: "4. Limits & Follow-up",
+      status: "done",
+      summary: readingSentence(
+        keyPoints[2],
+        `${keywords.slice(0, 2).join(", ") || "후속 검토"} 관점에서 한계와 다음 액션을 정리합니다.`,
+      ),
+    },
+  ];
+}
+
+function buildPreviewReadingSession(project, paper, index = 0) {
+  const safePaper = paper || buildPreviewReadingPaper(project);
+  const keywords = Array.isArray(safePaper.keywords) ? safePaper.keywords.filter(Boolean).slice(0, 6) : [];
+  const keyPoints = Array.isArray(safePaper.keyPoints) ? safePaper.keyPoints.filter(Boolean).slice(0, 4) : [];
+  const sections = buildPreviewReadingSections(project, safePaper);
+  const sessionId = `preview-session-${project?.id || "project"}-${safePaper.paperId || index}`;
+  const timestamp = safePaper.updatedAt || safePaper.savedAt || new Date().toISOString();
+  const focus = readingSentence(project?.focus, safePaper.summary || safePaper.abstract || safePaper.title || "Reading preview");
+  const summary = readingSentence(
+    safePaper.summary || safePaper.abstract,
+    `${safePaper.title || "Saved paper"}를 Reading 워크벤치에서 바로 검토할 수 있도록 starter session을 구성했습니다.`,
+  );
+  const sourceProvider = readingText(safePaper.sourceProvider, "preview");
+  const usingProjectPreview = sourceProvider === "preview";
+
+  return {
+    id: sessionId,
+    projectId: project?.id || "",
+    runId: "",
+    paperId: safePaper.paperId || sessionId,
+    title: safePaper.title || `${project?.name || "Project"} reading workspace`,
+    authors: Array.isArray(safePaper.authors) && safePaper.authors.length ? safePaper.authors.slice(0, 8) : ["ARES Reader"],
+    venue: safePaper.venue || "Preview session",
+    year: safePaper.year ?? null,
+    abstract: safePaper.abstract || focus,
+    summary,
+    keyPoints,
+    keywords,
+    matchedKeywords: Array.isArray(safePaper.matchedKeywords) ? safePaper.matchedKeywords.slice(0, 6) : keywords.slice(0, 4),
+    citedByCount: Number(safePaper.citedByCount) || 0,
+    openAccess: safePaper.openAccess !== false,
+    relevance: Number(safePaper.relevance) || 0,
+    paperUrl: safePaper.paperUrl || "",
+    pdfUrl: safePaper.pdfUrl || "",
+    sourceName: safePaper.sourceName || (usingProjectPreview ? "ARES preview" : "Saved paper"),
+    sourceProvider,
+    status: "done",
+    warning: usingProjectPreview ? "Saved paper가 아직 없어 프로젝트 focus 기반 preview session을 표시 중입니다." : "",
+    createdAt: safePaper.savedAt || timestamp,
+    updatedAt: timestamp,
+    sections,
+    highlights: [
+      {
+        id: `${sessionId}-highlight-claim`,
+        type: "claim",
+        text: summary,
+        section: "overview",
+      },
+      {
+        id: `${sessionId}-highlight-method`,
+        type: "method",
+        text: readingSentence(keyPoints[0], sections[1]?.summary || summary),
+        section: "method",
+      },
+      {
+        id: `${sessionId}-highlight-result`,
+        type: "result",
+        text: readingSentence(keyPoints[1], sections[2]?.summary || sections[1]?.summary || summary),
+        section: "result",
+      },
+      {
+        id: `${sessionId}-highlight-limit`,
+        type: "limit",
+        text: readingSentence(keyPoints[2], sections[3]?.summary || focus),
+        section: "limit",
+      },
+    ],
+    notes: [
+      {
+        id: `${sessionId}-note-focus`,
+        label: "summary",
+        value: focus,
+      },
+      {
+        id: `${sessionId}-note-followup`,
+        label: "note",
+        value: readingSentence(
+          safePaper.query,
+          `${project?.name || "현재 프로젝트"} 기준으로 후속 실험과 비교 포인트를 이어서 정리합니다.`,
+        ),
+      },
+    ],
+    reproParams: [
+      {
+        id: `${sessionId}-param-focus`,
+        label: "Project focus",
+        value: focus,
+      },
+      {
+        id: `${sessionId}-param-keywords`,
+        label: "Matched keywords",
+        value: keywords.join(", ") || "No keywords yet",
+      },
+      {
+        id: `${sessionId}-param-access`,
+        label: "Open access",
+        value: safePaper.openAccess === false ? "Manual source check needed" : "Likely reproducible with public sources",
+      },
+    ],
+  };
+}
+
+function buildPreviewReadingSessions(project) {
+  if (!project) {
+    return [];
+  }
+
+  const papers = Array.isArray(project.recentLibrary) && project.recentLibrary.length ? project.recentLibrary : [buildPreviewReadingPaper(project)];
+  return sortReadingSessions(papers.map((paper, index) => buildPreviewReadingSession(project, paper, index)));
+}
+
+function effectiveReadingSessions(project = activeProject()) {
+  if (state.readingSessions.length) {
+    return sortReadingSessions(state.readingSessions);
+  }
+
+  return buildPreviewReadingSessions(project);
+}
+
 function selectedReadingSession() {
-  const sessions = sortReadingSessions(state.readingSessions);
+  const sessions = effectiveReadingSessions();
   return sessions.find((session) => session.id === state.activeReadingSessionId) || sessions[0] || null;
 }
 
 function syncSelectedReadingSession() {
-  const sessions = sortReadingSessions(state.readingSessions);
+  const sessions = effectiveReadingSessions();
   if (!sessions.length) {
     state.activeReadingSessionId = "";
     return;
@@ -2053,7 +2247,7 @@ function renderReadingAssetThumb(asset) {
 }
 
 function renderReadingStage(project) {
-  const sessions = sortReadingSessions(state.readingSessions);
+  const sessions = effectiveReadingSessions(project);
   const session = selectedReadingSession();
 
   if (state.readingLoading && !sessions.length) {
