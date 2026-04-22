@@ -3212,6 +3212,105 @@ function patchSearchSelectionUI() {
   return true;
 }
 
+function patchReadingStageUI({ preserveRailFocus = false } = {}) {
+  if (state.activeStage !== "reading") {
+    return false;
+  }
+
+  const project = activeProject();
+  const currentStage = document.querySelector('[data-ares-surface="reading-stage"]');
+  if (!project || !currentStage) {
+    return false;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = renderReadingStage(project).trim();
+  const nextStage = template.content.firstElementChild;
+  if (!nextStage) {
+    return false;
+  }
+
+  const currentMetabar = currentStage.querySelector(".reading-metabar");
+  const nextMetabar = nextStage.querySelector(".reading-metabar");
+  const currentShell = currentStage.querySelector(".reading-shell-main");
+  const nextShell = nextStage.querySelector(".reading-shell-main");
+  if (!currentMetabar || !nextMetabar || !currentShell || !nextShell) {
+    return false;
+  }
+
+  const focusedRailQuery =
+    preserveRailFocus && document.activeElement?.matches?.('[name="readingRailQuery"]')
+      ? {
+          start: document.activeElement.selectionStart ?? null,
+          end: document.activeElement.selectionEnd ?? null,
+          direction: document.activeElement.selectionDirection ?? "none",
+        }
+      : null;
+
+  const currentIconRail = currentShell.querySelector(".reading-icon-rail");
+  const nextIconRail = nextShell.querySelector(".reading-icon-rail");
+  const currentSplit = currentShell.querySelector(".reading-split");
+  const nextSplit = nextShell.querySelector(".reading-split");
+  if (!currentIconRail || !nextIconRail || !currentSplit || !nextSplit) {
+    return false;
+  }
+
+  const currentPanel = currentShell.querySelector(".reading-float-panel");
+  const nextPanel = nextShell.querySelector(".reading-float-panel");
+  const previousPanelScrollTop = currentPanel?.querySelector(".reading-float-panel-body")?.scrollTop ?? 0;
+  const currentWorkbenchStrip = currentShell.querySelector(".reading-wb-strip");
+  const nextWorkbenchStrip = nextShell.querySelector(".reading-wb-strip");
+
+  currentStage.dataset.readingOrientation = nextStage.dataset.readingOrientation || "";
+  currentMetabar.replaceWith(nextMetabar);
+  currentIconRail.replaceWith(nextIconRail);
+
+  if (currentPanel && nextPanel) {
+    currentPanel.className = nextPanel.className;
+    currentPanel.replaceChildren(...Array.from(nextPanel.childNodes));
+    const nextPanelBody = currentPanel.querySelector(".reading-float-panel-body");
+    if (nextPanelBody) {
+      nextPanelBody.scrollTop = previousPanelScrollTop;
+    }
+  } else if (currentPanel) {
+    currentPanel.remove();
+  } else if (nextPanel) {
+    currentShell.insertBefore(nextPanel, currentSplit);
+  }
+
+  currentSplit.replaceWith(nextSplit);
+
+  if (currentWorkbenchStrip && nextWorkbenchStrip) {
+    currentWorkbenchStrip.replaceWith(nextWorkbenchStrip);
+  } else if (currentWorkbenchStrip) {
+    currentWorkbenchStrip.remove();
+  } else if (nextWorkbenchStrip) {
+    currentShell.appendChild(nextWorkbenchStrip);
+  }
+
+  if (focusedRailQuery) {
+    window.requestAnimationFrame(() => {
+      const input = document.querySelector('[name="readingRailQuery"]');
+      if (!input) {
+        return;
+      }
+
+      input.focus();
+      if (focusedRailQuery.start !== null && focusedRailQuery.end !== null) {
+        input.setSelectionRange(focusedRailQuery.start, focusedRailQuery.end, focusedRailQuery.direction);
+      }
+    });
+  }
+
+  return true;
+}
+
+function refreshReadingStageUI(options = {}) {
+  if (!patchReadingStageUI(options)) {
+    render();
+  }
+}
+
 function previewSearchModeSwitch(nextMode) {
   const hero = document.querySelector(".hero-input");
   if (!hero) {
@@ -3443,59 +3542,59 @@ document.addEventListener("click", async (event) => {
 
   if (action === "select-reading-session") {
     state.activeReadingSessionId = trigger.dataset.readingSessionId || "";
-    render();
+    refreshReadingStageUI();
     return;
   }
 
   if (action === "set-reading-rail") {
     const nextRail = trigger.dataset.readingRail || "overview";
     state.readingRailOpen = state.readingRailOpen === nextRail ? "" : nextRail;
-    render();
+    refreshReadingStageUI();
     return;
   }
 
   if (action === "close-reading-rail") {
     state.readingRailOpen = "";
-    render();
+    refreshReadingStageUI();
     return;
   }
 
   if (action === "set-reading-document-tab") {
     state.readingDocumentTab = trigger.dataset.readingDocumentTab || "pdf";
-    render();
+    refreshReadingStageUI();
     return;
   }
 
   if (action === "set-reading-workbench-tab") {
     state.readingWorkbenchTab = trigger.dataset.readingWorkbenchTab || "chat";
     state.readingWorkbenchCollapsed = false;
-    render();
+    refreshReadingStageUI();
     return;
   }
 
   if (action === "open-reading-workbench") {
     state.readingWorkbenchTab = trigger.dataset.readingWorkbenchTab || state.readingWorkbenchTab;
     state.readingWorkbenchCollapsed = false;
-    render();
+    refreshReadingStageUI();
     return;
   }
 
   if (action === "toggle-reading-workbench-collapse") {
     state.readingWorkbenchCollapsed = !state.readingWorkbenchCollapsed;
-    render();
+    refreshReadingStageUI();
     return;
   }
 
   if (action === "set-reading-assets-filter") {
     state.readingAssetsFilter = trigger.dataset.readingAssetsFilter || "all";
-    render();
+    refreshReadingStageUI();
     return;
   }
 
   if (action === "set-reading-orientation") {
     const nextOrientation = trigger.dataset.readingOrientation === "vertical" ? "vertical" : "horizontal";
     state.readingOrientation = nextOrientation;
-    render();
+    refreshReadingStageUI();
     return;
   }
 
@@ -3503,7 +3602,7 @@ document.addEventListener("click", async (event) => {
     const currentSession = selectedReadingSession();
     if (currentSession?.id) {
       state.readingParsedSessionIds.add(currentSession.id);
-      render();
+      refreshReadingStageUI();
     }
     return;
   }
@@ -3514,7 +3613,7 @@ document.addEventListener("click", async (event) => {
       state.readingSummarizedSessionIds.add(currentSession.id);
       state.readingParsedSessionIds.add(currentSession.id);
       state.readingDocumentTab = "summary";
-      render();
+      refreshReadingStageUI();
     }
     return;
   }
@@ -3716,7 +3815,7 @@ document.addEventListener("input", (event) => {
 
   if (event.target.name === "readingRailQuery") {
     state.readingRailQuery = event.target.value;
-    render();
+    refreshReadingStageUI({ preserveRailFocus: true });
     return;
   }
 
