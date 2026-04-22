@@ -164,7 +164,7 @@ const state = {
   sort: "relevance",
   searchMode: "keyword",
   searchLayout: INITIAL_SEARCH_LAYOUT,
-  filterPanelOpen: INITIAL_SEARCH_LAYOUT !== "tablet",
+  filterPanelOpen: false,
   previewPanelOpen: INITIAL_SEARCH_LAYOUT !== "tablet",
   scopePicker: null,
   scopePickerQuery: "",
@@ -257,13 +257,13 @@ function syncResponsiveSearchLayout(nextLayout = detectSearchLayout()) {
   }
 
   if (previousLayout === "tablet" && nextLayout === "desktop") {
-    state.filterPanelOpen = true;
+    state.filterPanelOpen = false;
     state.previewPanelOpen = true;
     return true;
   }
 
   if (previousLayout === "tablet" && nextLayout === "mobile") {
-    state.filterPanelOpen = true;
+    state.filterPanelOpen = false;
     state.previewPanelOpen = Boolean(state.selectedPaperId);
     return true;
   }
@@ -674,9 +674,9 @@ function resetSearchState() {
     agentRuntime: "",
   };
   state.filters.venues = new Set();
+  state.filterPanelOpen = false;
 
   if (isTabletSearchLayout()) {
-    state.filterPanelOpen = false;
     state.previewPanelOpen = false;
   }
 }
