@@ -32,6 +32,22 @@ export function unique(values) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+export function stripYearTokens(text) {
+  return String(text || '')
+    .replace(/\b(?:19|20)\d{2}\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function scopeYear(value) {
+  const match = String(value || '').match(/\b(?:19|20)\d{2}\b/);
+  return match ? Number(match[0]) : null;
+}
+
+export function conferenceScopeVenue(scope) {
+  return stripYearTokens(scope?.meta?.venue || scope?.label || '');
+}
+
 export function buildSearchTerms(project, query) {
   return unique([...(project?.keywords || []), ...tokenize(query)]);
 }
@@ -132,4 +148,38 @@ export function normaliseVenueLabel(venue) {
   }
 
   return value;
+}
+
+export function paperMatchesScope(paper, scope) {
+  if (!scope || typeof scope !== 'object') {
+    return true;
+  }
+
+  const venue = String(paper.venue || '').toLowerCase();
+  const authors = (paper.authors || []).map((author) => String(author).toLowerCase());
+  const haystack = `${paper.title || ''} ${paper.summary || paper.abstract || ''} ${(paper.keywords || []).join(' ')}`.toLowerCase();
+  const label = String(scope.label || '').toLowerCase();
+  const meta = scope.meta || {};
+
+  if (scope.type === 'conference') {
+    return venue.includes(String(meta.venue || scope.label || '').toLowerCase());
+  }
+
+  if (scope.type === 'author') {
+    return authors.some((author) => author.includes(label));
+  }
+
+  const anchor = String(meta.inst || scope.label || '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)[0];
+  return Boolean(anchor) && haystack.includes(anchor);
+}
+
+export function paperMatchesAnyScope(paper, scopes = []) {
+  if (!scopes.length) {
+    return true;
+  }
+
+  return scopes.some((scope) => paperMatchesScope(paper, scope));
 }

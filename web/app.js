@@ -138,6 +138,8 @@ const state = {
     total: 0,
     query: "",
     warning: "",
+    searchMode: "scout",
+    agentRuntime: "",
   },
   filters: {
     venues: new Set(),
@@ -448,11 +450,16 @@ async function runSearch({ preserveSelection = false } = {}) {
 
   try {
     const query = state.searchInput.trim();
-    const params = new URLSearchParams({
-      projectId: project.id,
-      q: query,
+    const payload = await api("api/search", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: project.id,
+        q: query,
+        mode: state.searchMode,
+        scopes: state.searchScopes,
+        page: 1,
+      }),
     });
-    const payload = await api(`api/search?${params.toString()}`);
 
     replaceProject(payload.project);
     state.results = payload.results || [];
@@ -463,6 +470,8 @@ async function runSearch({ preserveSelection = false } = {}) {
       total: payload.total,
       query: payload.query,
       warning: payload.warning || "",
+      searchMode: payload.searchMode || state.searchMode,
+      agentRuntime: payload.agentRuntime || "",
     };
     state.filters.venues = new Set(state.availableVenues);
 
@@ -773,6 +782,16 @@ function resolveScopeCatalogItem(type, id) {
 
 function searchProviderLabel() {
   const provider = String(state.searchMeta.provider || "");
+  if (provider === "scout-agent") {
+    const runtime = String(state.searchMeta.agentRuntime || "scout").trim().toLowerCase();
+    if (runtime === "codex") {
+      return "Codex Scout";
+    }
+    if (!runtime) {
+      return "Scout agent";
+    }
+    return `${runtime.slice(0, 1).toUpperCase()}${runtime.slice(1)} Scout`;
+  }
   if (provider === "openalex") {
     return "OpenAlex";
   }
@@ -1042,36 +1061,10 @@ function renderSearchHero(visible, totalResults) {
 
   return `
     <div class="hero-wrap">
-      <div class="search-hero-head">
-        <span class="search-hero-eyebrow">
-          ${icon("search", { size: 11, color: TOKENS.search })}
-          <span>Paper Search</span>
-        </span>
-        <span class="search-hero-spacer"></span>
+      <form class="hero-input ${escapeHtml(state.searchMode)}" data-action="submit-search">
         ${renderSearchModeToggle()}
-      </div>
-
-      <div class="scope-row">
-        <span class="scope-row-label">
-          ${icon("globe", { size: 11, color: TOKENS.t3 })}
-          <span>Searching in</span>
-        </span>
-        ${state.searchScopes.length ? "" : '<span class="scope-empty">everywhere</span>'}
-        ${state.searchScopes.map((scope) => renderSearchScopeChip(scope)).join("")}
-        <button
-          type="button"
-          class="scope-add"
-          data-action="open-scope-picker"
-          data-scope-tab="conference"
-          data-scope-source="hero"
-        >
-          ${icon("plus", { size: 10 })}
-          <span>Add target</span>
-        </button>
-      </div>
-
-      <form class="hero-input" data-action="submit-search">
-        ${icon("search", { size: 18, color: TOKENS.t3 })}
+        <span class="hero-input-divider" aria-hidden="true"></span>
+        ${icon("search", { size: 17, color: modeConfig.color })}
         <input
           id="search-input"
           type="text"
@@ -1081,22 +1074,32 @@ function renderSearchHero(visible, totalResults) {
           value="${escapeHtml(state.searchInput)}"
           placeholder="${escapeHtml(state.searchMode === "scout" ? "어떤 논문을 찾으시나요? 자연어로 질문해보세요" : "키워드, 저자, 제목으로 검색")}"
         />
-        <button type="submit" class="btn-p" ${state.loading ? "disabled" : ""}>
+        <button type="submit" class="btn-p btn-hero-submit" ${state.loading ? "disabled" : ""}>
           ${icon(modeConfig.icon, { size: 13, color: "#ffffff" })}
           <span>${state.loading ? "Searching..." : "Search"}</span>
         </button>
       </form>
 
-      <div class="status-strip ${escapeHtml(state.searchMode)}">
-        ${
-          state.searchMode === "scout"
-            ? `${renderPulseDot(TOKENS.search, 7)}<span class="status-strip-mode">Agent</span>`
-            : `${icon("db", { size: 12, color: TOKENS.read })}<span class="status-strip-mode">Keyword</span>`
-        }
-        <span class="status-strip-sep">·</span>
-        <span class="status-strip-source">${escapeHtml(providerLabel)}</span>
-        <span class="status-strip-grow"></span>
-        <span class="reasoning-line">${escapeHtml(statusMeta)}</span>
+      <div class="hero-meta ${escapeHtml(state.searchMode)}">
+        <div class="hero-meta-scope">
+          ${state.searchScopes.length ? "" : '<span class="scope-empty">everywhere</span>'}
+          ${state.searchScopes.map((scope) => renderSearchScopeChip(scope)).join("")}
+          <button
+            type="button"
+            class="scope-add"
+            data-action="open-scope-picker"
+            data-scope-tab="conference"
+            data-scope-source="hero"
+          >
+            ${icon("plus", { size: 10 })}
+            <span>Add target</span>
+          </button>
+        </div>
+        <div class="hero-meta-status">
+          <span class="hero-meta-source">${escapeHtml(providerLabel)}</span>
+          <span class="hero-meta-sep">·</span>
+          <span class="hero-meta-stats">${escapeHtml(statusMeta)}</span>
+        </div>
       </div>
 
       ${state.searchMeta.warning ? renderSearchNotice(state.searchMeta.warning) : ""}
@@ -1161,7 +1164,9 @@ function renderSearchResultRow(paper) {
 
 function renderSearchResultsList(visible) {
   if (state.loading) {
-    return '<div class="loading-state search-results-empty">Scout agent가 논문 후보를 수집 중입니다...</div>';
+    return state.searchMode === "scout"
+      ? '<div class="loading-state search-results-empty">Scout agent가 논문 후보를 수집 중입니다...</div>'
+      : '<div class="loading-state search-results-empty">OpenAlex에서 논문 후보를 불러오는 중입니다...</div>';
   }
 
   if (!visible.length) {
@@ -1173,8 +1178,9 @@ function renderSearchResultsList(visible) {
 
 function renderSearchPreview(paper) {
   if (!state.previewPanelOpen) {
+    const emptyCls = paper ? "" : " is-empty";
     return `
-      <aside class="preview-collapsed-strip" data-ares-surface="search-preview" data-ares-stage="search">
+      <aside class="preview-collapsed-strip${emptyCls}" data-ares-surface="search-preview" data-ares-stage="search">
         <button type="button" class="panel-toggle-btn" data-action="toggle-preview-panel" title="프리뷰 펼치기">
           ${icon("chevL", { size: 13, color: TOKENS.t2 })}
         </button>
@@ -1188,7 +1194,7 @@ function renderSearchPreview(paper) {
 
   if (!paper) {
     return `
-      <aside class="search-preview search-preview-focal" data-ares-surface="search-preview" data-ares-stage="search">
+      <aside class="search-preview search-preview-focal is-empty" data-ares-surface="search-preview" data-ares-stage="search">
         <div class="search-preview-header search-preview-header-focal">
           <div class="preview-heading">
             <div class="preview-eyebrow">Paper</div>
@@ -1198,7 +1204,7 @@ function renderSearchPreview(paper) {
             ${icon("chevR", { size: 13, color: TOKENS.t2 })}
           </button>
         </div>
-        <div class="empty-state search-preview-empty">좌측 리스트에서 논문을 선택하면 프리뷰가 여기에 표시됩니다.</div>
+        <div class="empty-state search-preview-empty">리스트에서 논문을 선택하면 프리뷰가 여기에 표시됩니다.</div>
       </aside>
     `;
   }

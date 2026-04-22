@@ -3,9 +3,9 @@ import path from 'node:path';
 import { promises as fs, watch as watchDirectory } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { searchOpenAlex } from './lib/openalex.mjs';
 import { normalizeRequestPath } from './lib/path-utils.mjs';
-import { searchSeedPapers } from './lib/seed-data.mjs';
+import { createScoutSearchService } from './lib/scout-search.mjs';
+import { parseSearchPayload, parseSearchQuery } from './lib/search-contract.mjs';
 import { createStore } from './lib/store.mjs';
 import { normaliseVenueLabel } from './lib/search-utils.mjs';
 
@@ -62,6 +62,8 @@ const PORT = Number(process.env.PORT || 3100);
 const HOST = process.env.HOST || '0.0.0.0';
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || '';
 const OPENALEX_MAILTO = process.env.OPENALEX_MAILTO || '';
+const SCOUT_AGENT_RUNTIME = process.env.SCOUT_AGENT_RUNTIME || 'codex';
+const SCOUT_AGENT_TIMEOUT_MS = Math.max(1000, Number(process.env.SCOUT_AGENT_TIMEOUT_MS) || 45000);
 const LIVE_RELOAD_ENABLED = process.env.WATCH_REPORT_DEPENDENCIES === '1' || process.env.ARES_LIVE_RELOAD === '1';
 
 const liveReloadClients = new Set();
@@ -71,6 +73,13 @@ let lastLiveReloadAt = 0;
 const store = await createStore({
   seedFile: SEED_FILE,
   runtimeFile: RUNTIME_FILE,
+});
+const searchService = createScoutSearchService({
+  agentRuntime: SCOUT_AGENT_RUNTIME,
+  agentTimeoutMs: SCOUT_AGENT_TIMEOUT_MS,
+  apiKey: OPENALEX_API_KEY,
+  mailto: OPENALEX_MAILTO,
+  rootDir: ROOT_DIR,
 });
 
 function json(response, statusCode, payload) {
@@ -267,37 +276,6 @@ function enrichSearchResponse(projectId, payload) {
   };
 }
 
-async function resolveSearch(project, query, page) {
-  try {
-    if (!OPENALEX_API_KEY) {
-      throw new Error(
-        'OPENALEX_API_KEY is missing. OpenAlex requires an API key for real traffic as of February 13, 2026.',
-      );
-    }
-
-    return await searchOpenAlex({
-      project,
-      query,
-      page,
-      perPage: 24,
-      apiKey: OPENALEX_API_KEY,
-      mailto: OPENALEX_MAILTO,
-    });
-  } catch (error) {
-    const fallback = searchSeedPapers({
-      project,
-      query,
-      page,
-      perPage: 24,
-    });
-
-    return {
-      ...fallback,
-      warning: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
 function filterSavedLibrary(projectId, query) {
   const library = store.getLibrary(projectId);
   if (!query) {
@@ -377,6 +355,29 @@ async function serveStatic(requestPath, response) {
 
 const stopLiveReloadWatcher = await startLiveReloadWatcher();
 
+async function handleSearchRequest(response, searchInput) {
+  if (!searchInput.projectId) {
+    sendError(response, new Error('projectId is required.'), 400);
+    return;
+  }
+
+  const project = store.getProject(searchInput.projectId);
+  const query = searchInput.q || project.defaultQuery;
+  const providerPayload = await searchService.search({
+    project,
+    query,
+    mode: searchInput.mode,
+    scopes: searchInput.scopes,
+    page: searchInput.page,
+  });
+
+  json(response, 200, {
+    project,
+    query,
+    ...enrichSearchResponse(searchInput.projectId, providerPayload),
+  });
+}
+
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host}`);
   const requestPath = normalizeRequestPath(url.pathname);
@@ -412,23 +413,13 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && requestPath === '/api/search') {
-      const projectId = url.searchParams.get('projectId');
-      const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+      await handleSearchRequest(response, parseSearchQuery(url.searchParams));
+      return;
+    }
 
-      if (!projectId) {
-        sendError(response, new Error('projectId is required.'), 400);
-        return;
-      }
-
-      const project = store.getProject(projectId);
-      const query = (url.searchParams.get('q') || '').trim() || project.defaultQuery;
-      const providerPayload = await resolveSearch(project, query, page);
-
-      json(response, 200, {
-        project,
-        query,
-        ...enrichSearchResponse(projectId, providerPayload),
-      });
+    if (request.method === 'POST' && requestPath === '/api/search') {
+      const body = await readJsonBody(request);
+      await handleSearchRequest(response, parseSearchPayload(body));
       return;
     }
 

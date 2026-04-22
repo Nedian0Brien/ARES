@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 
 import { decodeAbstract } from '../lib/search-utils.mjs';
 import { normalizeRequestPath } from '../lib/path-utils.mjs';
+import { parseSearchPayload } from '../lib/search-contract.mjs';
 import { searchSeedPapers } from '../lib/seed-data.mjs';
 import { createStore } from '../lib/store.mjs';
 
@@ -33,6 +34,39 @@ test('searchSeedPapers returns project-relevant ranked results', () => {
   assert.equal(payload.provider, 'seed');
   assert.equal(payload.results[0].paperId, 'seed-rag-adaptive-skip');
   assert.ok(payload.results[0].relevance >= 80);
+});
+
+test('searchSeedPapers narrows results by active scopes', () => {
+  const payload = searchSeedPapers({
+    project: {
+      id: 'rag-reranker',
+      keywords: ['rag', 'reranker', 'adaptive skipping'],
+    },
+    query: 'adaptive reranker',
+    scopes: [{ id: 'acl24', type: 'conference', label: 'ACL 2024', meta: { venue: 'ACL' } }],
+  });
+
+  assert.ok(payload.results.length > 0);
+  assert.ok(payload.results.every((paper) => paper.venue.toLowerCase().includes('acl')));
+});
+
+test('parseSearchPayload normalises the POST search contract', () => {
+  const payload = parseSearchPayload({
+    projectId: ' demo ',
+    q: ' adaptive reranker ',
+    mode: 'scout',
+    page: '3',
+    scopes: [
+      { id: 'acl24', type: 'conference', label: 'ACL 2024', meta: { venue: 'ACL' } },
+      { id: '', type: 'conference', label: '', meta: {} },
+    ],
+  });
+
+  assert.equal(payload.projectId, 'demo');
+  assert.equal(payload.q, 'adaptive reranker');
+  assert.equal(payload.mode, 'scout');
+  assert.equal(payload.page, 3);
+  assert.deepEqual(payload.scopes, [{ id: 'acl24', type: 'conference', label: 'ACL 2024', meta: { venue: 'ACL' } }]);
 });
 
 test('normalizeRequestPath strips proxy path prefixes', () => {

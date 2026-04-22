@@ -2,6 +2,7 @@ import {
   computeRelevance,
   detectMatchedKeywords,
   extractKeyPoints,
+  paperMatchesAnyScope,
   summariseAbstract,
   unique,
 } from './search-utils.mjs';
@@ -280,9 +281,10 @@ function normaliseSeedPaper(paper, { project, query }) {
   };
 }
 
-export function searchSeedPapers({ project, query = '', page = 1, perPage = 20 }) {
+export function searchSeedPapers({ project, query = '', page = 1, perPage = 20, scopes = [] }) {
   const candidates = SEED_PAPERS.filter((paper) => seedMatchesPaper(project.id, query, paper))
     .map((paper) => normaliseSeedPaper(paper, { project, query }))
+    .filter((paper) => paperMatchesAnyScope(paper, scopes))
     .sort((left, right) => right.relevance - left.relevance || right.citedByCount - left.citedByCount);
 
   const start = (page - 1) * perPage;
