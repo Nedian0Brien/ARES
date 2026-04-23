@@ -115,6 +115,18 @@ function defaultReadingOrientation(width = window.innerWidth) {
   return width <= READING_ORIENTATION_BREAKPOINT ? "vertical" : "horizontal";
 }
 
+function detectReadingHomeLayout(width = window.innerWidth) {
+  if (width <= SEARCH_LAYOUT_BREAKPOINTS.mobileMax) {
+    return "mobile";
+  }
+
+  if (width <= SEARCH_LAYOUT_BREAKPOINTS.tabletMax) {
+    return "tablet";
+  }
+
+  return "desktop";
+}
+
 const LOCAL_GRAB_HOSTS = new Set(["127.0.0.1", "localhost"]);
 const PROXY_DEV_PATH_PATTERN = /^\/proxy\/\d+(?:\/|$)/;
 
@@ -149,6 +161,7 @@ const APP_BASE_URL = resolveAppBaseUrl();
 const INITIAL_SEARCH_LAYOUT = detectSearchLayout();
 const INITIAL_FILTER_PANEL_OPEN = INITIAL_SEARCH_LAYOUT === "desktop";
 const INITIAL_PREVIEW_PANEL_OPEN = false;
+const INITIAL_READING_HOME_LAYOUT = detectReadingHomeLayout();
 
 const state = {
   booting: true,
@@ -168,6 +181,7 @@ const state = {
   readingSessions: [],
   activeReadingSessionId: "",
   activeReadingRunId: "",
+  readingView: "home",
   readingDocumentTab: "pdf",
   readingWorkbenchTab: "chat",
   readingRailOpen: "overview",
@@ -179,6 +193,11 @@ const state = {
   readingAssetsFilter: "all",
   readingParsedSessionIds: new Set(),
   readingSummarizedSessionIds: new Set(),
+  readingHomeFilter: "all",
+  readingHomeSelectedPaperId: "",
+  readingHomePreviewOpen: false,
+  readingHomePreviewWidth: 420,
+  readingHomeLayout: INITIAL_READING_HOME_LAYOUT,
   selectedPaperId: "",
   sort: "relevance",
   searchMode: "keyword",
@@ -219,6 +238,7 @@ let modalClosing = false;
 let activeRunPollTimer = 0;
 let readingResizeDrag = null;
 let readingResizeFrame = 0;
+let readingHomeResizeDrag = null;
 
 function loadStorage(key, fallback) {
   try {
@@ -774,19 +794,15 @@ function effectiveReadingSessions(project = activeProject()) {
     return sortReadingSessions(state.readingSessions);
   }
 
-  return buildPreviewReadingSessions(project);
-}
-
-function actualReadingSessions(project = activeProject()) {
-  if (state.readingSessions.length) {
-    return sortReadingSessions(state.readingSessions);
-  }
-
   if (Array.isArray(project?.recentReadingSessions) && project.recentReadingSessions.length) {
     return sortReadingSessions(project.recentReadingSessions);
   }
 
   return [];
+}
+
+function actualReadingSessions(project = activeProject()) {
+  return effectiveReadingSessions(project);
 }
 
 function currentProjectLibrary() {
@@ -931,6 +947,233 @@ function dashboardPaperTags(paper) {
   return uniqueValues([...(paper?.matchedKeywords || []), ...(paper?.keywords || [])]).filter(Boolean).slice(0, 3);
 }
 
+function readingPaperFromSession(session) {
+  if (!session) {
+    return null;
+  }
+
+  return {
+    abstract: session.abstract || "",
+    authors: Array.isArray(session.authors) ? session.authors : [],
+    citedByCount: Number(session.citedByCount) || 0,
+    keyPoints: Array.isArray(session.keyPoints) ? session.keyPoints : [],
+    keywords: Array.isArray(session.keywords) ? session.keywords : [],
+    matchedKeywords: Array.isArray(session.matchedKeywords) ? session.matchedKeywords : [],
+    openAccess: Boolean(session.openAccess),
+    paperId: session.paperId,
+    paperUrl: session.paperUrl || null,
+    pdfUrl: session.pdfUrl || null,
+    relevance: Number(session.relevance) || 0,
+    sourceName: session.sourceName || "Reading",
+    sourceProvider: session.sourceProvider || "reading",
+    summary: session.summary || session.abstract || "",
+    title: session.title || "Untitled paper",
+    updatedAt: session.updatedAt || session.startedAt || session.createdAt || "",
+    venue: session.venue || "Unknown venue",
+    year: session.year ?? null,
+  };
+}
+
+function readingHomeStatusMeta(paper, session) {
+  const sessionStatus = String(session?.status || "").toLowerCase();
+  if (sessionStatus === "done") {
+    return { bucket: "done", label: "Completed", color: TOKENS.search };
+  }
+
+  if (sessionStatus === "running") {
+    return { bucket: "running", label: "In progress", color: TOKENS.result };
+  }
+
+  if (sessionStatus === "queue") {
+    return { bucket: "running", label: "Queued", color: TOKENS.result };
+  }
+
+  if (sessionStatus === "todo") {
+    return { bucket: "ready", label: "Ready", color: TOKENS.read };
+  }
+
+  if (paper?.pdfUrl || session?.pdfUrl) {
+    return { bucket: "ready", label: "Ready", color: TOKENS.read };
+  }
+
+  return { bucket: "saved", label: "Saved", color: TOKENS.t3 };
+}
+
+function readingHomeActionMeta(item) {
+  if (item?.session?.status === "running") {
+    return {
+      primaryLabel: "Resume Reading",
+      primaryIcon: "book",
+      secondaryLabel: "Back to Search",
+      secondaryIcon: "search",
+    };
+  }
+
+  if (item?.session?.status === "done") {
+    return {
+      primaryLabel: "Open Reading",
+      primaryIcon: "note",
+      secondaryLabel: "Back to Search",
+      secondaryIcon: "search",
+    };
+  }
+
+  return {
+    primaryLabel: "Open Reading",
+    primaryIcon: "arrowR",
+    secondaryLabel: "Back to Search",
+    secondaryIcon: "search",
+  };
+}
+
+function readingHomeSessionMap(project = activeProject()) {
+  return new Map(
+    actualReadingSessions(project)
+      .filter((session) => session?.paperId)
+      .map((session) => [session.paperId, session]),
+  );
+}
+
+function readingHomeItems(project = activeProject()) {
+  const library = sortByRecentTimestamp(currentProjectLibrary(), ["savedAt", "updatedAt", "createdAt"]);
+  const sessionMap = readingHomeSessionMap(project);
+
+  return library.map((paper) => {
+    const session = sessionMap.get(paper.paperId) || null;
+    const mergedPaper = {
+      ...(readingPaperFromSession(session) || {}),
+      ...paper,
+    };
+    const status = readingHomeStatusMeta(mergedPaper, session);
+    const tags = uniqueValues([...(mergedPaper.matchedKeywords || []), ...(mergedPaper.keywords || [])]).slice(0, 4);
+    const progress = session ? readingProgress(session) : 0;
+    const notes = session ? deriveReadingNotes(session) : [];
+    const sections = Array.isArray(session?.sections) ? session.sections : [];
+    const lastActivityTimestamp =
+      session?.updatedAt || session?.startedAt || session?.createdAt || mergedPaper.updatedAt || mergedPaper.savedAt || mergedPaper.createdAt || "";
+
+    return {
+      abstract: mergedPaper.summary || mergedPaper.abstract || "",
+      authorsLabel: formatAuthors(mergedPaper.authors || []),
+      hasPdf: Boolean(mergedPaper.pdfUrl || session?.pdfUrl),
+      lastActivityLabel: readingHomeTimestampLabel(lastActivityTimestamp),
+      noteCount: notes.length,
+      paper: mergedPaper,
+      paperId: mergedPaper.paperId,
+      progress,
+      savedLabel: dashboardRelativeAge(mergedPaper.savedAt || mergedPaper.updatedAt || mergedPaper.createdAt),
+      sectionCount: sections.length,
+      session,
+      status,
+      tags,
+      title: mergedPaper.title || "Untitled paper",
+      venue: mergedPaper.venue || "Unknown venue",
+      year: mergedPaper.year ?? null,
+    };
+  });
+}
+
+function readingHomeCounts(items = []) {
+  return {
+    saved: items.length,
+    ready: items.filter((item) => item.status.bucket === "ready").length,
+    running: items.filter((item) => item.status.bucket === "running").length,
+    done: items.filter((item) => item.status.bucket === "done").length,
+    noPdf: items.filter((item) => !item.hasPdf).length,
+  };
+}
+
+function filterReadingHomeItems(items = []) {
+  if (state.readingHomeFilter === "ready") {
+    return items.filter((item) => item.status.bucket === "ready");
+  }
+
+  if (state.readingHomeFilter === "running") {
+    return items.filter((item) => item.status.bucket === "running");
+  }
+
+  if (state.readingHomeFilter === "done") {
+    return items.filter((item) => item.status.bucket === "done");
+  }
+
+  if (state.readingHomeFilter === "noPdf") {
+    return items.filter((item) => !item.hasPdf);
+  }
+
+  return items;
+}
+
+function readingHomeTimestampLabel(value) {
+  const timestamp = parseTimestamp(value);
+  if (!timestamp) {
+    return "—";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+  }).format(new Date(timestamp));
+}
+
+function syncReadingHomeSelection(project = activeProject()) {
+  const items = readingHomeItems(project);
+  const visible = filterReadingHomeItems(items);
+  const candidates = visible.length ? visible : items;
+  const preferredPaperId = state.readingHomeSelectedPaperId || selectedReadingSession()?.paperId || "";
+
+  if (!candidates.some((item) => item.paperId === preferredPaperId)) {
+    state.readingHomeSelectedPaperId = candidates[0]?.paperId || "";
+  }
+
+  if (!state.readingHomeSelectedPaperId) {
+    state.readingHomePreviewOpen = false;
+    return;
+  }
+
+  if (state.readingHomeLayout === "desktop") {
+    state.readingHomePreviewOpen = false;
+  }
+}
+
+function selectedReadingHomeItem(project = activeProject()) {
+  syncReadingHomeSelection(project);
+  const items = readingHomeItems(project);
+  return items.find((item) => item.paperId === state.readingHomeSelectedPaperId) || items[0] || null;
+}
+
+function currentReadingPaper(project = activeProject()) {
+  if (state.readingView === "home") {
+    return selectedReadingHomeItem(project)?.paper || null;
+  }
+
+  const session = selectedReadingSession();
+  if (!session) {
+    return selectedReadingHomeItem(project)?.paper || null;
+  }
+
+  return (
+    currentProjectLibrary().find((paper) => paper.paperId === session.paperId) ||
+    readingPaperFromSession(session) ||
+    null
+  );
+}
+
+function syncResponsiveReadingHomeLayout() {
+  const nextLayout = detectReadingHomeLayout();
+  if (nextLayout === state.readingHomeLayout) {
+    return false;
+  }
+
+  state.readingHomeLayout = nextLayout;
+  if (nextLayout === "desktop") {
+    state.readingHomePreviewOpen = false;
+  }
+  syncReadingHomeSelection();
+  return true;
+}
+
 function selectedReadingSession() {
   const sessions = effectiveReadingSessions();
   return sessions.find((session) => session.id === state.activeReadingSessionId) || sessions[0] || null;
@@ -978,11 +1221,13 @@ async function loadProjectLibrary() {
   const project = activeProject();
   if (!project) {
     state.projectLibrary = [];
+    state.readingHomeSelectedPaperId = "";
     return;
   }
 
   const payload = await api(`api/projects/${encodeURIComponent(project.id)}/library`);
   state.projectLibrary = Array.isArray(payload.results) ? payload.results : [];
+  syncReadingHomeSelection(project);
 }
 
 async function loadReadingSessions({ preserveSelection = true } = {}) {
@@ -1001,6 +1246,7 @@ async function loadReadingSessions({ preserveSelection = true } = {}) {
       state.activeReadingSessionId = state.readingSessions[0]?.id || "";
     }
     syncSelectedReadingSession();
+    syncReadingHomeSelection(project);
   } catch (error) {
     state.error = error.message;
     state.readingSessions = [];
@@ -1167,6 +1413,8 @@ async function savePaper(paper) {
 
 async function startReadingSession(paper) {
   state.readingStartingPaperId = paper.paperId;
+  state.readingHomeSelectedPaperId = paper.paperId;
+  state.readingHomePreviewOpen = false;
   render();
 
   try {
@@ -1190,6 +1438,7 @@ async function startReadingSession(paper) {
     });
     state.results = state.results.map((entry) => (entry.paperId === paper.paperId ? { ...entry, queued: true } : entry));
     state.activeStage = "reading";
+    state.readingView = "detail";
     saveStorage(STORAGE_KEYS.stage, state.activeStage);
     await loadProjects();
     await loadReadingSessions({ preserveSelection: false });
@@ -1199,6 +1448,39 @@ async function startReadingSession(paper) {
   } finally {
     state.readingStartingPaperId = "";
     render();
+  }
+}
+
+async function openReadingDetailForPaper(paperId, { createIfMissing = true } = {}) {
+  const project = activeProject();
+  if (!project || !paperId) {
+    return;
+  }
+
+  const session = actualReadingSessions(project).find((entry) => entry.paperId === paperId) || null;
+  if (session?.id) {
+    state.activeStage = "reading";
+    state.readingView = "detail";
+    state.activeReadingSessionId = session.id;
+    state.readingHomeSelectedPaperId = paperId;
+    state.readingHomePreviewOpen = false;
+    saveStorage(STORAGE_KEYS.stage, state.activeStage);
+    render();
+    return;
+  }
+
+  if (!createIfMissing) {
+    return;
+  }
+
+  const paper =
+    currentProjectLibrary().find((entry) => entry.paperId === paperId) ||
+    state.results.find((entry) => entry.paperId === paperId) ||
+    selectedReadingHomeItem(project)?.paper ||
+    null;
+
+  if (paper) {
+    await startReadingSession(paper);
   }
 }
 
@@ -1624,7 +1906,12 @@ function renderDashboardWorklistRow(row, index) {
   const pdfCollected = Boolean(paper.pdfUrl);
 
   return `
-    <div class="dashboard-tbl-row data ${index === 0 ? "selected" : ""}">
+    <button
+      type="button"
+      class="dashboard-tbl-row data ${index === 0 ? "selected" : ""}"
+      data-action="open-reading-paper"
+      data-paper-id="${escapeHtml(paper.paperId)}"
+    >
       <span class="dashboard-tbl-title">
         <span class="t">${escapeHtml(paper.title || "Untitled paper")}</span>
         <span class="a">${escapeHtml(formatAuthors(paper.authors || []))}</span>
@@ -1652,7 +1939,7 @@ function renderDashboardWorklistRow(row, index) {
           ${pdfCollected ? `${icon("check", { size: 11, color: "currentColor" })}수집됨` : "drop"}
         </span>
       </span>
-    </div>
+    </button>
   `;
 }
 
@@ -2814,7 +3101,409 @@ function renderReadingAssetThumb(asset) {
   `;
 }
 
-function renderReadingStage(project) {
+function renderReadingHomeMetricCard({ iconName, label, value, diagram }) {
+  const renderDiagram = () => {
+    if (diagram === "saved") {
+      return `
+        <svg class="reading-home-metric-svg" viewBox="0 0 88 42" preserveAspectRatio="none" aria-hidden="true">
+          <path class="reading-home-metric-axis" d="M2 34H86"></path>
+          <path class="reading-home-metric-fill" d="M2 34L2 25L14 24L26 21L38 17L50 19L62 14L74 12L86 9L86 34Z"></path>
+          <path class="reading-home-metric-line" d="M2 25L14 24L26 21L38 17L50 19L62 14L74 12L86 9"></path>
+        </svg>
+      `;
+    }
+
+    if (diagram === "ready") {
+      return `
+        <div class="reading-home-band-stack" aria-hidden="true">
+          <span class="reading-home-band"><i style="width:78%"></i></span>
+          <span class="reading-home-band"><i style="width:62%;opacity:0.82"></i></span>
+          <span class="reading-home-band"><i style="width:44%;opacity:0.68"></i></span>
+        </div>
+      `;
+    }
+
+    if (diagram === "running") {
+      return `
+        <div class="reading-home-bars" aria-hidden="true">
+          ${[12, 22, 16, 30, 18, 26]
+            .map((height, index) => `<span class="reading-home-bar ${index >= 2 ? "is-active" : ""}" style="height:${height}px"></span>`)
+            .join("")}
+        </div>
+      `;
+    }
+
+    return `
+      <div class="reading-home-dot-grid" aria-hidden="true">
+        ${Array.from({ length: 12 }, (_, index) => `<span class="reading-home-dot ${index < 9 ? "is-active" : ""}"></span>`).join("")}
+      </div>
+    `;
+  };
+
+  return `
+    <article class="reading-home-metric">
+      <div class="reading-home-metric-main">
+        <div class="reading-home-metric-label-row">
+          <span class="reading-home-metric-icon">${icon(iconName, { size: 14, color: "currentColor" })}</span>
+          <span class="reading-home-metric-label">${escapeHtml(label)}</span>
+        </div>
+        <div class="reading-home-metric-value">${escapeHtml(String(value))}</div>
+      </div>
+      <div class="reading-home-metric-diagram">
+        ${renderDiagram()}
+      </div>
+    </article>
+  `;
+}
+
+function renderReadingHomeStatusPill(item) {
+  return `
+    <span class="reading-home-status-pill is-${escapeHtml(item.status.bucket)}" style="background:${item.status.color}12;border-color:${item.status.color}30;color:${item.status.color}">
+      <span class="dot"></span>
+      <span>${escapeHtml(item.status.label)}</span>
+    </span>
+  `;
+}
+
+function renderReadingHomePreviewPanel(item, { surface = "desktop" } = {}) {
+  if (!item) {
+    return "";
+  }
+
+  const actionMeta = readingHomeActionMeta(item);
+  const primaryLabel =
+    !item.session && state.readingStartingPaperId === item.paperId ? "Starting..." : actionMeta.primaryLabel;
+  const summaryCopy =
+    item.abstract || "Abstract metadata is not available yet. Open Reading to generate structured notes.";
+
+  return `
+    <aside class="reading-home-preview ${surface === "desktop" ? "is-desktop" : `is-${surface}`}" data-ares-surface="reading-home-preview">
+      <div class="reading-home-preview-scroll">
+        <div class="reading-home-preview-header">
+          <div class="reading-home-preview-meta">
+            <span class="reading-home-preview-badge">${escapeHtml(item.venue)}</span>
+            <span class="reading-home-preview-badge">
+              <span>${item.hasPdf ? "PDF" : "No PDF"}</span>
+              ${item.hasPdf ? icon("check", { size: 11, color: TOKENS.search }) : icon("dot", { size: 10, color: TOKENS.t4 })}
+            </span>
+          </div>
+          ${
+            surface === "desktop"
+              ? `
+                <div class="reading-home-preview-icon-row">
+                  <button type="button" class="reading-home-preview-icon">${icon("bookmark", { size: 14, color: TOKENS.t3 })}</button>
+                  <button type="button" class="reading-home-preview-icon">${icon("moreH", { size: 14, color: TOKENS.t3 })}</button>
+                </div>
+              `
+              : `
+                <button type="button" class="reading-home-preview-close" data-action="close-reading-home-preview" aria-label="Close preview">
+                  ${icon("x", { size: 14, color: TOKENS.tx })}
+                </button>
+              `
+          }
+        </div>
+
+        <h2 class="reading-home-preview-title">${escapeHtml(item.title)}</h2>
+        <div class="reading-home-preview-authors">${escapeHtml(item.authorsLabel || "Unknown authors")}</div>
+
+        <section class="reading-home-preview-section">
+          <div class="reading-home-preview-section-title">Abstract</div>
+          <p class="reading-home-preview-copy">${escapeHtml(readingExcerpt(summaryCopy, summaryCopy, 520))}</p>
+        </section>
+
+        <section class="reading-home-preview-section">
+          <div class="reading-home-preview-section-title">Keywords</div>
+          <div class="tag-row reading-home-preview-terms">
+            ${
+              item.tags.length
+                ? item.tags.map((tag) => renderTag(tag)).join("")
+                : renderTag("No tags", TOKENS.t3)
+            }
+          </div>
+        </section>
+
+        <section class="reading-home-preview-stat-grid">
+          <article class="reading-home-preview-stat">
+            <div class="reading-home-preview-stat-label">Status</div>
+            <div class="reading-home-preview-stat-value">${renderReadingHomeStatusPill(item)}</div>
+          </article>
+          <article class="reading-home-preview-stat">
+            <div class="reading-home-preview-stat-label">Progress</div>
+            <div class="reading-home-preview-stat-value">${escapeHtml(String(item.progress))}%</div>
+          </article>
+          <article class="reading-home-preview-stat">
+            <div class="reading-home-preview-stat-label">Sections</div>
+            <div class="reading-home-preview-stat-value">${escapeHtml(String(item.sectionCount || 0))}</div>
+          </article>
+          <article class="reading-home-preview-stat">
+            <div class="reading-home-preview-stat-label">Notes</div>
+            <div class="reading-home-preview-stat-value">${escapeHtml(String(item.noteCount || 0))}</div>
+          </article>
+          <article class="reading-home-preview-stat">
+            <div class="reading-home-preview-stat-label">Saved</div>
+            <div class="reading-home-preview-stat-value mono">${escapeHtml(item.savedLabel)}</div>
+          </article>
+          <article class="reading-home-preview-stat">
+            <div class="reading-home-preview-stat-label">Last activity</div>
+            <div class="reading-home-preview-stat-value mono">${escapeHtml(item.lastActivityLabel)}</div>
+          </article>
+        </section>
+
+        <div class="reading-home-preview-footer">
+          <button
+            type="button"
+            class="btn-p"
+            data-action="open-reading-detail"
+            data-reading-paper-id="${escapeHtml(item.paperId)}"
+            ${!item.session && state.readingStartingPaperId === item.paperId ? "disabled" : ""}
+          >
+            ${icon(actionMeta.primaryIcon, { size: 13, color: "#ffffff" })}
+            <span>${escapeHtml(primaryLabel)}</span>
+          </button>
+          <button type="button" class="btn-s" data-action="select-stage" data-stage-id="search">
+            ${icon(actionMeta.secondaryIcon, { size: 13, color: "currentColor" })}
+            <span>${escapeHtml(actionMeta.secondaryLabel)}</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+  `;
+}
+
+function renderReadingHomeStage(project) {
+  const items = readingHomeItems(project);
+  const counts = readingHomeCounts(items);
+  const visible = filterReadingHomeItems(items);
+  const layout = state.readingHomeLayout;
+  const selected = visible.find((item) => item.paperId === state.readingHomeSelectedPaperId) || visible[0] || null;
+  const overlayOpen = layout !== "desktop" && state.readingHomePreviewOpen && selected;
+
+  if (state.readingLoading && !items.length) {
+    return `
+      <div class="reading-stage reading-stage-home" data-ares-surface="reading-stage" data-ares-stage="reading" data-reading-view="home" data-reading-home-layout="${escapeHtml(layout)}">
+        <section class="reading-home reading-home--loading">
+          <div class="reading-home-inner">
+            <div class="reading-home-hero">
+              <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Reading workspace</span></div>
+              <h1 class="reading-home-title">Reading Home</h1>
+              <p class="reading-home-copy">Syncing saved papers and reading sessions.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  if (!items.length) {
+    return `
+      <div class="reading-stage reading-stage-home" data-ares-surface="reading-stage" data-ares-stage="reading" data-reading-view="home" data-reading-home-layout="${escapeHtml(layout)}">
+        <section class="reading-home">
+          <div class="reading-home-inner">
+            <section class="reading-home-hero">
+              <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Reading workspace</span></div>
+              <h1 class="reading-home-title">Reading Home</h1>
+              <p class="reading-home-copy">Search에서 저장한 논문이 여기에 쌓입니다.</p>
+            </section>
+
+            <section class="reading-home-metrics">
+              ${renderReadingHomeMetricCard({ iconName: "bookmark", label: "Saved", value: 0, diagram: "saved" })}
+              ${renderReadingHomeMetricCard({ iconName: "sparkles", label: "Ready", value: 0, diagram: "ready" })}
+              ${renderReadingHomeMetricCard({ iconName: "clock", label: "In progress", value: 0, diagram: "running" })}
+              ${renderReadingHomeMetricCard({ iconName: "check", label: "Completed", value: 0, diagram: "done" })}
+            </section>
+
+            <section class="reading-home-empty">
+              <div class="reading-home-empty-icon">${icon("bookmark", { size: 28, color: TOKENS.read })}</div>
+              <div class="reading-home-empty-title">Nothing saved yet</div>
+              <div class="reading-home-empty-copy">Search에서 Save를 누르면 Reading Home에 논문이 나타난다.</div>
+              <div style="margin-top:18px">
+                <button type="button" class="btn-p" data-action="select-stage" data-stage-id="search">
+                  ${icon("search", { size: 13, color: "#ffffff" })}
+                  <span>Go to Search</span>
+                </button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  return `
+    <div
+      class="reading-stage reading-stage-home"
+      data-ares-surface="reading-stage"
+      data-ares-stage="reading"
+      data-reading-view="home"
+      data-reading-home-layout="${escapeHtml(layout)}"
+    >
+      <section class="reading-home">
+        <div class="reading-home-inner">
+          <section class="reading-home-hero">
+            <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Reading workspace</span></div>
+            <h1 class="reading-home-title">Reading Home</h1>
+            <p class="reading-home-copy">Search에서 저장한 논문을 선택해 Reading을 시작하거나 이어서 진행합니다.</p>
+          </section>
+
+          <section class="reading-home-metrics">
+            ${renderReadingHomeMetricCard({ iconName: "bookmark", label: "Saved", value: counts.saved, diagram: "saved" })}
+            ${renderReadingHomeMetricCard({ iconName: "sparkles", label: "Ready", value: counts.ready, diagram: "ready" })}
+            ${renderReadingHomeMetricCard({ iconName: "clock", label: "In progress", value: counts.running, diagram: "running" })}
+            ${renderReadingHomeMetricCard({ iconName: "check", label: "Completed", value: counts.done, diagram: "done" })}
+          </section>
+
+          <section
+            class="reading-home-content ${layout === "desktop" && selected ? "is-resizable" : ""}"
+            style="${layout === "desktop" && selected ? `--reading-home-preview-w:${state.readingHomePreviewWidth}px` : ""}"
+          >
+            <article class="reading-home-panel">
+              <div class="reading-home-panel-head">
+                <div class="reading-home-panel-title-wrap">
+                  <span class="reading-home-panel-kicker">Worklist</span>
+                  <h2 class="reading-home-panel-title">Saved papers</h2>
+                </div>
+              </div>
+
+              <div class="reading-home-list-tools">
+                <div class="reading-home-filter-row">
+                  ${[
+                    { id: "all", label: "All papers", count: counts.saved },
+                    { id: "ready", label: "Ready", count: counts.ready },
+                    { id: "running", label: "In progress", count: counts.running },
+                    { id: "done", label: "Completed", count: counts.done },
+                    { id: "noPdf", label: "No PDF", count: counts.noPdf },
+                  ]
+                    .map(
+                      (filter) => `
+                        <button
+                          type="button"
+                          class="reading-home-filter-chip ${state.readingHomeFilter === filter.id ? "is-on" : ""}"
+                          data-action="set-reading-home-filter"
+                          data-reading-home-filter="${escapeHtml(filter.id)}"
+                        >
+                          <span>${escapeHtml(filter.label)}</span>
+                          <span class="reading-home-filter-count mono">${escapeHtml(String(filter.count))}</span>
+                        </button>
+                      `,
+                    )
+                    .join("")}
+                </div>
+
+                <div class="reading-home-tool-row">
+                  <button type="button" class="reading-home-tool-btn">
+                    ${icon("filter", { size: 12, color: "currentColor" })}
+                    <span>Filter</span>
+                  </button>
+                  <button type="button" class="reading-home-tool-btn">
+                    <span>Sort: Saved newest</span>
+                    ${icon("chevD", { size: 12, color: TOKENS.t3 })}
+                  </button>
+                </div>
+              </div>
+
+              <div class="reading-home-table">
+                <div class="reading-home-table-head">
+                  <span>Title / Authors</span>
+                  <span>Venue</span>
+                  <span>Saved</span>
+                  <span>PDF</span>
+                  <span>Status</span>
+                  <span></span>
+                </div>
+
+                ${
+                  visible.length
+                    ? visible
+                        .map(
+                          (item) => `
+                            <button
+                              type="button"
+                              class="reading-home-row ${selected?.paperId === item.paperId ? "is-selected" : ""}"
+                              data-action="select-reading-home-paper"
+                              data-reading-paper-id="${escapeHtml(item.paperId)}"
+                            >
+                              <span class="reading-home-row-main">
+                                <span class="reading-home-row-file">${icon("pdf", { size: 16, color: selected?.paperId === item.paperId ? TOKENS.read : TOKENS.t3 })}</span>
+                                <span class="reading-home-row-copy">
+                                  <span class="reading-home-row-title">${escapeHtml(item.title)}</span>
+                                  <span class="reading-home-row-authors">${escapeHtml(item.authorsLabel)}</span>
+                                  <span class="reading-home-row-mobile-meta">
+                                    <span>${escapeHtml(item.venue)}</span>
+                                    <span class="mono">${escapeHtml(item.savedLabel)}</span>
+                                    <span class="reading-home-pdf-chip ${item.hasPdf ? "is-on" : "is-off"}">
+                                      ${item.hasPdf ? icon("check", { size: 11, color: TOKENS.search }) : '<span class="mono">--</span>'}
+                                      <span>${item.hasPdf ? "PDF" : "No PDF"}</span>
+                                    </span>
+                                    ${renderReadingHomeStatusPill(item)}
+                                  </span>
+                                </span>
+                              </span>
+                              <span class="reading-home-cell">${escapeHtml(item.venue)}</span>
+                              <span class="reading-home-cell mono">${escapeHtml(item.savedLabel)}</span>
+                              <span class="reading-home-pdf-chip ${item.hasPdf ? "is-on" : "is-off"}">
+                                ${item.hasPdf ? icon("check", { size: 12, color: TOKENS.search }) : '<span class="mono">--</span>'}
+                                <span>${item.hasPdf ? "PDF" : "Missing"}</span>
+                              </span>
+                              <span class="reading-home-status-cell">${renderReadingHomeStatusPill(item)}</span>
+                              <span class="reading-home-row-menu">${icon("chevR", { size: 13, color: TOKENS.t3 })}</span>
+                            </button>
+                          `,
+                        )
+                        .join("")
+                    : `
+                        <div class="reading-home-table-empty">
+                          <div class="reading-home-empty-icon">${icon("book", { size: 28, color: TOKENS.read })}</div>
+                          <div class="reading-home-empty-title">No papers in this slice</div>
+                          <div class="reading-home-empty-copy">현재 필터와 일치하는 저장 논문이 없습니다.</div>
+                        </div>
+                      `
+                }
+
+                <div class="reading-home-table-foot">
+                  <span>Showing ${escapeHtml(String(visible.length))} of ${escapeHtml(String(items.length))}</span>
+                  <span class="mono">${escapeHtml(project.name)}</span>
+                </div>
+              </div>
+            </article>
+
+            ${
+              layout === "desktop" && selected
+                ? `
+                    <div class="reading-home-resizer-wrap" aria-hidden="true">
+                      <button
+                        type="button"
+                        class="reading-home-resizer"
+                        data-action="start-reading-home-resize"
+                        aria-label="Resize preview panel"
+                      ></button>
+                    </div>
+                    ${renderReadingHomePreviewPanel(selected)}
+                  `
+                : ""
+            }
+          </section>
+        </div>
+      </section>
+
+      ${
+        layout !== "desktop"
+          ? `
+              <div class="reading-home-preview-overlay is-${layout === "tablet" ? "drawer" : "modal"} ${overlayOpen ? "is-open" : ""}">
+                <button type="button" class="reading-home-preview-backdrop" data-action="close-reading-home-preview" aria-label="Close preview"></button>
+                <div class="reading-home-preview-panel">
+                  <div class="reading-home-preview-surface" role="dialog" aria-modal="true" aria-label="Paper preview">
+                    ${selected ? renderReadingHomePreviewPanel(selected, { surface: layout === "tablet" ? "drawer" : "modal" }) : ""}
+                  </div>
+                </div>
+              </div>
+            `
+          : ""
+      }
+    </div>
+  `;
+}
+
+function renderReadingDetailStage(project) {
   const sessions = effectiveReadingSessions(project);
   const session = selectedReadingSession();
 
@@ -3100,6 +3789,11 @@ function renderReadingStage(project) {
           ${icon("book", { size: 13, color: TOKENS.read })}
           <span style="color:${TOKENS.read};font-weight:550">Reading</span>
         </div>
+
+        <button type="button" class="btn-s reading-back-home-btn" data-action="back-reading-home">
+          ${icon("chevL", { size: 12, color: "currentColor" })}
+          <span>Back to list</span>
+        </button>
 
         <div class="reading-metabar-copy">
           <div class="reading-metabar-title">${escapeHtml(session?.title || "Untitled paper")}</div>
@@ -3542,6 +4236,15 @@ function renderReadingStage(project) {
   `;
 }
 
+function renderReadingStage(project) {
+  const hasDetailSession = effectiveReadingSessions(project).length > 0;
+  if (state.readingView === "detail" && hasDetailSession) {
+    return renderReadingDetailStage(project);
+  }
+
+  return renderReadingHomeStage(project);
+}
+
 function renderPlaceholderStage(project) {
   const stage = stageById(state.activeStage);
   const meta = placeholderMeta(project, stage);
@@ -3666,6 +4369,7 @@ function renderShell(message) {
 
 function render() {
   syncResponsiveSearchLayout();
+  syncResponsiveReadingHomeLayout();
   const project = activeProject();
 
   if (!project) {
@@ -3673,7 +4377,12 @@ function render() {
     return;
   }
 
-  const selected = state.activeStage === "search" ? selectedPaper() : null;
+  const selected =
+    state.activeStage === "search"
+      ? selectedPaper()
+      : state.activeStage === "reading"
+        ? currentReadingPaper(project)
+        : null;
   const stageContent =
     state.activeStage === "search"
       ? renderSearchStage(project)
@@ -3796,6 +4505,14 @@ function patchReadingStageUI({ preserveRailFocus = false } = {}) {
   const nextStage = template.content.firstElementChild;
   if (!nextStage) {
     return false;
+  }
+
+  const currentView = currentStage.dataset.readingView || "";
+  const nextView = nextStage.dataset.readingView || "";
+  if (currentView !== "detail" || nextView !== "detail") {
+    currentStage.replaceWith(nextStage);
+    syncAppActivePaperMetadata(currentReadingPaper(project));
+    return true;
   }
 
   const currentMetabar = currentStage.querySelector(".reading-metabar");
@@ -4018,6 +4735,46 @@ function updateReadingSplitFromPointer(clientX, clientY) {
   }
 }
 
+function applyReadingHomePreviewWidth() {
+  const content = document.querySelector(".reading-home-content.is-resizable");
+  if (!content) {
+    return false;
+  }
+
+  content.style.setProperty("--reading-home-preview-w", `${state.readingHomePreviewWidth}px`);
+  return true;
+}
+
+function startReadingHomeResize(event) {
+  if (state.activeStage !== "reading" || state.readingView !== "home" || state.readingHomeLayout !== "desktop") {
+    return;
+  }
+
+  readingHomeResizeDrag = {
+    startWidth: state.readingHomePreviewWidth,
+    startX: event.clientX,
+  };
+  document.body.classList.add("reading-home-resize-active");
+}
+
+function stopReadingHomeResize() {
+  readingHomeResizeDrag = null;
+  document.body.classList.remove("reading-home-resize-active");
+}
+
+function updateReadingHomePreviewFromPointer(clientX) {
+  if (!readingHomeResizeDrag) {
+    return;
+  }
+
+  const delta = readingHomeResizeDrag.startX - clientX;
+  const nextWidth = clampValue(readingHomeResizeDrag.startWidth + delta, 360, 560);
+  if (Math.abs(nextWidth - state.readingHomePreviewWidth) >= 1) {
+    state.readingHomePreviewWidth = Number(nextWidth.toFixed(0));
+    applyReadingHomePreviewWidth();
+  }
+}
+
 function openScopePickerFromTrigger(trigger, tab) {
   const rect = trigger.getBoundingClientRect();
   const left = Math.max(12, Math.min(rect.left, window.innerWidth - 384));
@@ -4069,7 +4826,10 @@ document.addEventListener("click", async (event) => {
     state.scopePicker = null;
     saveStorage(STORAGE_KEYS.stage, state.activeStage);
     if (state.activeStage === "reading") {
+      state.readingView = "home";
+      state.readingHomePreviewOpen = false;
       await loadReadingSessions({ preserveSelection: true });
+      syncReadingHomeSelection();
     }
     render();
     return;
@@ -4085,6 +4845,10 @@ document.addEventListener("click", async (event) => {
     resetSearchState();
     await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: false });
+    if (state.activeStage === "reading") {
+      state.readingView = "home";
+      state.readingHomePreviewOpen = false;
+    }
     render();
     return;
   }
@@ -4144,8 +4908,51 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "open-reading-paper") {
+    await openReadingDetailForPaper(trigger.dataset.paperId || "");
+    return;
+  }
+
+  if (action === "set-reading-home-filter") {
+    state.readingHomeFilter = trigger.dataset.readingHomeFilter || "all";
+    syncReadingHomeSelection();
+    refreshReadingStageUI();
+    return;
+  }
+
+  if (action === "select-reading-home-paper") {
+    state.readingHomeSelectedPaperId = trigger.dataset.readingPaperId || "";
+    if (state.readingHomeLayout !== "desktop") {
+      state.readingHomePreviewOpen = true;
+    }
+    refreshReadingStageUI();
+    return;
+  }
+
+  if (action === "close-reading-home-preview") {
+    state.readingHomePreviewOpen = false;
+    refreshReadingStageUI();
+    return;
+  }
+
+  if (action === "open-reading-detail") {
+    await openReadingDetailForPaper(trigger.dataset.readingPaperId || "");
+    return;
+  }
+
   if (action === "select-reading-session") {
+    state.readingView = "detail";
     state.activeReadingSessionId = trigger.dataset.readingSessionId || "";
+    state.readingHomeSelectedPaperId = selectedReadingSession()?.paperId || state.readingHomeSelectedPaperId;
+    refreshReadingStageUI();
+    return;
+  }
+
+  if (action === "back-reading-home") {
+    state.readingView = "home";
+    state.readingHomeSelectedPaperId = selectedReadingSession()?.paperId || state.readingHomeSelectedPaperId;
+    state.readingHomePreviewOpen = false;
+    syncReadingHomeSelection();
     refreshReadingStageUI();
     return;
   }
@@ -4361,6 +5168,13 @@ document.addEventListener("click", async (event) => {
 });
 
 document.addEventListener("mousedown", (event) => {
+  const homeHandle = event.target.closest('[data-action="start-reading-home-resize"]');
+  if (homeHandle) {
+    event.preventDefault();
+    startReadingHomeResize(event);
+    return;
+  }
+
   const handle = event.target.closest('[data-action="start-reading-resize"]');
   if (!handle) {
     return;
@@ -4371,6 +5185,12 @@ document.addEventListener("mousedown", (event) => {
 });
 
 document.addEventListener("mousemove", (event) => {
+  if (readingHomeResizeDrag) {
+    event.preventDefault();
+    updateReadingHomePreviewFromPointer(event.clientX);
+    return;
+  }
+
   if (!readingResizeDrag) {
     return;
   }
@@ -4387,6 +5207,10 @@ document.addEventListener("mousemove", (event) => {
 });
 
 document.addEventListener("mouseup", () => {
+  if (readingHomeResizeDrag) {
+    stopReadingHomeResize();
+  }
+
   if (readingResizeDrag) {
     stopReadingResize();
   }
@@ -4480,6 +5304,11 @@ document.addEventListener("keydown", (event) => {
     const stage = WORKFLOW_STAGES[Number(event.key) - 1];
     if (stage) {
       state.activeStage = stage.id;
+      if (stage.id === "reading") {
+        state.readingView = "home";
+        state.readingHomePreviewOpen = false;
+        syncReadingHomeSelection();
+      }
       saveStorage(STORAGE_KEYS.stage, state.activeStage);
       render();
     }
@@ -4518,6 +5347,11 @@ document.addEventListener("keydown", (event) => {
       needsRender = true;
     }
 
+    if (state.activeStage === "reading" && state.readingHomePreviewOpen) {
+      state.readingHomePreviewOpen = false;
+      needsRender = true;
+    }
+
     if (needsRender) {
       render();
     }
@@ -4534,7 +5368,9 @@ window.addEventListener("resize", () => {
   resizeTicking = true;
   window.requestAnimationFrame(() => {
     resizeTicking = false;
-    if (syncResponsiveSearchLayout()) {
+    const searchLayoutChanged = syncResponsiveSearchLayout();
+    const readingHomeLayoutChanged = syncResponsiveReadingHomeLayout();
+    if (searchLayoutChanged || readingHomeLayoutChanged) {
       render();
     }
   });
@@ -4548,6 +5384,7 @@ async function boot() {
     resetSearchState();
     await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: false });
+    syncReadingHomeSelection();
     const pendingSession = state.readingSessions.find((session) => session.runId && session.status !== "done");
     if (pendingSession?.runId) {
       void pollAgentRun(pendingSession.runId);
