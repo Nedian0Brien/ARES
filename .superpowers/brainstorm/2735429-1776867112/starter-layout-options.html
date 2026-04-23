@@ -1,0 +1,158 @@
+<h2>Search Starter Workspace</h2>
+<p class="subtitle">프로젝트 맥락 중심으로 시작하는 3가지 레이아웃입니다. 가장 자연스러운 첫 진입 경험을 골라주세요.</p>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="a" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Brief-first Hybrid</h3>
+        <p>추천. 프로젝트 브리프를 먼저 보여주고, 바로 아래에 snapshot과 실행 액션을 이어 붙입니다.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="b" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Split Dashboard</h3>
+        <p>좌측은 연구 맥락, 우측은 quick start 액션으로 나눠 대시보드처럼 보이게 합니다.</p>
+      </div>
+    </div>
+    <div class="option" data-choice="c" onclick="toggleSelect(this)">
+      <div class="letter">C</div>
+      <div class="content">
+        <h3>Scout Prep Canvas</h3>
+        <p>에이전트가 어떤 식으로 탐색할지까지 같이 설명하는 온보딩형 구성입니다.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. Brief-first Hybrid</div>
+        <div class="mockup-body">
+          <div style="display:grid;gap:14px">
+            <div style="border:1px solid #d8ddd8;border-radius:14px;padding:16px 18px;background:linear-gradient(180deg,#f7fbf8,#ffffff)">
+              <div class="label">Project brief</div>
+              <div style="font-size:22px;font-weight:650;margin:6px 0 8px">RAG Reranker Study</div>
+              <div style="font-size:14px;line-height:1.6;color:#55606b">검색-생성 파이프라인에서 reranker 비용을 줄이면서 정확도를 유지하는 방법을 검증합니다.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+                <span class="tag">rag</span>
+                <span class="tag">reranker</span>
+                <span class="tag">adaptive skipping</span>
+                <span class="tag">beir</span>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:12px">
+              <div style="border:1px solid #e6e8ec;border-radius:14px;padding:14px;background:#fff">
+                <div class="label">Recommended searches</div>
+                <div style="display:grid;gap:8px;margin-top:10px">
+                  <div class="mock-input">"rag reranker" adaptive skipping efficiency</div>
+                  <div class="mock-input">rag reranker recent papers</div>
+                  <div class="mock-input">adaptive skipping reproducibility</div>
+                </div>
+              </div>
+              <div style="display:grid;gap:12px">
+                <div style="border:1px solid #e6e8ec;border-radius:14px;padding:14px;background:#fff">
+                  <div class="label">Snapshot</div>
+                  <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:14px"><span>Saved papers</span><strong>1</strong></div>
+                  <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:14px"><span>Reading queue</span><strong>0</strong></div>
+                </div>
+                <div style="border:1px dashed #cad2da;border-radius:14px;padding:14px;background:#fbfcfd">
+                  <div class="label">Quick scope</div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                    <span class="tag">ACL 2024</span>
+                    <span class="tag">OpenAI</span>
+                    <span class="tag">Christopher Manning</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>추천안</h3>
+      <p>연구 맥락을 먼저 잡아주면서도, 바로 검색으로 이어지는 속도를 잃지 않습니다.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. Split Dashboard</div>
+        <div class="mockup-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="display:grid;gap:12px">
+              <div style="border:1px solid #d8ddd8;border-radius:14px;padding:16px;background:#fff">
+                <div class="label">Project context</div>
+                <div style="font-size:22px;font-weight:650;margin:6px 0">RAG Reranker Study</div>
+                <div style="font-size:14px;line-height:1.6;color:#55606b">focus와 키워드가 이 칼럼에 모입니다.</div>
+              </div>
+              <div style="border:1px solid #e6e8ec;border-radius:14px;padding:14px;background:#fff">
+                <div class="label">Research status</div>
+                <div class="placeholder" style="min-height:108px;margin-top:10px">saved / queue / recent activity</div>
+              </div>
+            </div>
+            <div style="display:grid;gap:12px">
+              <div style="border:1px solid #e6e8ec;border-radius:14px;padding:14px;background:#fff">
+                <div class="label">Quick start</div>
+                <div class="placeholder" style="min-height:96px;margin-top:10px">search CTA + query suggestions</div>
+              </div>
+              <div style="border:1px dashed #cad2da;border-radius:14px;padding:14px;background:#fbfcfd">
+                <div class="label">Scope packs</div>
+                <div class="placeholder" style="min-height:96px;margin-top:10px">conference / institution / author</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>대시보드형</h3>
+      <p>정보가 균형 있게 보이지만, 첫 시선이 분산되어 검색 탭보다 홈 대시보드처럼 느껴질 수 있습니다.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. Scout Prep Canvas</div>
+        <div class="mockup-body">
+          <div style="display:grid;gap:12px">
+            <div style="border:1px solid #d8ddd8;border-radius:14px;padding:16px;background:linear-gradient(180deg,#f7fbf8,#ffffff)">
+              <div class="label">Project + scout setup</div>
+              <div style="font-size:22px;font-weight:650;margin:6px 0">RAG Reranker Study</div>
+              <div style="font-size:14px;line-height:1.6;color:#55606b">이 프로젝트에서 Scout가 우선 볼 키워드, venue, follow-up 방향까지 함께 설명합니다.</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+              <div style="border:1px solid #e6e8ec;border-radius:14px;padding:14px;background:#fff">
+                <div class="label">Scout reads</div>
+                <div class="placeholder" style="min-height:90px;margin-top:10px">focus + keywords</div>
+              </div>
+              <div style="border:1px solid #e6e8ec;border-radius:14px;padding:14px;background:#fff">
+                <div class="label">Suggested scopes</div>
+                <div class="placeholder" style="min-height:90px;margin-top:10px">ACL / OpenAI / Manning</div>
+              </div>
+              <div style="border:1px solid #e6e8ec;border-radius:14px;padding:14px;background:#fff">
+                <div class="label">Likely outputs</div>
+                <div class="placeholder" style="min-height:90px;margin-top:10px">themes / brief / papers</div>
+              </div>
+            </div>
+            <div style="border:1px solid #e6e8ec;border-radius:14px;padding:14px;background:#fff">
+              <div class="label">Start search</div>
+              <div class="mock-input" style="margin-top:10px">Ask Scout to find efficient reranker papers</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>온보딩형</h3>
+      <p>Scout의 존재감은 강하지만, 검색 탭 첫 상태치고는 설명이 많아져 다소 무거워질 수 있습니다.</p>
+    </div>
+  </div>
+</div>

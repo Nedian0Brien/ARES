@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARES Search Starter Layout Options</title>
+  <style>
+    :root {
+      --bg: #f5f5f4;
+      --panel: #ffffff;
+      --panel-2: #fafaf9;
+      --line: #e8e8e6;
+      --line-2: #d8d8d4;
+      --text: #111214;
+      --muted: #5d6169;
+      --subtle: #868b94;
+      --search: #5e9c6f;
+      --search-soft: rgba(94, 156, 111, 0.12);
+      --read: #5e6ad2;
+      --read-soft: rgba(94, 106, 210, 0.12);
+      --shadow: 0 18px 40px rgba(17, 18, 20, 0.08);
+      --shadow-soft: 0 8px 20px rgba(17, 18, 20, 0.05);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17181a;
+        --panel: #202226;
+        --panel-2: #26292e;
+        --line: #343841;
+        --line-2: #464b55;
+        --text: #f3f4f6;
+        --muted: #c5cad4;
+        --subtle: #99a0ad;
+        --search-soft: rgba(94, 156, 111, 0.18);
+        --read-soft: rgba(94, 106, 210, 0.18);
+        --shadow: 0 22px 50px rgba(0, 0, 0, 0.28);
+        --shadow-soft: 0 12px 28px rgba(0, 0, 0, 0.22);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: radial-gradient(circle at top, rgba(94, 156, 111, 0.08), transparent 28%), var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow: hidden;
+    }
+
+    .frame {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100%;
+    }
+
+    .topbar,
+    .indicator {
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 22px;
+    }
+
+    .topbar-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--subtle);
+    }
+
+    .topbar-note {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .main {
+      overflow: auto;
+      padding: 28px 28px 36px;
+    }
+
+    .hero {
+      max-width: 1180px;
+      margin: 0 auto 18px;
+    }
+
+    h1 {
+      font-size: 30px;
+      line-height: 1.1;
+      margin: 0 0 10px;
+      letter-spacing: -0.03em;
+    }
+
+    .subtitle {
+      max-width: 860px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.65;
+      margin: 0 0 14px;
+    }
+
+    .helper-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .helper-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .helper-chip strong { color: var(--text); }
+
+    .cards {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 95%, transparent), var(--panel));
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: var(--line-2);
+    }
+
+    .card.selected {
+      border-color: var(--search);
+      box-shadow: 0 0 0 2px rgba(94, 156, 111, 0.2), var(--shadow);
+    }
+
+    .card-head {
+      padding: 18px 18px 12px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 96%, transparent), color-mix(in srgb, var(--panel) 98%, transparent));
+    }
+
+    .eyebrow-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--subtle);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .letter {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .card.selected .letter {
+      background: var(--search);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .pill.rec { background: var(--search-soft); color: var(--search); }
+    .pill.alt { background: var(--read-soft); color: var(--read); }
+
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+
+    .card-copy {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .card-body {
+      padding: 16px 18px 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .flow {
+      display: grid;
+      gap: 12px;
+    }
+
+    .flow-step {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    .flow-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--subtle);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .mini-app {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .mini-hero {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(94, 156, 111, 0.08), transparent);
+    }
+
+    .search-pill {
+      border: 1px solid color-mix(in srgb, var(--search) 40%, var(--line));
+      background: var(--panel);
+      border-radius: 999px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      box-shadow: var(--shadow-soft);
+      margin-bottom: 10px;
+    }
+
+    .search-pill.keyword { border-color: color-mix(in srgb, var(--read) 40%, var(--line)); }
+
+    .search-pill .query {
+      font-size: 12px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .mode-chip {
+      flex: 0 0 auto;
+      padding: 6px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--search);
+    }
+
+    .mode-chip.keyword { background: var(--read); }
+
+    .brief-card,
+    .split-card,
+    .theme-card,
+    .right-card,
+    .mini-list-item {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .brief-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 6px;
+    }
+
+    .brief-copy,
+    .muted {
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    .tag-row,
+    .chip-row,
+    .meta-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .tag,
+    .rec-chip,
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-size: 11px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--muted);
+    }
+
+    .rec-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .rec-item {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 11px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+    }
+
+    .rec-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .rec-label {
+      font-size: 10px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--search);
+    }
+
+    .rec-label.alt { color: var(--read); }
+
+    .rec-query {
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.45;
+      font-weight: 600;
+    }
+
+    .rec-derivation {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 10px;
+    }
+
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 7px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .stat strong {
+      font-size: 18px;
+      color: var(--text);
+      letter-spacing: -0.03em;
+    }
+
+    .report {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1.1fr 0.9fr;
+    }
+
+    .report-main {
+      display: grid;
+      gap: 10px;
+    }
+
+    .report-side {
+      display: grid;
+      gap: 10px;
+    }
+
+    .theme-card h4,
+    .right-card h4 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      letter-spacing: -0.01em;
+    }
+
+    .theme-card p,
+    .right-card p {
+      margin: 0;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    .paper-row {
+      margin-top: 8px;
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .paper-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.4;
+    }
+
+    .panel-switch {
+      display: grid;
+      gap: 8px;
+    }
+
+    .panel-state {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: var(--panel);
+    }
+
+    .panel-state.active {
+      border-color: color-mix(in srgb, var(--search) 55%, var(--line));
+      background: color-mix(in srgb, var(--search-soft) 55%, var(--panel));
+    }
+
+    .panel-state.preview {
+      border-color: color-mix(in srgb, var(--read) 55%, var(--line));
+      background: color-mix(in srgb, var(--read-soft) 55%, var(--panel));
+    }
+
+    .pros {
+      display: grid;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .pros div {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .pros span {
+      color: var(--search);
+      font-weight: 800;
+      margin-top: 1px;
+    }
+
+    .indicator {
+      border-top: 1px solid var(--line);
+      border-bottom: none;
+      padding: 12px 22px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .selected-text {
+      color: var(--search);
+      font-weight: 700;
+    }
+
+    @media (max-width: 1120px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="topbar">
+      <div class="topbar-title">ARES Search Brainstorm</div>
+      <div class="topbar-note">v2 · before/after flow + dark mode safe</div>
+    </div>
+
+    <div class="main">
+      <div class="hero">
+        <h1>어떤 초기 상태가 가장 “ARES답게” 느껴지는지 골라주세요</h1>
+        <p class="subtitle">
+          이번 시안은 단순 박스 비교가 아니라, 각 안마다 <strong>검색 탭 첫 진입 상태</strong>와
+          <strong>Agent Search 이후 상태</strong>를 같이 보여줍니다. 특히 `Recommended searches`가
+          <strong>어디서 도출되는지</strong>도 카드 안에 직접 표기했습니다.
+        </p>
+        <div class="helper-row">
+          <div class="helper-chip"><strong>추천 검색어 원칙</strong> `defaultQuery` + keyword pair + 연구 진행형 angle</div>
+          <div class="helper-chip"><strong>Agent Search 패널</strong> 기본은 Scout panel, 논문 클릭 시 Paper preview</div>
+          <div class="helper-chip"><strong>이번 비교 포인트</strong> 검색 탭다움 / 프로젝트 맥락 / 과한 설명 여부</div>
+        </div>
+      </div>
+
+      <div class="cards">
+        <article class="card" data-choice="a" onclick="toggleSelect(this)">
+          <div class="card-head">
+            <div class="eyebrow-row">
+              <div class="eyebrow"><span class="letter">A</span> Brief-first Hybrid</div>
+              <div class="pill rec">Recommended</div>
+            </div>
+            <h3>프로젝트 브리프가 앞에 오고, 바로 검색으로 이어지는 안</h3>
+            <p class="card-copy">첫 시선은 연구 맥락에 두되, 바로 아래에서 검색 실행과 scope 조정이 가능한 흐름입니다.</p>
+          </div>
+          <div class="card-body">
+            <div class="flow">
+              <div class="flow-step">
+                <div class="flow-label">Before Search</div>
+                <div class="mini-app">
+                  <div class="mini-hero">
+                    <div class="search-pill">
+                      <div class="query">의미 기반으로 논문을 찾아볼까요?</div>
+                      <div class="mode-chip">Agent</div>
+                    </div>
+                    <div class="tag-row">
+                      <div class="tag">ACL 2024</div>
+                      <div class="tag">OpenAI</div>
+                      <div class="tag">Christopher Manning</div>
+                    </div>
+                  </div>
+                  <div style="padding:12px; display:grid; gap:10px;">
+                    <div class="brief-card">
+                      <div class="flow-label" style="margin-bottom:6px">Project brief</div>
+                      <div class="brief-title">RAG Reranker Study</div>
+                      <div class="brief-copy">검색-생성 파이프라인에서 reranker 비용을 줄이면서 정확도를 유지하는 방법을 검증합니다.</div>
+                      <div class="chip-row" style="margin-top:10px">
+                        <div class="meta-chip">rag</div>
+                        <div class="meta-chip">reranker</div>
+                        <div class="meta-chip">adaptive skipping</div>
+                        <div class="meta-chip">beir</div>
+                      </div>
+                    </div>
+                    <div class="two-col">
+                      <div class="split-card">
+                        <div class="flow-label" style="margin-bottom:8px">Recommended searches</div>
+                        <div class="rec-list">
+                          <div class="rec-item">
+                            <div class="rec-top"><div class="rec-label">default query</div></div>
+                            <div class="rec-query">"rag reranker" adaptive skipping efficiency</div>
+                            <div class="rec-derivation">project.defaultQuery 그대로 사용</div>
+                          </div>
+                          <div class="rec-item">
+                            <div class="rec-top"><div class="rec-label">keyword pair</div></div>
+                            <div class="rec-query">rag reranker recent papers</div>
+                            <div class="rec-derivation">keywords[0] + keywords[1] + recent scan</div>
+                          </div>
+                          <div class="rec-item">
+                            <div class="rec-top"><div class="rec-label">repro angle</div></div>
+                            <div class="rec-query">adaptive skipping reproducibility</div>
+                            <div class="rec-derivation">focus/keyword 기반 검증형 쿼리</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="split-card">
+                        <div class="flow-label" style="margin-bottom:8px">Research snapshot</div>
+                        <div class="stat"><span>Saved papers</span><strong>1</strong></div>
+                        <div class="stat"><span>Reading queue</span><strong>0</strong></div>
+                        <div class="stat"><span>Need right now</span><strong style="font-size:13px">broader scout</strong></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flow-step">
+                <div class="flow-label">After Agent Search</div>
+                <div class="mini-app" style="padding:12px">
+                  <div class="report">
+                    <div class="report-main">
+                      <div class="theme-card">
+                        <h4>Scout brief</h4>
+                        <p>Adaptive skipping과 lightweight reranker 두 흐름이 보입니다. 현재 프로젝트는 효율-정확도 균형과 재현성 확인이 핵심입니다.</p>
+                      </div>
+                      <div class="theme-card">
+                        <h4>Theme 1 · cost-aware reranking</h4>
+                        <p>추론 비용 절감을 직접 다루는 논문군. 프로젝트 focus와 가장 가깝습니다.</p>
+                        <div class="paper-row">
+                          <div class="paper-title">Reducing Reranker Costs in RAG via Adaptive Skipping</div>
+                          <div class="muted">Save / Read / Preview</div>
+                        </div>
+                      </div>
+                      <div class="theme-card">
+                        <h4>Theme 2 · benchmark & reproducibility</h4>
+                        <p>효율 개선 주장 검증에 필요한 비교군과 평가 프레임워크.</p>
+                        <div class="paper-row">
+                          <div class="paper-title">Efficient RAG with Lightweight Rerankers</div>
+                          <div class="muted">follow-up query · benchmark compare</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="report-side">
+                      <div class="panel-switch">
+                        <div class="panel-state active">
+                          <div class="flow-label" style="margin-bottom:6px">Default right panel</div>
+                          <div class="paper-title">Scout panel</div>
+                          <div class="muted">reasoning, search path, follow-up query</div>
+                        </div>
+                        <div class="panel-state preview">
+                          <div class="flow-label" style="margin-bottom:6px">On paper click</div>
+                          <div class="paper-title">Paper preview</div>
+                          <div class="muted">abstract, why relevant, Save / Read</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="pros">
+              <div><span>+</span> 검색 탭의 정체성을 유지하면서도 프로젝트 맥락이 가장 선명합니다.</div>
+              <div><span>+</span> 추천 검색어의 출처가 보여서 “왜 이 쿼리인가”가 납득됩니다.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" data-choice="b" onclick="toggleSelect(this)">
+          <div class="card-head">
+            <div class="eyebrow-row">
+              <div class="eyebrow"><span class="letter">B</span> Split Dashboard</div>
+              <div class="pill alt">Balanced</div>
+            </div>
+            <h3>좌측은 연구 맥락, 우측은 실행 패널로 나누는 대시보드형</h3>
+            <p class="card-copy">한눈에는 잘 들어오지만, 검색 탭보다 프로젝트 홈처럼 느껴질 가능성이 큽니다.</p>
+          </div>
+          <div class="card-body">
+            <div class="flow">
+              <div class="flow-step">
+                <div class="flow-label">Before Search</div>
+                <div class="mini-app">
+                  <div class="mini-hero">
+                    <div class="search-pill keyword">
+                      <div class="query">"rag reranker" adaptive skipping efficiency</div>
+                      <div class="mode-chip keyword">Keyword</div>
+                    </div>
+                  </div>
+                  <div style="padding:12px">
+                    <div class="two-col">
+                      <div style="display:grid; gap:10px">
+                        <div class="brief-card">
+                          <div class="flow-label" style="margin-bottom:6px">Project context</div>
+                          <div class="brief-title">RAG Reranker Study</div>
+                          <div class="brief-copy">focus, keywords, saved 논문 맥락을 한 칼럼에 정리합니다.</div>
+                        </div>
+                        <div class="split-card">
+                          <div class="flow-label" style="margin-bottom:8px">Snapshot</div>
+                          <div class="stat"><span>Saved</span><strong>1</strong></div>
+                          <div class="stat"><span>Queue</span><strong>0</strong></div>
+                        </div>
+                      </div>
+                      <div style="display:grid; gap:10px">
+                        <div class="split-card">
+                          <div class="flow-label" style="margin-bottom:8px">Quick start</div>
+                          <div class="rec-list">
+                            <div class="rec-item">
+                              <div class="rec-top"><div class="rec-label alt">recommended</div></div>
+                              <div class="rec-query">rag reranker recent papers</div>
+                              <div class="rec-derivation">keyword pair</div>
+                            </div>
+                            <div class="rec-item">
+                              <div class="rec-top"><div class="rec-label alt">recommended</div></div>
+                              <div class="rec-query">adaptive skipping reproducibility</div>
+                              <div class="rec-derivation">repro angle</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="split-card">
+                          <div class="flow-label" style="margin-bottom:8px">Scope packs</div>
+                          <div class="tag-row">
+                            <div class="tag">ACL / EMNLP</div>
+                            <div class="tag">OpenAI / DeepMind</div>
+                            <div class="tag">Manning / Liang</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flow-step">
+                <div class="flow-label">After Agent Search</div>
+                <div class="mini-app" style="padding:12px">
+                  <div class="report">
+                    <div class="report-main">
+                      <div class="theme-card">
+                        <h4>Scout report</h4>
+                        <p>보고서와 결과가 균형적으로 놓이지만, 전체가 운영 대시보드처럼 느껴집니다.</p>
+                      </div>
+                      <div class="theme-card">
+                        <h4>Result group</h4>
+                        <p>주제별 묶음은 잘 보이지만 시작 상태와 결과 상태의 정체성이 다소 달라질 수 있습니다.</p>
+                      </div>
+                    </div>
+                    <div class="report-side">
+                      <div class="panel-state active">
+                        <div class="paper-title">Scout panel</div>
+                        <div class="muted">search path / follow-up</div>
+                      </div>
+                      <div class="panel-state preview">
+                        <div class="paper-title">Paper preview</div>
+                        <div class="muted">클릭 후 전환은 자연스럽지만 메인 좌우 분할이 이미 강함</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="pros">
+              <div><span>+</span> 정보 구조는 안정적이고 운영 화면처럼 보입니다.</div>
+              <div><span>+</span> 대신 “Search 탭 첫 진입”의 날카로운 초점은 다소 흐려집니다.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card" data-choice="c" onclick="toggleSelect(this)">
+          <div class="card-head">
+            <div class="eyebrow-row">
+              <div class="eyebrow"><span class="letter">C</span> Scout Prep Canvas</div>
+              <div class="pill alt">Agent-heavy</div>
+            </div>
+            <h3>Scout가 무엇을 읽고 무엇을 돌려줄지 먼저 설명하는 온보딩형</h3>
+            <p class="card-copy">에이전트 존재감은 강하지만, 첫 화면이 다소 설명적이고 느리게 느껴질 수 있습니다.</p>
+          </div>
+          <div class="card-body">
+            <div class="flow">
+              <div class="flow-step">
+                <div class="flow-label">Before Search</div>
+                <div class="mini-app">
+                  <div class="mini-hero">
+                    <div class="search-pill">
+                      <div class="query">Ask Scout to find efficient reranker papers</div>
+                      <div class="mode-chip">Agent</div>
+                    </div>
+                  </div>
+                  <div style="padding:12px; display:grid; gap:10px">
+                    <div class="brief-card">
+                      <div class="flow-label" style="margin-bottom:6px">How Scout will search</div>
+                      <div class="brief-copy">project focus, keywords, scope 후보, follow-up query 생성 방식까지 먼저 설명합니다.</div>
+                    </div>
+                    <div class="three-col">
+                      <div class="split-card">
+                        <div class="flow-label" style="margin-bottom:8px">Scout reads</div>
+                        <div class="muted">focus + keyword stack</div>
+                      </div>
+                      <div class="split-card">
+                        <div class="flow-label" style="margin-bottom:8px">Suggested scopes</div>
+                        <div class="muted">ACL · OpenAI · Manning</div>
+                      </div>
+                      <div class="split-card">
+                        <div class="flow-label" style="margin-bottom:8px">Likely outputs</div>
+                        <div class="muted">themes · brief · papers</div>
+                      </div>
+                    </div>
+                    <div class="rec-list">
+                      <div class="rec-item">
+                        <div class="rec-top"><div class="rec-label">generated prompt</div></div>
+                        <div class="rec-query">adaptive skipping efficiency with reproducibility evidence</div>
+                        <div class="rec-derivation">defaultQuery + focus interpretation</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flow-step">
+                <div class="flow-label">After Agent Search</div>
+                <div class="mini-app" style="padding:12px">
+                  <div class="report">
+                    <div class="report-main">
+                      <div class="theme-card">
+                        <h4>Scout narrative</h4>
+                        <p>탐색 과정의 설명은 풍부하지만, 실제 논문을 빨리 읽어야 하는 사용자에게는 길어질 수 있습니다.</p>
+                      </div>
+                      <div class="theme-card">
+                        <h4>Theme clusters</h4>
+                        <p>보고서의 이야기성은 강하나, 검색 탭이 아니라 Scout onboarding 탭처럼 보일 수 있습니다.</p>
+                      </div>
+                    </div>
+                    <div class="report-side">
+                      <div class="panel-state active">
+                        <div class="paper-title">Scout panel</div>
+                        <div class="muted">always prominent</div>
+                      </div>
+                      <div class="panel-state preview">
+                        <div class="paper-title">Paper preview</div>
+                        <div class="muted">전환은 자연스럽지만 메인 화면 밀도가 이미 높음</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="pros">
+              <div><span>+</span> Agent Search의 차별점은 가장 강하게 드러납니다.</div>
+              <div><span>+</span> 대신 초기 상태치고는 설명량이 많아 첫 액션이 늦어질 수 있습니다.</div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <div class="indicator">
+      <span id="indicator-text">브라우저에서 안을 클릭한 뒤, 터미널에서 의견을 알려주세요</span>
+    </div>
+  </div>
+</body>
+</html>

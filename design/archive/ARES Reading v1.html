@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARES Reading — v1 Balanced Dual-Pane</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --bg:#fbfbfa; --sb:#f5f5f4; --s1:#ffffff; --s2:#f7f7f6; --s3:#f0efed;
+  --b1:#e8e8e6; --b2:#d4d4d2;
+  --tx:#0a0a0b; --t2:#4a4a50; --t3:#8a8a92; --t4:#b0b0b8;
+  --read:#5e6ad2; --search:#5e9c6f; --research:#8957c9; --result:#c07b3a; --insight:#c04e68; --writing:#3aa3a3;
+}
+html, body { height:100%; }
+body {
+  font-family:'Inter',-apple-system,sans-serif;
+  font-feature-settings:'cv11','ss01','ss03';
+  background:var(--bg); color:var(--tx);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  font-size:13px; letter-spacing:-0.006em;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-thumb { background:#d8d7d3; border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#b8b7b3; }
+button { font-family:inherit; }
+
+.tag { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:500; padding:1px 7px; border-radius:4px; background:var(--s2); color:var(--t2); border:1px solid var(--b1); white-space:nowrap; letter-spacing:-0.003em; }
+.kbd { font-family:'Inter',sans-serif; font-size:10.5px; font-weight:500; color:var(--t3); background:var(--s1); border:1px solid var(--b1); border-radius:3px; padding:0 5px; min-width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; }
+.btn-p { background:#18181b; color:#fff; border:none; border-radius:6px; padding:5px 11px; font-size:12.5px; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:6px; letter-spacing:-0.006em; }
+.btn-p:hover { background:#26262b; }
+.btn-s { background:var(--s1); color:var(--tx); border:1px solid var(--b1); border-radius:6px; padding:4px 10px; font-size:12.5px; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:6px; letter-spacing:-0.006em; }
+.btn-s:hover { background:var(--s2); border-color:var(--b2); }
+.btn-ghost { background:transparent; color:var(--t2); border:none; border-radius:5px; padding:4px 8px; font-size:12.5px; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.btn-ghost:hover { background:rgba(0,0,0,0.04); color:var(--tx); }
+
+.app { height:100vh; display:flex; flex-direction:column; background:var(--bg); }
+.chrome { height:40px; flex-shrink:0; background:var(--sb); border-bottom:1px solid var(--b1); display:flex; align-items:center; gap:10px; padding:0 14px; font-size:12px; color:var(--t3); }
+.chrome .crumb { display:inline-flex; align-items:center; gap:6px; }
+.chrome .crumb .sep { color:var(--t4); }
+.metabar { height:58px; flex-shrink:0; background:var(--s1); border-bottom:1px solid var(--b1); padding:0 20px; display:flex; align-items:center; gap:14px; }
+.metabar .title { font-size:14px; font-weight:550; letter-spacing:-0.012em; color:var(--tx); max-width:540px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.metabar .byline { color:var(--t3); font-size:12px; display:flex; align-items:center; gap:6px; margin-top:2px; }
+.metabar .meta-actions { margin-left:auto; display:flex; align-items:center; gap:6px; }
+
+.main { flex:1; display:flex; min-height:0; }
+.rail { width:220px; flex-shrink:0; background:var(--sb); border-right:1px solid var(--b1); display:flex; flex-direction:column; min-height:0; }
+.rail-section { display:flex; flex-direction:column; min-height:0; }
+.rail-hdr { display:flex; align-items:center; justify-content:space-between; padding:12px 14px 6px; font-size:10.5px; font-weight:600; color:var(--t3); text-transform:uppercase; letter-spacing:0.08em; }
+.rail-hdr .count { color:var(--t4); font-weight:500; letter-spacing:0; text-transform:none; font-size:11px; }
+.rail-search { margin:2px 10px 8px; background:var(--s1); border:1px solid var(--b1); border-radius:5px; padding:5px 9px; display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--t3); }
+.rail-search input { flex:1; background:transparent; border:none; outline:none; font-size:11.5px; color:var(--tx); font-family:inherit; }
+.lib-list { flex:1; overflow:auto; padding:0 6px 8px; }
+.lib-item { padding:7px 10px; border-radius:6px; cursor:pointer; display:flex; flex-direction:column; gap:3px; margin-bottom:1px; }
+.lib-item.active { background:rgba(94,106,210,0.06); }
+.lib-item:hover:not(.active) { background:rgba(0,0,0,0.028); }
+.lib-item .t { font-size:12px; line-height:1.35; letter-spacing:-0.008em; color:var(--tx); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.lib-item .m { font-size:10.5px; color:var(--t3); display:flex; align-items:center; gap:5px; }
+.lib-item .bar { height:2px; border-radius:1px; background:var(--s3); overflow:hidden; margin-top:3px; }
+.lib-item .bar > i { display:block; height:100%; background:var(--read); }
+.rail-divider { height:1px; background:var(--b1); margin:6px 0; }
+.outline { padding:0 6px 10px; }
+.outline-item { padding:6px 10px 6px 12px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--t2); border-radius:5px; cursor:pointer; border-left:2px solid transparent; }
+.outline-item.active { background:rgba(94,106,210,0.05); border-left-color:var(--read); color:var(--tx); font-weight:550; }
+.outline-item:hover:not(.active) { background:rgba(0,0,0,0.028); }
+
+.split { flex:1; display:flex; min-width:0; }
+.pane { display:flex; flex-direction:column; background:var(--bg); min-width:0; overflow:hidden; }
+.pane-hdr { height:42px; flex-shrink:0; border-bottom:1px solid var(--b1); background:var(--s1); display:flex; align-items:center; padding:0 12px; gap:2px; }
+.pane-tab { padding:6px 11px; font-size:12.5px; font-weight:500; color:var(--t3); border-radius:5px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; position:relative; }
+.pane-tab:hover { color:var(--t2); background:rgba(0,0,0,0.028); }
+.pane-tab.active { color:var(--tx); }
+.pane-tab.active::after { content:''; position:absolute; bottom:-11px; left:8px; right:8px; height:2px; background:var(--read); border-radius:1px 1px 0 0; }
+.pane-actions { margin-left:auto; display:flex; align-items:center; gap:4px; }
+.pane-icon-btn { width:26px; height:26px; border-radius:5px; background:transparent; border:none; color:var(--t3); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+.pane-icon-btn:hover { background:rgba(0,0,0,0.04); color:var(--t2); }
+.pane-body { flex:1; overflow:auto; position:relative; }
+
+.resize { width:5px; flex-shrink:0; background:var(--b1); position:relative; cursor:col-resize; }
+.resize:hover { background:var(--read); }
+.resize::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:1px; height:22px; background:var(--b2); border-radius:1px; }
+
+.pdf { padding:22px 24px; display:flex; flex-direction:column; gap:16px; align-items:center; min-height:100%; background:#f4f3ef; }
+.pdf-page { width:94%; max-width:560px; aspect-ratio:210/297; background:#fff; border:1px solid var(--b1); border-radius:4px; box-shadow:0 2px 6px rgba(15,15,15,0.04), 0 1px 2px rgba(15,15,15,0.03); padding:44px 46px 36px; font-family:'Times New Roman',Georgia,serif; font-size:10.5px; color:#1a1a1d; line-height:1.6; position:relative; }
+.pdf-page h1 { font-size:14.5px; font-family:'Times New Roman',serif; font-weight:700; line-height:1.3; margin-bottom:10px; color:#0a0a0b; }
+.pdf-page .aut { font-size:10px; color:#3a3a3e; margin-bottom:10px; }
+.pdf-page .abs-h { font-size:10.5px; font-weight:700; margin:8px 0 4px; }
+.pdf-page p { margin-bottom:9px; text-align:justify; hyphens:auto; }
+.pdf-page h2 { font-size:11.5px; font-weight:700; margin:12px 0 5px; }
+.pdf-page .pgnum { position:absolute; bottom:18px; right:22px; font-size:9px; color:#8a8a92; font-family:'Times New Roman',serif; }
+.pdf-sep { font-size:11px; color:var(--t3); letter-spacing:0.06em; }
+
+.summary-wrap { padding:24px 28px; max-width:720px; margin:0 auto; }
+.summary-block { margin-bottom:22px; }
+.summary-label { font-size:10px; font-weight:600; color:var(--t3); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px; display:inline-flex; align-items:center; gap:6px; }
+.summary-body { font-size:13px; line-height:1.7; color:var(--tx); }
+.summary-list { list-style:none; display:flex; flex-direction:column; gap:7px; }
+.summary-list li { display:flex; gap:10px; align-items:flex-start; font-size:12.8px; line-height:1.6; color:var(--t2); }
+.summary-list li .bullet { width:5px; height:5px; border-radius:50%; margin-top:7px; flex-shrink:0; }
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 32px; gap:12px; color:var(--t3); text-align:center; height:100%; }
+.empty-state .title { font-size:14px; color:var(--tx); font-weight:550; }
+.empty-state .sub { font-size:12.5px; line-height:1.55; max-width:320px; }
+
+.chat-wrap { display:flex; flex-direction:column; height:100%; }
+.chat-body { flex:1; overflow:auto; padding:16px 18px; display:flex; flex-direction:column; gap:14px; }
+.bubble { display:flex; gap:10px; }
+.bubble.user { align-self:flex-end; max-width:84%; }
+.bubble.user .avatar { display:none; }
+.bubble.user .content { background:var(--s2); border:1px solid var(--b1); border-radius:10px 10px 2px 10px; padding:8px 12px; font-size:12.8px; line-height:1.55; }
+.bubble.assistant { max-width:92%; }
+.bubble .avatar { width:22px; height:22px; border-radius:6px; background:rgba(94,106,210,0.1); color:var(--read); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+.bubble .content { font-size:12.8px; line-height:1.6; color:var(--tx); }
+.cite { display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:2px 7px; margin:6px 4px 0 0; background:var(--s2); border:1px solid var(--b1); border-radius:4px; color:var(--t2); cursor:pointer; }
+.cite:hover { background:var(--s3); color:var(--tx); }
+.cite .dot { width:4px; height:4px; border-radius:50%; background:var(--read); }
+.chat-input { border-top:1px solid var(--b1); background:var(--s1); padding:10px 14px 12px; }
+.chat-chips { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px; }
+.chip { font-size:10.5px; padding:2px 7px; background:rgba(94,106,210,0.08); color:var(--read); border:1px solid rgba(94,106,210,0.24); border-radius:4px; display:inline-flex; align-items:center; gap:4px; }
+.chip .x { cursor:pointer; opacity:0.7; }
+.chat-input-box { display:flex; gap:8px; align-items:flex-end; background:var(--s1); border:1px solid var(--b1); border-radius:8px; padding:7px 9px; }
+.chat-input-box:focus-within { border-color:var(--b2); }
+.chat-input-box textarea { flex:1; resize:none; border:none; outline:none; font-family:inherit; font-size:13px; color:var(--tx); background:transparent; max-height:120px; line-height:1.5; }
+.chat-input-box .send { width:28px; height:28px; border-radius:6px; background:var(--tx); color:#fff; border:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+
+.notes-wrap { padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+.note-card { background:var(--s1); border:1px solid var(--b1); border-radius:7px; padding:10px 12px; display:flex; flex-direction:column; gap:7px; }
+.note-head { display:flex; align-items:center; gap:6px; }
+.note-head .pg { margin-left:auto; font-size:10.5px; color:var(--t3); font-family:'JetBrains Mono',monospace; }
+.note-quote { font-size:11.8px; color:var(--t2); line-height:1.55; padding:6px 10px; background:var(--s2); border-left:2px solid var(--b2); border-radius:3px; font-style:italic; }
+.note-memo { font-size:12.5px; line-height:1.55; color:var(--tx); }
+.note-actions { display:flex; gap:4px; margin-top:2px; }
+
+.assets-wrap { padding:14px 16px; }
+.assets-toolbar { display:flex; align-items:center; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+.asset-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+.asset-card { border:1px solid var(--b1); border-radius:7px; background:var(--s1); overflow:hidden; cursor:pointer; transition:border-color 120ms; }
+.asset-card:hover { border-color:var(--b2); }
+.asset-thumb { aspect-ratio:4/3; background:var(--s2); border-bottom:1px solid var(--b1); display:flex; align-items:center; justify-content:center; color:var(--t4); position:relative; overflow:hidden; }
+.asset-meta { padding:7px 10px; }
+.asset-kind { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; }
+.asset-caption { font-size:11.5px; color:var(--tx); line-height:1.4; margin-top:2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.asset-pg { font-size:10px; color:var(--t4); font-family:'JetBrains Mono',monospace; margin-top:2px; }
+
+.variant { position:fixed; top:8px; right:12px; z-index:50; font-size:11px; padding:3px 9px; border-radius:999px; background:rgba(94,106,210,0.12); color:var(--read); border:1px solid rgba(94,106,210,0.3); font-weight:500; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const T = {
+  bg:'#fbfbfa', sb:'#f5f5f4', s1:'#ffffff', s2:'#f7f7f6', s3:'#f0efed',
+  b1:'#e8e8e6', b2:'#d4d4d2', tx:'#0a0a0b', t2:'#4a4a50', t3:'#8a8a92', t4:'#b0b0b8',
+  read:'#5e6ad2', search:'#5e9c6f', research:'#8957c9', result:'#c07b3a', insight:'#c04e68', writing:'#3aa3a3',
+};
+const mono = { fontFamily:"'JetBrains Mono',monospace" };
+
+const Icon = ({ name, size=15, color='currentColor', style={} }) => {
+  const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:color, strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round', style };
+  const paths = {
+    search:<><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></>,
+    book:<><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></>,
+    sparkles:<><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></>,
+    pdf:<><path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M9 14h6M9 17h6M9 11h2"/></>,
+    chat:<><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></>,
+    note:<><path d="M4 4h12l4 4v12H4z"/><path d="M16 4v4h4"/><path d="M8 12h8M8 16h5"/></>,
+    grid:<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
+    send:<><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></>,
+    highlight:<><path d="M12 20l9-9-4-4-9 9v4z"/><path d="M14 7l4 4"/><path d="M3 21h7"/></>,
+    pen:<><path d="M17 3l4 4L7 21H3v-4L17 3z"/></>,
+    quote:<><path d="M6 8c0-1 1-2 2-2h2v6H6V8zM14 8c0-1 1-2 2-2h2v6h-4V8z"/></>,
+    chevR:<path d="M9 6l6 6-6 6"/>,
+    chevD:<path d="M6 9l6 6 6-6"/>,
+    plus:<><path d="M12 5v14M5 12h14"/></>,
+    check:<path d="M20 6L9 17l-5-5"/>,
+    x:<><path d="M18 6L6 18M6 6l12 12"/></>,
+    dot:<circle cx="12" cy="12" r="4" fill={color} stroke="none"/>,
+    moreH:<><circle cx="6" cy="12" r="1.4" fill={color} stroke="none"/><circle cx="12" cy="12" r="1.4" fill={color} stroke="none"/><circle cx="18" cy="12" r="1.4" fill={color} stroke="none"/></>,
+    arrowR:<><path d="M5 12h14M12 5l7 7-7 7"/></>,
+    status_done:<><circle cx="12" cy="12" r="9" fill={color} stroke="none"/><path d="M8 12l3 3 5-6" stroke="#fff"/></>,
+    status_run:<><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 019 9" stroke={color} strokeWidth="2.5"/></>,
+    status_todo:<circle cx="12" cy="12" r="9" strokeDasharray="2 3"/>,
+    status_queue:<circle cx="12" cy="12" r="9"/>,
+    bookmark:<path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z"/>,
+    download:<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></>,
+    share:<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></>,
+    columns:<><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></>,
+    rows:<><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="18" height="7" rx="1"/></>,
+    table:<><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M3 15h18M9 5v14M15 5v14"/></>,
+    image:<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5-11 11"/></>,
+    info:<><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16v.01"/></>,
+    flask:<><path d="M9 3h6"/><path d="M10 3v6L4.5 18a2 2 0 001.7 3h11.6a2 2 0 001.7-3L14 9V3"/><path d="M7 15h10"/></>,
+  };
+  return <svg {...p}>{paths[name]}</svg>;
+};
+
+const Tag = ({ label, color, dot }) => (
+  <span className="tag" style={color ? { background:`color-mix(in srgb, ${color} 12%, transparent)`, color, borderColor:`color-mix(in srgb, ${color} 30%, transparent)` } : {}}>
+    {dot && <span style={{ width:5, height:5, borderRadius:'50%', background:color||T.t3 }} />}
+    {label}
+  </span>
+);
+const Kbd = ({ children }) => <span className="kbd">{children}</span>;
+const StatusIcon = ({ status }) => {
+  const map = { done:T.search, running:T.result, todo:T.t3, queue:T.t4 };
+  const color = map[status] || T.t3;
+  if (status==='done') return <Icon name="status_done" size={13} color={color}/>;
+  if (status==='running') return <span style={{ display:'inline-flex', animation:'pulse 1.5s infinite' }}><Icon name="status_run" size={13} color={color}/></span>;
+  if (status==='todo') return <Icon name="status_todo" size={13} color={T.t3}/>;
+  return <Icon name="status_queue" size={13} color={T.t4}/>;
+};
+
+const LIBRARY = [
+  { id:'p1', title:'Reducing Reranker Costs in RAG via Adaptive Skipping', auth:'Kim et al.', venue:'ACL 2024', progress:62, active:true },
+  { id:'p2', title:'Efficient RAG with Lightweight Rerankers', auth:'Chen et al.', venue:'EMNLP 2024', progress:0 },
+  { id:'p3', title:'FlashRAG: A Modular Framework for RAG Research', auth:'Jin et al.', venue:'arXiv', progress:0 },
+  { id:'p4', title:'Is Reranking Really Necessary for RAG?', auth:'Park et al.', venue:'ACL 2024', progress:100 },
+  { id:'p5', title:'RAGLAB: Research-Oriented Unified Framework', auth:'Zhang et al.', venue:'arXiv', progress:18 },
+];
+const OUTLINE = [
+  { label:'Abstract', status:'done' },
+  { label:'1. Introduction', status:'done' },
+  { label:'2. Related Work', status:'done' },
+  { label:'3. Method', status:'done', active:true },
+  { label:'4. Experiments', status:'running' },
+  { label:'5. Analysis', status:'queue' },
+  { label:'6. Conclusion', status:'queue' },
+];
+const MESSAGES = [
+  { id:1, role:'user', text:'τ 값이 데이터셋마다 다르면 일반화 어렵지 않아?' },
+  { id:2, role:'assistant', text:'좋은 지적입니다. §5.2의 민감도 분석을 보면 τ=0.6이 BEIR 평균 sweet spot이지만, FiQA·NFCorpus처럼 retrieval이 약한 도메인에서는 τ를 0.4–0.5로 낮춰야 nDCG 유지됩니다.', cites:[{ label:'§5.2 Sensitivity', pg:7 }] },
+  { id:3, role:'user', text:'Baseline 대비 reranker 호출이 얼마나 줄었어?' },
+  { id:4, role:'assistant', text:'Table 3 기준 평균 58% skip → 전체 latency 40% 감소. FiQA는 35% 그쳤고, Natural Questions는 72%까지 skip 가능했습니다.', cites:[{ label:'Table 3', pg:8 },{ label:'§5.1 Throughput', pg:8 }] },
+];
+const NOTES = [
+  { id:'n1', cat:'Method', color:T.read, text:'cascade confidence scoring으로 retriever 신뢰도가 τ 이하일 때만 reranker 호출', memo:'BM25 + DPR 혼합 시 confidence 정의 재검토 필요 — c(q) 재정의 실험 TODO', pg:4 },
+  { id:'n2', cat:'Result', color:T.search, text:'BEIR 18 tasks 평균 nDCG@10 = 44.8, full-reranker 대비 −0.4', memo:'원 논문 Table 3 ↔ 우리 Baseline 40.2 / 4.6 차이 → 재현 seed·split 확인', pg:7 },
+  { id:'n3', cat:'Limit', color:T.result, text:'threshold τ는 데이터셋별 수동 튜닝 필요', memo:'auto-τ regression 모델로 회귀하는 후속 아이디어', pg:9 },
+];
+const ASSETS = [
+  { id:'f1', kind:'Figure', n:1, cap:'Adaptive Skipping overview', pg:3 },
+  { id:'t1', kind:'Table',  n:1, cap:'BEIR nDCG@10 comparison', pg:7 },
+  { id:'f2', kind:'Figure', n:2, cap:'Cascade scoring pipeline', pg:5 },
+  { id:'t3', kind:'Table',  n:3, cap:'Reranker skip ratio per dataset', pg:8 },
+  { id:'f3', kind:'Figure', n:3, cap:'Confidence distribution (FiQA)', pg:9 },
+  { id:'t2', kind:'Table',  n:2, cap:'Latency breakdown per component', pg:8 },
+];
+
+function AssetFig({ n }) {
+  return (
+    <svg viewBox="0 0 200 150" width="82%" height="82%">
+      <rect x="6" y="6" width="188" height="138" fill="none" stroke="#d4d4d2" strokeDasharray="2 2"/>
+      {n===1 && <g>
+        <rect x="25" y="55" width="28" height="40" fill="#5e6ad2" opacity="0.55"/>
+        <rect x="72" y="38" width="28" height="57" fill="#5e9c6f" opacity="0.55"/>
+        <rect x="119" y="22" width="28" height="73" fill="#c07b3a" opacity="0.55"/>
+        <rect x="166" y="48" width="20" height="47" fill="#8957c9" opacity="0.55"/>
+        <line x1="20" y1="110" x2="186" y2="110" stroke="#8a8a92"/>
+      </g>}
+      {n===2 && <g>
+        <circle cx="42" cy="75" r="22" fill="none" stroke="#5e6ad2" strokeWidth="1.5"/>
+        <text x="42" y="78" textAnchor="middle" fontSize="9" fill="#5e6ad2">retrieve</text>
+        <path d="M68 75 L108 75" stroke="#8a8a92" strokeWidth="1.2"/>
+        <polygon points="108,71 116,75 108,79" fill="#8a8a92"/>
+        <rect x="118" y="58" width="56" height="34" rx="4" fill="none" stroke="#8957c9" strokeWidth="1.5"/>
+        <text x="146" y="80" textAnchor="middle" fontSize="9" fill="#8957c9">rerank</text>
+      </g>}
+      {n===3 && <g>
+        <path d="M20 120 C 40 50, 80 40, 100 70 S 160 110, 180 90" fill="none" stroke="#c04e68" strokeWidth="1.8"/>
+        <line x1="12" y1="130" x2="192" y2="130" stroke="#8a8a92"/>
+        <line x1="12" y1="130" x2="12" y2="18" stroke="#8a8a92"/>
+      </g>}
+    </svg>
+  );
+}
+function AssetTbl({ n }) {
+  const rows = n===1 ? [['BM25','33.2','—'],['DPR','38.7','—'],['DPR+R','44.8','base'],['Ours','44.4','−0.4']] :
+               n===3 ? [['NQ','72%','−50%'],['HotpotQA','61%','−42%'],['FiQA','35%','−24%']] :
+                       [['Retrieve','9ms','14%'],['Rerank','42ms','66%'],['Generate','13ms','20%']];
+  const cols = n===1 ? ['Method','nDCG','Δ'] : n===3 ? ['Dataset','Skip%','Latency'] : ['Stage','Time','Share'];
+  return (
+    <div style={{ fontFamily:"'Times New Roman',serif", fontSize:9, color:'#1a1a1d', width:'86%', border:'1px solid #8a8a92' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr 1fr', borderBottom:'1px solid #0a0a0b', padding:'3px 5px', fontWeight:700 }}>
+        {cols.map(c => <span key={c}>{c}</span>)}
+      </div>
+      {rows.map((r,i) => (
+        <div key={i} style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr 1fr', borderBottom: i<rows.length-1?'1px solid #e8e8e6':'none', padding:'3px 5px' }}>
+          {r.map((c,j) => <span key={j}>{c}</span>)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LeftRail() {
+  return (
+    <div className="rail">
+      <div className="rail-section" style={{ flex:'0 0 44%' }}>
+        <div className="rail-hdr"><span>Library</span><span className="count">{LIBRARY.length}</span></div>
+        <div className="rail-search">
+          <Icon name="search" size={12}/>
+          <input placeholder="Filter…"/>
+          <Kbd>⌘K</Kbd>
+        </div>
+        <div className="lib-list">
+          {LIBRARY.map(p => (
+            <div key={p.id} className={`lib-item ${p.active?'active':''}`}>
+              <div className="t">{p.title}</div>
+              <div className="m">
+                <span>{p.auth}</span><span style={{ color:T.t4 }}>·</span><span>{p.venue}</span>
+              </div>
+              {p.progress>0 && p.progress<100 && <div className="bar"><i style={{ width:`${p.progress}%` }}/></div>}
+              {p.progress===100 && <div style={{ display:'flex', alignItems:'center', gap:4, fontSize:10.5, color:T.search }}><Icon name="check" size={10}/> done</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rail-divider"/>
+      <div className="rail-section" style={{ flex:'1', minHeight:0, overflow:'auto' }}>
+        <div className="rail-hdr"><span>Outline</span><span className="count" style={{ color:T.read, fontWeight:600 }}>62%</span></div>
+        <div style={{ padding:'0 14px 6px' }}>
+          <div style={{ height:2, background:T.s3, borderRadius:1, overflow:'hidden' }}>
+            <div style={{ width:'62%', height:'100%', background:T.read }}/>
+          </div>
+        </div>
+        <div className="outline">
+          {OUTLINE.map((s,i) => (
+            <div key={i} className={`outline-item ${s.active?'active':''}`}>
+              <StatusIcon status={s.status}/><span>{s.label}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:'10px 14px', borderTop:`1px solid ${T.b1}`, marginTop:6 }}>
+          <div className="rail-hdr" style={{ padding:0, marginBottom:8 }}>
+            <span>Highlights</span><span className="count">{NOTES.length}</span>
+          </div>
+          {[['Method',T.read],['Result',T.search],['Limit',T.result],['Claim',T.research],['Note',T.writing]].map(([l,c]) => (
+            <div key={l} style={{ display:'flex', alignItems:'center', gap:7, fontSize:11.5, color:T.t2, padding:'2px 0' }}>
+              <span style={{ width:8, height:2, background:c, borderRadius:1 }}/>{l}
+              <span style={{ marginLeft:'auto', fontSize:10.5, color:T.t4, ...mono }}>{NOTES.filter(n=>n.cat===l).length}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocumentHeader({ tab, setTab, summarized }) {
+  return (
+    <div className="pane-hdr">
+      <div className={`pane-tab ${tab==='summary'?'active':''}`} onClick={() => setTab('summary')}>
+        <Icon name="sparkles" size={13} color={tab==='summary'?T.read:T.t3}/>Summary
+        {summarized && <span style={{ width:5, height:5, borderRadius:'50%', background:T.read }}/>}
+      </div>
+      <div className={`pane-tab ${tab==='pdf'?'active':''}`} onClick={() => setTab('pdf')}>
+        <Icon name="pdf" size={13} color={tab==='pdf'?T.tx:T.t3}/>PDF Document
+        <span style={{ fontSize:10.5, color:T.t3, ...mono, marginLeft:2 }}>14p</span>
+      </div>
+      <div className="pane-actions">
+        <button className="pane-icon-btn"><Icon name="plus" size={13}/></button>
+        <button className="pane-icon-btn"><Icon name="download" size={13}/></button>
+      </div>
+    </div>
+  );
+}
+
+function PdfView() {
+  return (
+    <div className="pdf">
+      <div className="pdf-page">
+        <h1>Reducing Reranker Costs in Retrieval-Augmented Generation via Adaptive Skipping</h1>
+        <div className="aut">Kim, J.¹ · Park, S.² · Lee, H.¹ &nbsp;&nbsp;<sup>1</sup>KAIST &nbsp;<sup>2</sup>Seoul National University</div>
+        <div className="aut" style={{ marginBottom:14 }}>ACL 2024 · arXiv:2406.XXXXX</div>
+        <div className="abs-h">Abstract</div>
+        <p>Retrieval-augmented generation (RAG) pipelines typically apply a neural reranker to every retrieved passage list, regardless of the retriever's confidence in its top-k candidates. We show that this full-reranking policy is wasteful on a non-trivial fraction of queries.</p>
+        <p>We propose <b>Adaptive Skipping</b>, a lightweight cascade mechanism that uses a confidence score derived from retriever scores to selectively bypass the reranker. On BEIR, our method achieves <b>44.8 nDCG@10</b> on average — matching full-reranking within 0.4 points — while reducing reranker calls by <b>58%</b> and end-to-end latency by <b>40%</b>.</p>
+        <h2>1. Introduction</h2>
+        <p>Modern RAG systems combine a dense retriever (e.g. DPR, Contriever) with a cross-encoder reranker to surface the most relevant passages for generation. Although rerankers improve retrieval quality, they also incur substantial compute cost.</p>
+        <div className="pgnum">1 / 14</div>
+      </div>
+      <div className="pdf-sep">Page 2</div>
+      <div className="pdf-page">
+        <h2>2. Related Work</h2>
+        <p>Cascaded retrieval systems have been studied for decades in the IR literature. Matveeva et al. (2006) introduced multi-stage retrieval for web search, and recent work has adapted this pattern to neural IR.</p>
+        <p>Our work differs in that we make the cascade <i>query-adaptive</i>: rather than applying a fixed late-stage reranker, we predict whether the reranker will change the top-k based on the retriever's own confidence signal.</p>
+        <h2>3. Method</h2>
+        <p>Given a query q and top-k retrieved passages, we compute a confidence score c(q) and compare it to a threshold τ. If c(q) &gt; τ, we skip the reranker entirely and return the retriever's ranking.</p>
+        <div className="pgnum">2 / 14</div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryView({ ready, onGen }) {
+  if (!ready) return (
+    <div className="empty-state">
+      <div style={{ width:48, height:48, borderRadius:12, background:'rgba(94,106,210,0.08)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <Icon name="sparkles" size={22} color={T.read}/>
+      </div>
+      <div className="title">요약이 아직 생성되지 않았습니다</div>
+      <div className="sub">상단의 <b>Summarize</b> 버튼을 누르면 AI가 TL;DR · Key Points · Method · Result · Limit 순으로 요약을 스트리밍합니다.</div>
+      <button className="btn-p" onClick={onGen} style={{ marginTop:8 }}>
+        <Icon name="sparkles" size={13}/> Generate summary
+      </button>
+    </div>
+  );
+  return (
+    <div className="summary-wrap">
+      <div className="summary-block">
+        <div className="summary-label"><Icon name="sparkles" size={11} color={T.read}/> TL;DR</div>
+        <div className="summary-body">retriever 신뢰도 기반으로 reranker 호출을 선택적으로 skip 하는 <b>Adaptive Skipping</b>을 제안. BEIR 18개 태스크 기준 nDCG@10 44.8 달성하면서 reranker 호출을 58%, 전체 latency를 40% 감축.</div>
+      </div>
+      <div className="summary-block">
+        <div className="summary-label" style={{ color:T.search }}><Icon name="dot" size={8} color={T.search}/> Key points</div>
+        <ul className="summary-list">
+          <li><span className="bullet" style={{ background:T.search }}/>Cascade confidence scoring으로 τ-gating 수행</li>
+          <li><span className="bullet" style={{ background:T.search }}/>BEIR 18 tasks 평균 nDCG@10 = 44.8 (Full reranker 대비 −0.4)</li>
+          <li><span className="bullet" style={{ background:T.search }}/>reranker 호출 −58%, 전체 latency −40%</li>
+          <li><span className="bullet" style={{ background:T.search }}/>DPR + BM25 혼합 retriever · 4×A100 환경</li>
+        </ul>
+      </div>
+      <div className="summary-block">
+        <div className="summary-label" style={{ color:T.read }}><Icon name="dot" size={8} color={T.read}/> Method</div>
+        <div className="summary-body">c(q) = cosine(q, d₀) − cosine(q, d₁). skip_reranker := c(q) &gt; τ. τ는 validation set 에서 grid-search로 결정하며, 본 논문은 τ=0.6을 BEIR 평균 최적값으로 제시.</div>
+      </div>
+      <div className="summary-block">
+        <div className="summary-label" style={{ color:T.result }}><Icon name="dot" size={8} color={T.result}/> Limit</div>
+        <div className="summary-body">τ는 데이터셋마다 수동 튜닝이 필요. 저-retrieval-confidence 도메인(FiQA·NFCorpus)에서는 τ를 낮춰야 하며, auto-τ 회귀 모델은 future work.</div>
+      </div>
+    </div>
+  );
+}
+
+function WorkbenchHeader({ tab, setTab }) {
+  const tabs = [
+    { id:'chat', label:'Chat', icon:'chat', count:MESSAGES.length },
+    { id:'notes', label:'Notes', icon:'note', count:NOTES.length },
+    { id:'assets', label:'Assets', icon:'grid', count:ASSETS.length },
+  ];
+  return (
+    <div className="pane-hdr">
+      {tabs.map(t => (
+        <div key={t.id} className={`pane-tab ${tab===t.id?'active':''}`} onClick={() => setTab(t.id)}>
+          <Icon name={t.icon} size={13} color={tab===t.id?T.tx:T.t3}/>{t.label}
+          <span style={{ fontSize:10.5, color:T.t4, ...mono }}>{t.count}</span>
+        </div>
+      ))}
+      <div className="pane-actions">
+        <button className="pane-icon-btn"><Icon name="plus" size={13}/></button>
+        <button className="pane-icon-btn"><Icon name="moreH" size={13}/></button>
+      </div>
+    </div>
+  );
+}
+
+function ChatView({ parsed }) {
+  return (
+    <div className="chat-wrap">
+      <div className="chat-body">
+        {!parsed && (
+          <div style={{ padding:'10px 12px', background:'rgba(192,123,58,0.08)', border:'1px solid rgba(192,123,58,0.22)', borderRadius:7, fontSize:11.5, color:T.result, display:'flex', gap:8, alignItems:'flex-start' }}>
+            <Icon name="info" size={13} color={T.result}/>
+            <div>파싱된 본문 없이도 채팅 가능하지만, <b>Parse paper</b> 후에는 본문 문맥 인용이 붙습니다.</div>
+          </div>
+        )}
+        {MESSAGES.map(m => (
+          <div key={m.id} className={`bubble ${m.role}`}>
+            {m.role==='assistant' && <div className="avatar"><Icon name="sparkles" size={12} color={T.read}/></div>}
+            <div className="content" style={m.role==='user'?{}:{ padding:0 }}>
+              {m.text}
+              {m.cites && <div style={{ marginTop:4 }}>{m.cites.map((c,i) => (
+                <span key={i} className="cite"><span className="dot"/>{c.label}<span style={{ color:T.t4, ...mono }}>p.{c.pg}</span></span>
+              ))}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="chat-input">
+        <div className="chat-chips">
+          <span className="chip"><Icon name="pdf" size={10}/> §4 Method <span className="x">×</span></span>
+          <span className="chip"><Icon name="quote" size={10}/> selected (84w) <span className="x">×</span></span>
+        </div>
+        <div className="chat-input-box">
+          <textarea rows={1} placeholder="논문에게 질문하기… (⌘↩ 전송)"/>
+          <button className="send"><Icon name="send" size={13} color="#fff"/></button>
+        </div>
+        <div style={{ marginTop:6, fontSize:10.5, color:T.t4, display:'flex', justifyContent:'space-between' }}>
+          <span>Context: 현재 섹션 + 선택 텍스트 자동 포함</span>
+          <span style={mono}>gpt-4o · 12k/128k</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotesView() {
+  return (
+    <div className="notes-wrap">
+      <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4 }}>
+        <span style={{ fontSize:10.5, color:T.t3, textTransform:'uppercase', letterSpacing:'0.08em', fontWeight:600, flex:1 }}>All notes</span>
+        <button className="btn-s" style={{ padding:'3px 8px', fontSize:11.5 }}><Icon name="highlight" size={11}/> Category</button>
+        <button className="btn-s" style={{ padding:'3px 8px', fontSize:11.5 }}>Sort</button>
+      </div>
+      {NOTES.map(n => (
+        <div key={n.id} className="note-card">
+          <div className="note-head">
+            <Tag label={n.cat} color={n.color} dot/>
+            <span className="pg">p.{n.pg}</span>
+          </div>
+          <div className="note-quote">"{n.text}"</div>
+          <div className="note-memo">{n.memo}</div>
+          <div className="note-actions">
+            <button className="btn-ghost" style={{ padding:'2px 6px', fontSize:11 }}><Icon name="pen" size={11}/> Edit</button>
+            <button className="btn-ghost" style={{ padding:'2px 6px', fontSize:11 }}><Icon name="chat" size={11}/> Ask AI</button>
+            <button className="btn-ghost" style={{ padding:'2px 6px', fontSize:11, marginLeft:'auto', color:T.research }}>
+              <Icon name="flask" size={11}/> Send to Research
+            </button>
+          </div>
+        </div>
+      ))}
+      <button className="btn-s" style={{ justifyContent:'center', padding:'7px 10px', color:T.t2 }}>
+        <Icon name="plus" size={12}/> New manual note
+      </button>
+    </div>
+  );
+}
+
+function AssetsView() {
+  const [kind, setKind] = useState('all');
+  const list = kind==='all' ? ASSETS : ASSETS.filter(a => a.kind.toLowerCase()===kind);
+  return (
+    <div className="assets-wrap">
+      <div className="assets-toolbar">
+        <button className={`btn-${kind==='all'?'p':'s'}`} style={{ padding:'3px 9px', fontSize:11.5 }} onClick={() => setKind('all')}>All {ASSETS.length}</button>
+        <button className={`btn-${kind==='figure'?'p':'s'}`} style={{ padding:'3px 9px', fontSize:11.5 }} onClick={() => setKind('figure')}><Icon name="image" size={11}/> Figures 3</button>
+        <button className={`btn-${kind==='table'?'p':'s'}`} style={{ padding:'3px 9px', fontSize:11.5 }} onClick={() => setKind('table')}><Icon name="table" size={11}/> Tables 3</button>
+        <button className="btn-ghost" style={{ marginLeft:'auto' }}><Icon name="columns" size={12}/></button>
+      </div>
+      <div className="asset-grid">
+        {list.map(a => (
+          <div key={a.id} className="asset-card">
+            <div className="asset-thumb">{a.kind==='Figure' ? <AssetFig n={a.n}/> : <AssetTbl n={a.n}/>}</div>
+            <div className="asset-meta">
+              <div className="asset-kind" style={{ color: a.kind==='Figure' ? T.research : T.writing }}>{a.kind} {a.n}</div>
+              <div className="asset-caption">{a.cap}</div>
+              <div className="asset-pg">p.{a.pg}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop:12, padding:'9px 12px', background:'rgba(94,106,210,0.05)', border:'1px dashed rgba(94,106,210,0.3)', borderRadius:7, fontSize:11.5, color:T.t2, display:'flex', alignItems:'center', gap:8 }}>
+        <Icon name="info" size={12} color={T.read}/>
+        본문에서는 Figure/Table이 인라인 카드로 노출됩니다. 여기는 전체 모아보기입니다.
+      </div>
+    </div>
+  );
+}
+
+function Reading() {
+  const [docTab, setDocTab] = useState('pdf');
+  const [wbTab, setWbTab] = useState('chat');
+  const [split, setSplit] = useState(50);
+  const [parsed, setParsed] = useState(false);
+  const [summarized, setSummarized] = useState(false);
+  const paper = LIBRARY[0];
+  const drag = useRef(null);
+
+  const onDown = (e) => { drag.current = { startX:e.clientX, startSplit:split }; };
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!drag.current) return;
+      const rail = 220, delta = e.clientX - drag.current.startX;
+      const total = window.innerWidth - rail - 5;
+      const next = drag.current.startSplit + (delta/total)*100;
+      setSplit(Math.max(28, Math.min(72, next)));
+    };
+    const onUp = () => drag.current = null;
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
+
+  return (
+    <div className="app">
+      <span className="variant">Variant 1 · Balanced Dual-Pane</span>
+
+      <div className="chrome">
+        <span className="crumb"><Icon name="book" size={13} color={T.read}/><span style={{ color:T.read, fontWeight:550 }}>Reading</span></span>
+        <span className="crumb sep">/</span>
+        <span style={{ color:T.tx, fontWeight:500 }}>Adaptive Skipping</span>
+        <span style={{ marginLeft:'auto', display:'flex', gap:6, alignItems:'center', color:T.t3 }}>
+          <Kbd>⌘</Kbd><Kbd>/</Kbd>
+          <span style={{ fontSize:11.5 }}>command menu</span>
+        </span>
+      </div>
+
+      <div className="metabar">
+        <div style={{ display:'flex', flexDirection:'column', minWidth:0 }}>
+          <div className="title">{paper.title}</div>
+          <div className="byline">
+            <span>{paper.auth}</span><span style={{ color:T.t4 }}>·</span>
+            <Tag label={paper.venue}/>
+            <Tag label={parsed?'parsed':'raw PDF'} color={parsed?T.read:null} dot={parsed}/>
+            {summarized && <Tag label="summary ready" color={T.read} dot/>}
+          </div>
+        </div>
+        <div className="meta-actions">
+          <button className={parsed?'btn-s':'btn-p'} onClick={() => setParsed(true)}>
+            <Icon name={parsed?'check':'sparkles'} size={13}/>{parsed?'Parsed':'Parse paper'}
+          </button>
+          <button className="btn-s" onClick={() => setSummarized(true)}>
+            <Icon name="sparkles" size={13} color={T.read}/>{summarized?'Re-summarize':'Summarize'}
+          </button>
+          <button className="btn-s"><Icon name="grid" size={13}/> Extract assets</button>
+          <div style={{ width:1, height:20, background:T.b1, margin:'0 4px' }}/>
+          <button className="btn-ghost"><Icon name="bookmark" size={14}/></button>
+          <button className="btn-ghost"><Icon name="share" size={14}/></button>
+          <button className="btn-ghost"><Icon name="moreH" size={14}/></button>
+        </div>
+      </div>
+
+      <div className="main">
+        <LeftRail/>
+        <div className="split">
+          <div className="pane" style={{ flex:`0 0 calc(${split}% - 2.5px)` }}>
+            <DocumentHeader tab={docTab} setTab={setDocTab} summarized={summarized}/>
+            <div className="pane-body">
+              {docTab==='pdf' ? <PdfView/> : <SummaryView ready={summarized} onGen={() => setSummarized(true)}/>}
+            </div>
+          </div>
+          <div className="resize" onMouseDown={onDown}/>
+          <div className="pane" style={{ flex:`0 0 calc(${100-split}% - 2.5px)` }}>
+            <WorkbenchHeader tab={wbTab} setTab={setWbTab}/>
+            <div className="pane-body">
+              {wbTab==='chat' && <ChatView parsed={parsed}/>}
+              {wbTab==='notes' && <NotesView/>}
+              {wbTab==='assets' && <AssetsView/>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Reading/>);
+</script>
+</body>
+</html>

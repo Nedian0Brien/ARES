@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARES Search Directions</title>
+  <style>
+    :root {
+      --bg: #fbfbfa;
+      --surface: #ffffff;
+      --surface-muted: #f5f5f4;
+      --surface-soft: #f7f7f6;
+      --border: #e8e8e6;
+      --border-strong: #d4d4d2;
+      --text: #0a0a0b;
+      --text-muted: #4a4a50;
+      --text-soft: #8a8a92;
+      --search: #5e9c6f;
+      --read: #5e6ad2;
+      --result: #c07b3a;
+      --shadow: 0 2px 8px rgba(10, 10, 11, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #171819;
+        --surface: #202224;
+        --surface-muted: #1b1d20;
+        --surface-soft: #26282c;
+        --border: #31343a;
+        --border-strong: #474b52;
+        --text: #f3f4f6;
+        --text-muted: #c0c4cc;
+        --text-soft: #8f95a0;
+        --shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .page {
+      min-height: 100%;
+      padding: 24px;
+    }
+
+    .intro {
+      max-width: 1340px;
+      margin: 0 auto 20px;
+    }
+
+    .intro h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      font-weight: 650;
+    }
+
+    .intro p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.65;
+      max-width: 980px;
+    }
+
+    .comparison {
+      max-width: 1340px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      align-items: start;
+    }
+
+    .direction {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      border-radius: 10px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color 140ms ease, box-shadow 140ms ease;
+    }
+
+    .direction:hover {
+      border-color: var(--border-strong);
+    }
+
+    .direction.selected {
+      border-color: var(--search);
+      box-shadow: 0 0 0 1px rgba(94, 156, 111, 0.18), var(--shadow);
+    }
+
+    .direction-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-soft);
+      display: grid;
+      gap: 8px;
+    }
+
+    .head-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .choice {
+      width: 24px;
+      height: 24px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-soft);
+      font-size: 12px;
+      font-weight: 700;
+      flex: 0 0 auto;
+      background: var(--surface);
+    }
+
+    .direction.selected .choice {
+      border-color: var(--search);
+      background: var(--search);
+      color: #fff;
+    }
+
+    .direction-head h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: -0.015em;
+    }
+
+    .badge {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--surface);
+      flex: 0 0 auto;
+    }
+
+    .badge.recommended {
+      border-color: rgba(94, 156, 111, 0.3);
+      color: var(--search);
+    }
+
+    .direction-head p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .direction-body {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .notes {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .notes-row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .notes-row:first-child {
+      border-top: none;
+    }
+
+    .notes-key {
+      padding: 10px 12px;
+      background: var(--surface-soft);
+      color: var(--text-soft);
+      font-weight: 600;
+    }
+
+    .notes-value {
+      padding: 10px 12px;
+      color: var(--text-muted);
+      line-height: 1.55;
+      background: var(--surface);
+    }
+
+    .app {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .app-top {
+      height: 42px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-soft);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      color: var(--text-soft);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--border-strong);
+    }
+
+    .app-main {
+      display: grid;
+      grid-template-columns: 248px 1fr;
+      min-height: 610px;
+    }
+
+    .sidebar {
+      background: var(--surface-muted);
+      border-right: 1px solid var(--border);
+      padding: 14px 12px;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 16px;
+    }
+
+    .workspace {
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .workspace-mark {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: #2f3437;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+
+    .workspace strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .workspace span {
+      display: block;
+      color: var(--text-soft);
+      font-size: 10px;
+      margin-top: 1px;
+    }
+
+    .nav-group {
+      display: grid;
+      gap: 2px;
+    }
+
+    .nav-item {
+      padding: 7px 8px;
+      border-radius: 7px;
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-item.active {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    .nav-mark {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.65;
+      flex: 0 0 auto;
+    }
+
+    .project-list {
+      display: grid;
+      gap: 4px;
+      align-content: start;
+    }
+
+    .project-item {
+      padding: 8px;
+      border-radius: 7px;
+      color: var(--text-muted);
+      font-size: 12px;
+      display: grid;
+      gap: 3px;
+    }
+
+    .project-item.current {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .project-item strong {
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .project-item span {
+      color: var(--text-soft);
+      line-height: 1.45;
+    }
+
+    .content {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .toolbar {
+      height: 54px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 18px;
+      background: var(--surface);
+    }
+
+    .toolbar-title {
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.015em;
+    }
+
+    .toolbar-copy {
+      font-size: 12px;
+      color: var(--text-soft);
+      margin-top: 2px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .button {
+      height: 30px;
+      padding: 0 11px;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .button.primary {
+      background: #18181b;
+      border-color: #18181b;
+      color: #fff;
+    }
+
+    .stage {
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      background: var(--surface);
+    }
+
+    .searchbar {
+      border: 1px solid var(--border-strong);
+      border-radius: 9px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 8px 8px 12px;
+      background: var(--surface);
+    }
+
+    .searchbar span {
+      color: var(--text-muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mode {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(94, 156, 111, 0.12);
+      color: var(--search);
+      border: 1px solid rgba(94, 156, 111, 0.24);
+    }
+
+    .mode.keyword {
+      background: rgba(94, 106, 210, 0.12);
+      color: var(--read);
+      border-color: rgba(94, 106, 210, 0.24);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 312px;
+      gap: 12px;
+      min-height: 500px;
+    }
+
+    .main-panel,
+    .rail {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .panel-head {
+      height: 40px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .panel-body {
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .context-block {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      background: var(--surface);
+    }
+
+    .context-block h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .context-block p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    .token-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .token {
+      border: 1px solid var(--border);
+      background: var(--surface-soft);
+      color: var(--text-muted);
+      font-size: 11px;
+      padding: 4px 7px;
+      border-radius: 7px;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 12px;
+    }
+
+    .table {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .table-row {
+      display: grid;
+      grid-template-columns: 128px 1fr 132px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .table-row:first-child {
+      border-top: none;
+      background: var(--surface-soft);
+      color: var(--text-soft);
+      font-weight: 600;
+    }
+
+    .cell {
+      padding: 9px 10px;
+      line-height: 1.5;
+    }
+
+    .statlist {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .statline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .statline:first-child {
+      border-top: none;
+    }
+
+    .statline strong {
+      font-size: 18px;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .summary {
+      border: 1px solid rgba(94, 156, 111, 0.24);
+      background: rgba(94, 156, 111, 0.08);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .summary strong {
+      font-size: 12px;
+      color: var(--search);
+    }
+
+    .summary p {
+      margin: 0;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .theme {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .theme-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .theme-title {
+      font-weight: 650;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .theme-sub {
+      color: var(--text-soft);
+      font-size: 11px;
+    }
+
+    .paper-item {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      gap: 5px;
+    }
+
+    .paper-item:first-of-type {
+      border-top: none;
+    }
+
+    .paper-item strong {
+      font-size: 12px;
+      line-height: 1.45;
+      letter-spacing: -0.01em;
+    }
+
+    .paper-item span {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .rail-section {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .rail-title {
+      height: 36px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-soft);
+      display: flex;
+      align-items: center;
+      padding: 0 11px;
+      font-size: 12px;
+      color: var(--text-soft);
+    }
+
+    .rail-body {
+      padding: 10px 11px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .rail-note {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    .rail-list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .rail-item {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.45;
+      padding: 7px 8px;
+      border-radius: 7px;
+      background: var(--surface-soft);
+      border: 1px solid var(--border);
+    }
+
+    .transition-note {
+      border-left: 2px solid var(--read);
+      padding-left: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .footer-note {
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    @media (max-width: 1240px) {
+      .comparison {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="intro">
+      <h1>더 완성된 제품처럼 보이는 두 방향만 남겼습니다</h1>
+      <p>
+        이번 시안은 `uncodixfy` 기준으로 다시 그렸습니다. 큰 둥근 카드, 과한 그림자, 히어로 블록, 설명용 장식은 걷어내고,
+        실제 ARES를 켰을 때 보일 법한 정보 구조만 남겼습니다. 핵심 비교 포인트는 세 가지입니다.
+        `검색 탭이 연구 맥락을 어떻게 시작시키는가`, `Recommended searches가 왜 나오는지 사용자가 이해되는가`,
+        그리고 `Agent Search 결과가 실제 다음 행동으로 자연스럽게 이어지는가`.
+      </p>
+    </div>
+
+    <div class="comparison">
+      <section class="direction" data-choice="a" onclick="toggleSelect(this)">
+        <div class="direction-head">
+          <div class="head-row">
+            <div class="title-wrap">
+              <div class="choice">A</div>
+              <h2>Research Desk</h2>
+            </div>
+            <div class="badge recommended">추천</div>
+          </div>
+          <p>검색 전에는 프로젝트 기억을 짧게 정리해 주고, 검색 후에는 Scout 결과를 연구 작업 흐름으로 바로 연결하는 방식입니다.</p>
+        </div>
+
+        <div class="direction-body">
+          <div class="notes">
+            <div class="notes-row">
+              <div class="notes-key">사용자 가치</div>
+              <div class="notes-value">검색을 시작하기 전에 “무엇을 왜 찾아야 하는지”를 바로 떠올릴 수 있습니다. 추천 검색어도 프로젝트 데이터에서 나온다는 점이 납득됩니다.</div>
+            </div>
+            <div class="notes-row">
+              <div class="notes-key">강한 순간</div>
+              <div class="notes-value">프로젝트를 다시 열었을 때, 연구 초점을 회복하고 다음 탐색 질문을 정하는 순간</div>
+            </div>
+            <div class="notes-row">
+              <div class="notes-key">위험</div>
+              <div class="notes-value">맥락 영역이 너무 커지면 검색 탭이 아니라 프로젝트 홈처럼 보일 수 있으므로 상단 한 블록만 허용</div>
+            </div>
+          </div>
+
+          <div class="app">
+            <div class="app-top">
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <span>ARES · Search</span>
+            </div>
+            <div class="app-main">
+              <aside class="sidebar">
+                <div class="workspace">
+                  <div class="workspace-mark">AR</div>
+                  <div>
+                    <strong>ARES</strong>
+                    <span>Agentic Research Workspace</span>
+                  </div>
+                </div>
+
+                <div class="project-list">
+                  <div class="project-item current">
+                    <strong>RAG Reranker Study</strong>
+                    <span>adaptive skipping · beir · efficiency</span>
+                  </div>
+                  <div class="project-item">
+                    <strong>LLM Reasoning</strong>
+                    <span>verifier · inference-time scaling</span>
+                  </div>
+                </div>
+
+                <div class="nav-group">
+                  <div class="nav-item active"><div class="nav-mark"></div><span>Search</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Reading</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Research</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Result</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Insight</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Writing</span></div>
+                </div>
+
+                <div class="nav-group">
+                  <div class="nav-item"><div class="nav-mark"></div><span>Scout history</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Saved papers</span></div>
+                </div>
+              </aside>
+
+              <div class="content">
+                <div class="toolbar">
+                  <div>
+                    <div class="toolbar-title">Search</div>
+                    <div class="toolbar-copy">프로젝트 맥락에서 논문 후보를 수집하고 Reading으로 넘깁니다.</div>
+                  </div>
+                  <div class="toolbar-actions">
+                    <div class="button">Filter</div>
+                    <div class="button primary">New query</div>
+                  </div>
+                </div>
+
+                <div class="stage">
+                  <div class="searchbar">
+                    <span>"rag reranker" adaptive skipping efficiency</span>
+                    <div class="mode">Agent Search</div>
+                  </div>
+
+                  <div class="layout">
+                    <div class="main-panel">
+                      <div class="panel-head">
+                        <span>Before search</span>
+                        <span>프로젝트 브리프 + 추천 검색</span>
+                      </div>
+                      <div class="panel-body">
+                        <div class="context-block">
+                          <h3>RAG Reranker Study</h3>
+                          <p>검색-생성 파이프라인에서 reranker 비용을 줄이면서 정확도를 유지하는 방법을 검증한다.</p>
+                          <div class="token-row">
+                            <div class="token">rag</div>
+                            <div class="token">reranker</div>
+                            <div class="token">adaptive skipping</div>
+                            <div class="token">beir</div>
+                          </div>
+                        </div>
+
+                        <div class="split">
+                          <div class="table">
+                            <div class="table-row">
+                              <div class="cell">추천 검색</div>
+                              <div class="cell">질의</div>
+                              <div class="cell">도출 근거</div>
+                            </div>
+                            <div class="table-row">
+                              <div class="cell">대표 질의</div>
+                              <div class="cell">"rag reranker" adaptive skipping efficiency</div>
+                              <div class="cell">defaultQuery</div>
+                            </div>
+                            <div class="table-row">
+                              <div class="cell">최근 동향</div>
+                              <div class="cell">rag reranker recent papers</div>
+                              <div class="cell">keyword 0+1</div>
+                            </div>
+                            <div class="table-row">
+                              <div class="cell">검증 관점</div>
+                              <div class="cell">adaptive skipping reproducibility</div>
+                              <div class="cell">focus + keyword</div>
+                            </div>
+                          </div>
+
+                          <div class="statlist">
+                            <div class="statline"><span>Saved papers</span><strong>1</strong></div>
+                            <div class="statline"><span>Reading queue</span><strong>0</strong></div>
+                            <div class="statline"><span>지금 필요한 것</span><span>넓은 탐색으로 후보 수집</span></div>
+                          </div>
+                        </div>
+
+                        <div class="summary">
+                          <strong>After Agent Search</strong>
+                          <p>Scout 결과는 “relevance 순 리스트”보다 먼저, 지금 프로젝트에서 어떤 논문군이 왜 중요한지 한 문단으로 요약됩니다.</p>
+                        </div>
+
+                        <div class="theme">
+                          <div class="theme-head">
+                            <div>
+                              <div class="theme-title">Theme 1 · cost-aware reranking</div>
+                              <div class="theme-sub">프로젝트 focus와 가장 직접적으로 맞는 후보군</div>
+                            </div>
+                            <span>2 papers</span>
+                          </div>
+                          <div class="paper-item">
+                            <strong>Reducing Reranker Costs in RAG via Adaptive Skipping</strong>
+                            <span>Scout summary를 읽고 바로 Save / Read / Preview로 넘어가는 대표 카드</span>
+                          </div>
+                          <div class="paper-item">
+                            <strong>Efficient RAG with Lightweight Rerankers</strong>
+                            <span>비교군 확보와 benchmark 확장 탐색에 쓰이는 보조 카드</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <aside class="rail">
+                      <div class="panel-head">
+                        <span>Right panel</span>
+                        <span>기본: Scout panel</span>
+                      </div>
+                      <div class="panel-body">
+                        <div class="rail-section">
+                          <div class="rail-title">Scout brief</div>
+                          <div class="rail-body">
+                            <div class="rail-note">Adaptive skipping과 lightweight reranker 두 흐름이 보입니다. 지금은 cost-relevance 균형을 먼저 보는 쪽이 적합합니다.</div>
+                          </div>
+                        </div>
+
+                        <div class="rail-section">
+                          <div class="rail-title">Follow-up queries</div>
+                          <div class="rail-body">
+                            <div class="rail-list">
+                              <div class="rail-item">benchmark compare for adaptive reranking</div>
+                              <div class="rail-item">beir latency tradeoff reranker</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="rail-section">
+                          <div class="rail-title">Panel switch</div>
+                          <div class="rail-body">
+                            <div class="transition-note">논문 카드를 클릭하면 이 패널이 Paper preview로 바뀌고, abstract / why relevant / Save / Read가 나타납니다.</div>
+                          </div>
+                        </div>
+                      </div>
+                    </aside>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer-note">
+            이 방향은 “검색 탭이 프로젝트 메모리를 바탕으로 연구 질문을 다시 세우는 장소”라는 인상을 줍니다.
+          </div>
+        </div>
+      </section>
+
+      <section class="direction" data-choice="b" onclick="toggleSelect(this)">
+        <div class="direction-head">
+          <div class="head-row">
+            <div class="title-wrap">
+              <div class="choice">B</div>
+              <h2>Search Console</h2>
+            </div>
+            <div class="badge">대안</div>
+          </div>
+          <p>검색 자체를 먼저 두고, 프로젝트 맥락은 우측 레일에 압축해 두는 방식입니다. 빠르지만 프로젝트 워크스페이스다운 인상은 약해집니다.</p>
+        </div>
+
+        <div class="direction-body">
+          <div class="notes">
+            <div class="notes-row">
+              <div class="notes-key">사용자 가치</div>
+              <div class="notes-value">바로 검색하려는 사용자에겐 가장 익숙합니다. 첫 진입 때도 곧바로 결과 영역 구조를 이해할 수 있습니다.</div>
+            </div>
+            <div class="notes-row">
+              <div class="notes-key">강한 순간</div>
+              <div class="notes-value">이미 검색 목적이 분명하고, 프로젝트 맥락보다 결과 조작이 더 중요한 순간</div>
+            </div>
+            <div class="notes-row">
+              <div class="notes-key">위험</div>
+              <div class="notes-value">빈 결과 영역의 허전함이 줄어들지만, ARES가 프로젝트 기반 연구 워크스페이스라는 차별점이 옅어짐</div>
+            </div>
+          </div>
+
+          <div class="app">
+            <div class="app-top">
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <span>ARES · Search</span>
+            </div>
+            <div class="app-main">
+              <aside class="sidebar">
+                <div class="workspace">
+                  <div class="workspace-mark">AR</div>
+                  <div>
+                    <strong>ARES</strong>
+                    <span>Agentic Research Workspace</span>
+                  </div>
+                </div>
+
+                <div class="project-list">
+                  <div class="project-item current">
+                    <strong>RAG Reranker Study</strong>
+                    <span>adaptive skipping · beir · efficiency</span>
+                  </div>
+                  <div class="project-item">
+                    <strong>LLM Reasoning</strong>
+                    <span>verifier · inference-time scaling</span>
+                  </div>
+                </div>
+
+                <div class="nav-group">
+                  <div class="nav-item active"><div class="nav-mark"></div><span>Search</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Reading</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Research</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Result</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Insight</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Writing</span></div>
+                </div>
+
+                <div class="nav-group">
+                  <div class="nav-item"><div class="nav-mark"></div><span>Search scope</span></div>
+                  <div class="nav-item"><div class="nav-mark"></div><span>Saved papers</span></div>
+                </div>
+              </aside>
+
+              <div class="content">
+                <div class="toolbar">
+                  <div>
+                    <div class="toolbar-title">Search</div>
+                    <div class="toolbar-copy">결과 조작과 필터링이 먼저 보이는 구조입니다.</div>
+                  </div>
+                  <div class="toolbar-actions">
+                    <div class="button">Scope</div>
+                    <div class="button">Sort</div>
+                  </div>
+                </div>
+
+                <div class="stage">
+                  <div class="searchbar">
+                    <span>"rag reranker" adaptive skipping efficiency</span>
+                    <div class="mode keyword">Keyword Search</div>
+                  </div>
+
+                  <div class="layout">
+                    <div class="main-panel">
+                      <div class="panel-head">
+                        <span>Before search</span>
+                        <span>검색 구조가 먼저 보임</span>
+                      </div>
+                      <div class="panel-body">
+                        <div class="summary" style="border-color: rgba(94, 106, 210, 0.24); background: rgba(94, 106, 210, 0.08);">
+                          <strong style="color: var(--read);">Initial state</strong>
+                          <p>빈 결과 리스트 대신 추천 검색어와 최근 scope를 보여주지만, 맥락은 메인보다 오른쪽 레일에 더 많이 남겨둡니다.</p>
+                        </div>
+
+                        <div class="table">
+                          <div class="table-row">
+                            <div class="cell">추천 검색</div>
+                            <div class="cell">질의</div>
+                            <div class="cell">근거</div>
+                          </div>
+                          <div class="table-row">
+                            <div class="cell">빠른 시작</div>
+                            <div class="cell">"rag reranker" adaptive skipping efficiency</div>
+                            <div class="cell">defaultQuery</div>
+                          </div>
+                          <div class="table-row">
+                            <div class="cell">확장 탐색</div>
+                            <div class="cell">rag reranker recent papers</div>
+                            <div class="cell">keyword 0+1</div>
+                          </div>
+                        </div>
+
+                        <div class="theme">
+                          <div class="theme-head">
+                            <div>
+                              <div class="theme-title">After Agent Search</div>
+                              <div class="theme-sub">리포트보다는 결과 컨트롤의 성격이 강함</div>
+                            </div>
+                            <span>list-first</span>
+                          </div>
+                          <div class="paper-item">
+                            <strong>Scout summary block</strong>
+                            <span>상단에 짧게 붙지만 메인 인상은 여전히 result console에 가깝습니다.</span>
+                          </div>
+                          <div class="paper-item">
+                            <strong>Grouped paper list</strong>
+                            <span>논문은 잘 보이나, “왜 이 논문군인가”의 이야기성은 조금 약합니다.</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <aside class="rail">
+                      <div class="panel-head">
+                        <span>Right rail</span>
+                        <span>project context</span>
+                      </div>
+                      <div class="panel-body">
+                        <div class="rail-section">
+                          <div class="rail-title">Project context</div>
+                          <div class="rail-body">
+                            <div class="rail-note">focus, keywords, saved / queue 정보가 이쪽에 모입니다. 메인은 검색, 레일은 맥락이라는 역할 분리가 분명합니다.</div>
+                          </div>
+                        </div>
+
+                        <div class="rail-section">
+                          <div class="rail-title">Recommended searches</div>
+                          <div class="rail-body">
+                            <div class="rail-list">
+                              <div class="rail-item">adaptive skipping reproducibility</div>
+                              <div class="rail-item">beir reranker efficiency</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="rail-section">
+                          <div class="rail-title">Panel switch</div>
+                          <div class="rail-body">
+                            <div class="transition-note">논문 클릭 시 Scout panel 대신 Paper preview로 바뀌는 건 동일하지만, 기본 레일이 context 성격이라 agent 존재감은 더 약합니다.</div>
+                          </div>
+                        </div>
+                      </div>
+                    </aside>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer-note">
+            이 방향은 익숙하고 다루기 쉽지만, “ARES가 그냥 검색 콘솔이 아니라 연구 워크스페이스다”라는 메시지는 덜 강합니다.
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

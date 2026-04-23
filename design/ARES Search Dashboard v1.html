@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ARES · Search Dashboard · V1 Analytics-First</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #fbfbfa;
+    --sb: #f5f5f4;
+    --s1: #ffffff;
+    --s2: #f7f7f6;
+    --s3: #f0efed;
+    --b1: #e8e8e6;
+    --b2: #d4d4d2;
+    --tx: #0a0a0b;
+    --t2: #4a4a50;
+    --t3: #8a8a92;
+    --t4: #b0b0b8;
+    --accent: #5e6ad2;
+    --c-search: #5e9c6f;
+    --c-scout: #5e6ad2;
+    --c-read: #8957c9;
+    --c-research: #c48a3e;
+    --c-result: #3fa8a1;
+    --warn: #c87f3a;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    background: var(--bg);
+    color: var(--tx);
+    font-size: 13px;
+    letter-spacing: -0.006em;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace; font-feature-settings: 'zero'; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #d8d7d3; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #b8b7b3; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------- APP SHELL ---------- */
+  .app { display: grid; grid-template-columns: 56px 1fr auto; height: 100vh; }
+  .rail {
+    background: var(--sb);
+    border-right: 1px solid var(--b1);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 10px 0; gap: 2px;
+  }
+  .rail-brand {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(135deg, #2a2a2e, #0a0a0b);
+    color: white; display: grid; place-items: center;
+    font-weight: 700; font-size: 12px; letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .rail-btn {
+    width: 36px; height: 36px; border-radius: 6px;
+    display: grid; place-items: center;
+    color: var(--t3); cursor: pointer;
+    border: none; background: transparent;
+    transition: background 120ms, color 120ms;
+  }
+  .rail-btn:hover { background: rgba(0,0,0,0.04); color: var(--t2); }
+  .rail-btn.active { background: var(--s1); color: var(--tx); box-shadow: 0 0 0 1px var(--b1); }
+  .rail-sep { flex: 1; }
+  .rail-foot { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; }
+
+  /* ---------- MAIN ---------- */
+  .main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .topbar {
+    height: 44px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 16px; border-bottom: 1px solid var(--b1);
+    background: var(--bg);
+  }
+  .crumb { color: var(--t3); font-size: 12px; }
+  .crumb strong { color: var(--tx); font-weight: 500; }
+  .crumb-sep { color: var(--t4); padding: 0 6px; }
+  .stage-chips { display: flex; gap: 2px; margin-left: 18px; }
+  .stage-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 9px; border-radius: 5px;
+    font-size: 12px; color: var(--t2); cursor: pointer;
+    border: none; background: transparent;
+  }
+  .stage-chip:hover { background: var(--s2); }
+  .stage-chip.active { background: var(--s1); box-shadow: 0 0 0 1px var(--b1); color: var(--tx); }
+  .stage-chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .topbar-spacer { flex: 1; }
+  .top-action { width: 28px; height: 28px; display: grid; place-items: center; color: var(--t3); border-radius: 5px; cursor: pointer; }
+  .top-action:hover { background: var(--s2); color: var(--t2); }
+  .avatar { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, #d4b37a, #a67c3f); color: white; display: grid; place-items: center; font-size: 10px; font-weight: 600; margin-left: 8px; }
+
+  /* ---------- BODY SCROLL ---------- */
+  .scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+  .scroll-inner { max-width: 1560px; margin: 0 auto; padding: 20px 28px 80px; }
+
+  /* ---------- HERO SEARCH (STICKY) ---------- */
+  .hero {
+    position: sticky; top: 0; z-index: 8;
+    background: var(--bg);
+    padding: 12px 28px 14px;
+    margin: 0 -28px 4px;
+    border-bottom: 1px solid transparent;
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+  .hero-inner { max-width: 1504px; margin: 0 auto; }
+  .hero-label { color: var(--t3); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .hero-input {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--s1); border: 1px solid var(--b1); border-radius: 10px;
+    padding: 0 8px 0 14px; height: 44px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  }
+  .hero-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(94,106,210,0.1); }
+  .hero-lead { color: var(--t3); display: grid; place-items: center; }
+  .hero-input input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-family: inherit; font-size: 14px; color: var(--tx);
+  }
+  .hero-input input::placeholder { color: var(--t4); }
+  .mode-toggle { display: flex; gap: 2px; padding: 3px; background: var(--s2); border-radius: 7px; }
+  .mode-btn {
+    border: none; background: transparent;
+    padding: 5px 11px; border-radius: 5px;
+    font-family: inherit; font-size: 12px; font-weight: 500;
+    color: var(--t2); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .mode-btn.active { background: var(--s1); color: var(--tx); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .submit-btn {
+    background: var(--tx); color: white; border: none;
+    padding: 0 14px; height: 32px; border-radius: 6px;
+    font-family: inherit; font-size: 12px; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  }
+  .submit-btn:hover { background: #2a2a2e; }
+
+  .hero-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .scope-label { font-size: 11px; color: var(--t3); }
+  .scope-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 8px 3px 8px; border-radius: 11px;
+    background: var(--s2); border: 1px solid var(--b1);
+    font-size: 11px; color: var(--t2);
+  }
+  .scope-chip .x { color: var(--t4); margin-left: 2px; cursor: pointer; }
+  .scope-add {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 11px;
+    background: transparent; border: 1px dashed var(--b2);
+    font-size: 11px; color: var(--t3); cursor: pointer;
+  }
+  .scope-add:hover { border-color: var(--t3); color: var(--t2); }
+
+  /* ---------- SECTION HEADING ---------- */
+  .sec-head { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; }
+  .sec-head h2 { font-size: 13px; font-weight: 600; color: var(--tx); letter-spacing: -0.01em; }
+  .sec-head .hint { font-size: 11px; color: var(--t3); }
+  .sec-head .more { margin-left: auto; font-size: 11px; color: var(--t3); cursor: pointer; }
+  .sec-head .more:hover { color: var(--accent); }
+
+  /* ---------- KPI STRIP ---------- */
+  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .kpi {
+    background: var(--s1); border: 1px solid var(--b1); border-radius: 10px;
+    padding: 14px 14px 12px;
+    display: flex; flex-direction: column; gap: 2px;
+    position: relative; overflow: hidden;
+  }
+  .kpi-label { font-size: 11px; color: var(--t3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+  .kpi-val { font-size: 24px; font-weight: 600; color: var(--tx); letter-spacing: -0.02em; margin-top: 3px; }
+  .kpi-sub { font-size: 11px; color: var(--t3); margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+  .kpi-sub .delta { color: var(--c-search); font-weight: 500; }
+  .kpi-sub .delta.neg { color: var(--warn); }
+  .kpi-bar { position: absolute; left: 0; top: 0; height: 2px; width: 100%; background: var(--s3); }
+  .kpi-bar span { display: block; height: 100%; background: var(--c-search); }
+  .kpi .spark { position: absolute; right: 10px; bottom: 8px; opacity: 0.7; }
+
+  /* ---------- CHART GRID ---------- */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 10px;
+  }
+  .chart-grid .row2 { grid-column: 1 / -1; display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; }
+  .card {
+    background: var(--s1); border: 1px solid var(--b1); border-radius: 10px;
+    padding: 14px 16px; display: flex; flex-direction: column; min-height: 0;
+  }
+  .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--tx); }
+  .card-sub { font-size: 11px; color: var(--t3); }
+  .toggle-group { display: inline-flex; gap: 1px; padding: 2px; background: var(--s2); border-radius: 6px; }
+  .toggle-group button { border: none; background: transparent; font-family: inherit; font-size: 10.5px; color: var(--t3); padding: 3px 7px; border-radius: 4px; cursor: pointer; }
+  .toggle-group button.active { background: var(--s1); color: var(--tx); box-shadow: 0 1px 1px rgba(0,0,0,0.03); }
+
+  /* Chart: 수집 추이 (area) */
+  .chart-area { width: 100%; height: 180px; }
+
+  /* Chart: 워크플로우 상태 (funnel-ish stacked bars) */
+  .funnel { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+  .funnel-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+  .funnel-label { width: 90px; color: var(--t2); flex-shrink: 0; }
+  .funnel-bar { flex: 1; height: 16px; border-radius: 4px; background: var(--s2); position: relative; overflow: hidden; }
+  .funnel-bar span { display: block; height: 100%; border-radius: 4px; }
+  .funnel-val { width: 52px; text-align: right; color: var(--t2); font-variant-numeric: tabular-nums; }
+  .funnel-pct { width: 40px; text-align: right; color: var(--t3); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  /* Chart: 폴더별 분포 (horizontal bar list) */
+  .bars { display: flex; flex-direction: column; gap: 6px; }
+  .bars .row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .bars .swatch { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .bars .label { flex: 1; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bars .bar { width: 100px; height: 6px; background: var(--s2); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+  .bars .bar span { display: block; height: 100%; }
+  .bars .n { width: 28px; text-align: right; color: var(--t2); font-variant-numeric: tabular-nums; }
+
+  /* Chart: 출처 분포 (donut) */
+  .donut-wrap { display: flex; align-items: center; gap: 14px; }
+  .donut { flex-shrink: 0; }
+  .donut-legend { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; }
+  .donut-legend .item { display: flex; align-items: center; gap: 6px; color: var(--t2); }
+  .donut-legend .sw { width: 8px; height: 8px; border-radius: 2px; }
+  .donut-legend .n { color: var(--t3); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  /* Chart: 태그 분포 (tag cloud) */
+  .tag-cloud { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+  .tag-item {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 9px; border-radius: 12px;
+    background: var(--s2); color: var(--t2);
+    font-size: 11.5px;
+  }
+  .tag-item .count { color: var(--t3); font-size: 10px; }
+  .tag-item.auto { background: rgba(94,106,210,0.08); color: #434ba8; }
+  .tag-item.manual { background: rgba(137,87,201,0.08); color: #6b3f9f; }
+  .tag-legend { display: flex; gap: 10px; font-size: 10.5px; color: var(--t3); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--b1); }
+  .tag-legend .swatch { width: 7px; height: 7px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: middle; }
+
+  /* ---------- COLLECTION TABLE ---------- */
+  .tbl-head { display: flex; align-items: center; gap: 8px; margin: 22px 0 8px; flex-wrap: wrap; }
+  .tbl-head h2 { font-size: 13px; font-weight: 600; color: var(--tx); letter-spacing: -0.01em; margin-right: 6px; }
+  .filter-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .f-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px; border-radius: 12px;
+    background: transparent; border: 1px solid var(--b1);
+    font-size: 11.5px; color: var(--t2);
+    cursor: pointer;
+  }
+  .f-chip:hover { background: var(--s2); }
+  .f-chip.active { background: var(--tx); color: white; border-color: var(--tx); }
+  .f-chip .n { color: var(--t4); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .f-chip.active .n { color: rgba(255,255,255,0.6); }
+  .tbl-head .tool { margin-left: auto; display: flex; gap: 4px; }
+  .tool-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 6px;
+    background: var(--s1); border: 1px solid var(--b1);
+    font-size: 11.5px; color: var(--t2); cursor: pointer;
+  }
+  .tool-btn:hover { background: var(--s2); }
+
+  .tbl { background: var(--s1); border: 1px solid var(--b1); border-radius: 10px; overflow: hidden; }
+  .tbl-row {
+    display: grid;
+    grid-template-columns: 28px minmax(260px,1fr) 120px 100px 130px 180px 110px 90px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--b1);
+    font-size: 12.5px;
+    min-height: 46px;
+  }
+  .tbl-row:last-child { border-bottom: none; }
+  .tbl-row.header {
+    background: var(--s2); font-size: 10.5px;
+    color: var(--t3); text-transform: uppercase;
+    letter-spacing: 0.06em; font-weight: 500;
+    min-height: 30px; padding: 6px 14px;
+  }
+  .tbl-row.data:hover { background: var(--s2); cursor: pointer; }
+  .tbl-row.selected { background: rgba(94,106,210,0.04); box-shadow: inset 2px 0 0 var(--accent); }
+  .ck { width: 14px; height: 14px; border: 1px solid var(--b2); border-radius: 3px; background: var(--s1); display: grid; place-items: center; }
+  .ck.on { background: var(--accent); border-color: var(--accent); color: white; }
+  .tbl-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tbl-title .t { color: var(--tx); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tbl-title .a { color: var(--t3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tbl .venue { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--t2); }
+  .tbl .venue .vbar { width: 3px; height: 11px; border-radius: 2px; }
+  .tbl .year { color: var(--t3); font-size: 11.5px; }
+  .tbl .saved { color: var(--t3); font-size: 11.5px; }
+
+  .cell-folder {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px 3px 7px; border-radius: 6px;
+    background: var(--s2); border: 1px solid var(--b1);
+    font-size: 11.5px; color: var(--t2); cursor: pointer;
+    max-width: 100%; overflow: hidden;
+  }
+  .cell-folder:hover { background: var(--s1); border-color: var(--b2); }
+  .cell-folder .swatch { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+  .cell-folder.empty { border-style: dashed; color: var(--t3); background: transparent; }
+  .cell-folder.empty:hover { color: var(--t2); border-color: var(--t3); }
+
+  .cell-tags { display: flex; gap: 3px; flex-wrap: wrap; min-width: 0; align-items: center; }
+  .tag-pill {
+    display: inline-flex; align-items: center;
+    padding: 2px 7px; border-radius: 10px;
+    font-size: 10.5px; line-height: 1.4;
+  }
+  .tag-pill.auto { background: rgba(94,106,210,0.08); color: #434ba8; }
+  .tag-pill.manual { background: rgba(137,87,201,0.08); color: #6b3f9f; }
+  .tag-add { color: var(--t3); padding: 2px 6px; font-size: 11px; cursor: pointer; border-radius: 10px; border: 1px dashed var(--b2); }
+  .tag-add:hover { color: var(--t2); border-color: var(--t3); }
+
+  .cell-queue {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: 10px;
+    font-size: 11px;
+  }
+  .cell-queue.on { background: rgba(63,168,161,0.1); color: #2e7873; }
+  .cell-queue.off { color: var(--t4); border: 1px dashed var(--b2); background: transparent; }
+  .cell-queue .dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  .cell-pdf {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 3px 9px; border-radius: 6px;
+    font-size: 11px; font-weight: 500;
+    cursor: pointer;
+  }
+  .cell-pdf.empty { color: var(--t3); border: 1px dashed var(--b2); background: var(--s2); }
+  .cell-pdf.empty:hover { color: var(--accent); border-color: var(--accent); border-style: solid; background: rgba(94,106,210,0.04); }
+  .cell-pdf.on { color: #5e9c6f; background: rgba(94,156,111,0.1); }
+
+  .tbl-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; font-size: 11.5px; color: var(--t3);
+    background: var(--s2); border-top: 1px solid var(--b1);
+  }
+  .page-btns { display: flex; gap: 4px; }
+  .page-btn { width: 22px; height: 22px; border-radius: 4px; display: grid; place-items: center; color: var(--t3); cursor: pointer; border: 1px solid transparent; background: transparent; }
+  .page-btn:hover { background: var(--s1); border-color: var(--b1); color: var(--t2); }
+  .page-btn.active { background: var(--s1); border-color: var(--b1); color: var(--tx); }
+
+  /* ---------- DETAIL DRAWER ---------- */
+  .drawer { width: 42px; flex-shrink: 0; background: var(--sb); border-left: 1px solid var(--b1); display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 2px; }
+  .dr-btn { width: 34px; height: 34px; display: grid; place-items: center; color: var(--t3); border-radius: 5px; cursor: pointer; position: relative; }
+  .dr-btn:hover { background: rgba(0,0,0,0.035); color: var(--t2); }
+  .dr-btn.badge::after { content: ''; position: absolute; top: 5px; right: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+
+  /* ---------- FOOTER META ---------- */
+  .variant-badge {
+    position: fixed; left: 68px; bottom: 12px; z-index: 20;
+    padding: 6px 10px 6px 28px; border-radius: 6px;
+    background: var(--s1); border: 1px solid var(--b1);
+    font-size: 10.5px; color: var(--t2);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .variant-badge::before {
+    content: ''; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 8px; height: 8px; border-radius: 50%; background: var(--c-search);
+  }
+  .variant-badge strong { color: var(--tx); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- LEFT RAIL -->
+  <aside class="rail">
+    <div class="rail-brand">A</div>
+    <button class="rail-btn active" title="Search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    </button>
+    <button class="rail-btn" title="Reading">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h6a2 2 0 0 1 2 2 2 2 0 0 1 2-2h6V4h-6a4 4 0 0 0-2 1 4 4 0 0 0-2-1H4z"/></svg>
+    </button>
+    <button class="rail-btn" title="Research">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+    </button>
+    <button class="rail-btn" title="Result">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+    </button>
+    <div class="rail-sep"></div>
+    <div class="rail-foot">
+      <button class="rail-btn" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.08 7.08 4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.08-7.08 4.24-4.24"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <span class="crumb"><strong>Literature Review — Trust-region methods</strong></span>
+      <nav class="stage-chips" aria-label="Stage">
+        <button class="stage-chip active"><span class="dot" style="background:var(--c-search)"></span>Search</button>
+        <button class="stage-chip"><span class="dot" style="background:var(--c-read)"></span>Reading</button>
+        <button class="stage-chip"><span class="dot" style="background:var(--c-research)"></span>Research</button>
+        <button class="stage-chip"><span class="dot" style="background:var(--c-result)"></span>Result</button>
+      </nav>
+      <div class="topbar-spacer"></div>
+      <button class="top-action" title="Command">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
+      </button>
+      <button class="top-action" title="Notifications">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      </button>
+      <div class="avatar">MP</div>
+    </header>
+
+    <!-- SCROLL BODY -->
+    <div class="scroll">
+      <div class="scroll-inner">
+        <!-- HERO SEARCH -->
+        <section class="hero">
+          <div class="hero-inner">
+            <div class="hero-label">Search — Collect &amp; Organize</div>
+            <form class="hero-input" onsubmit="return false">
+              <span class="hero-lead"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+              <input placeholder="논문을 검색하거나, Scout에게 주제를 맡기세요..." />
+              <div class="mode-toggle" role="tablist">
+                <button type="button" class="mode-btn active"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search</button>
+                <button type="button" class="mode-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 9.2 9.2 2 12l7.2 2.8L12 22l2.8-7.2L22 12l-7.2-2.8z"/></svg>Scout</button>
+              </div>
+              <button type="submit" class="submit-btn">Search<span class="kbd" style="opacity:0.6">⏎</span></button>
+            </form>
+            <div class="hero-meta">
+              <span class="scope-label">Target</span>
+              <span class="scope-chip"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/></svg>NeurIPS 2021–2025<span class="x">×</span></span>
+              <span class="scope-chip"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/></svg>ICML 2022–2025<span class="x">×</span></span>
+              <span class="scope-chip"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M2 12h20"/></svg>arXiv · cs.LG<span class="x">×</span></span>
+              <button type="button" class="scope-add"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add target</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- KPI STRIP -->
+        <div class="sec-head">
+          <h2>Collection overview</h2>
+          <span class="hint">프로젝트 라이브러리 기준 · 최근 30일</span>
+          <span class="more">View history</span>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-bar"><span style="width:100%; background:#2a2a2e"></span></div>
+            <div class="kpi-label">총 수집 논문</div>
+            <div class="kpi-val">248</div>
+            <div class="kpi-sub"><span class="delta">+14</span><span>지난 7일</span></div>
+            <svg class="spark" width="60" height="20" viewBox="0 0 60 20" fill="none"><polyline points="0,14 10,12 20,13 30,9 40,10 50,6 60,5" stroke="#2a2a2e" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="kpi">
+            <div class="kpi-bar"><span style="width:62%; background:var(--c-read)"></span></div>
+            <div class="kpi-label">폴더 지정</div>
+            <div class="kpi-val">154 <span style="font-size:13px; color:var(--t3); font-weight:400;">/ 248</span></div>
+            <div class="kpi-sub"><span style="color:var(--warn)">94</span><span>미분류</span></div>
+            <svg class="spark" width="60" height="20" viewBox="0 0 60 20"><rect x="2" y="10" width="4" height="8" rx="1" fill="#8957c9" opacity="0.25"/><rect x="10" y="8" width="4" height="10" rx="1" fill="#8957c9" opacity="0.35"/><rect x="18" y="5" width="4" height="13" rx="1" fill="#8957c9" opacity="0.5"/><rect x="26" y="7" width="4" height="11" rx="1" fill="#8957c9" opacity="0.6"/><rect x="34" y="4" width="4" height="14" rx="1" fill="#8957c9" opacity="0.7"/><rect x="42" y="3" width="4" height="15" rx="1" fill="#8957c9" opacity="0.85"/><rect x="50" y="2" width="4" height="16" rx="1" fill="#8957c9"/></svg>
+          </div>
+          <div class="kpi">
+            <div class="kpi-bar"><span style="width:34%; background:var(--c-result)"></span></div>
+            <div class="kpi-label">Reading queue</div>
+            <div class="kpi-val">42</div>
+            <div class="kpi-sub"><span class="delta">+6</span><span>대기 중</span></div>
+            <svg class="spark" width="60" height="20" viewBox="0 0 60 20" fill="none"><polyline points="0,18 10,14 20,15 30,12 40,10 50,8 60,6" stroke="#3fa8a1" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>
+          </div>
+          <div class="kpi">
+            <div class="kpi-bar"><span style="width:58%; background:var(--c-scout)"></span></div>
+            <div class="kpi-label">태그 생성</div>
+            <div class="kpi-val">144</div>
+            <div class="kpi-sub"><span style="color:var(--t3);">자동 118 · 수동 26</span></div>
+            <svg class="spark" width="60" height="20" viewBox="0 0 60 20" fill="none"><polyline points="0,16 10,14 20,11 30,12 40,8 50,7 60,4" stroke="#5e6ad2" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>
+          </div>
+          <div class="kpi">
+            <div class="kpi-bar"><span style="width:23%; background:var(--c-search)"></span></div>
+            <div class="kpi-label">PDF 수집</div>
+            <div class="kpi-val">56 <span style="font-size:13px; color:var(--t3); font-weight:400;">/ 248</span></div>
+            <div class="kpi-sub"><span style="color:var(--warn)">192</span><span>없음</span></div>
+            <svg class="spark" width="60" height="20" viewBox="0 0 60 20"><rect x="2" y="13" width="4" height="5" rx="1" fill="#5e9c6f" opacity="0.3"/><rect x="10" y="10" width="4" height="8" rx="1" fill="#5e9c6f" opacity="0.45"/><rect x="18" y="11" width="4" height="7" rx="1" fill="#5e9c6f" opacity="0.45"/><rect x="26" y="8" width="4" height="10" rx="1" fill="#5e9c6f" opacity="0.6"/><rect x="34" y="7" width="4" height="11" rx="1" fill="#5e9c6f" opacity="0.7"/><rect x="42" y="5" width="4" height="13" rx="1" fill="#5e9c6f" opacity="0.85"/><rect x="50" y="4" width="4" height="14" rx="1" fill="#5e9c6f"/></svg>
+          </div>
+        </div>
+
+        <!-- CHART GRID -->
+        <div class="sec-head">
+          <h2>Workspace analytics</h2>
+          <span class="hint">수집 흐름 · 분류 현황 · 주제 분포</span>
+        </div>
+        <div class="chart-grid">
+          <!-- 수집 추이 (big area) -->
+          <article class="card" style="grid-column: 1; grid-row: 1;">
+            <div class="card-head">
+              <div>
+                <div class="card-title">수집 추이</div>
+                <div class="card-sub">최근 기간별 수집 논문 수</div>
+              </div>
+              <div class="toggle-group">
+                <button>7D</button><button class="active">30D</button><button>90D</button><button>ALL</button>
+              </div>
+            </div>
+            <svg class="chart-area" viewBox="0 0 640 180" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="gArea" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#5e9c6f" stop-opacity="0.28"/>
+                  <stop offset="100%" stop-color="#5e9c6f" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <!-- gridlines -->
+              <g stroke="#efeeeb" stroke-width="1">
+                <line x1="0" y1="30" x2="640" y2="30"/>
+                <line x1="0" y1="80" x2="640" y2="80"/>
+                <line x1="0" y1="130" x2="640" y2="130"/>
+              </g>
+              <!-- area + line -->
+              <path d="M0,140 L30,135 L60,128 L90,130 L120,115 L150,118 L180,108 L210,100 L240,95 L270,100 L300,88 L330,80 L360,70 L390,72 L420,60 L450,55 L480,50 L510,42 L540,38 L570,32 L600,28 L640,22 L640,180 L0,180 Z" fill="url(#gArea)"/>
+              <path d="M0,140 L30,135 L60,128 L90,130 L120,115 L150,118 L180,108 L210,100 L240,95 L270,100 L300,88 L330,80 L360,70 L390,72 L420,60 L450,55 L480,50 L510,42 L540,38 L570,32 L600,28 L640,22" fill="none" stroke="#5e9c6f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- axis labels -->
+              <g font-family="Inter,sans-serif" font-size="10" fill="#8a8a92">
+                <text x="0" y="175">Mar 24</text>
+                <text x="160" y="175">Mar 31</text>
+                <text x="320" y="175">Apr 7</text>
+                <text x="480" y="175">Apr 14</text>
+                <text x="600" y="175">Today</text>
+              </g>
+              <!-- annotation -->
+              <circle cx="420" cy="60" r="3" fill="#5e9c6f"/>
+              <circle cx="420" cy="60" r="7" fill="#5e9c6f" opacity="0.18"/>
+              <text x="432" y="55" font-family="Inter,sans-serif" font-size="10.5" fill="#2a2a2e" font-weight="500">scout run +12</text>
+            </svg>
+          </article>
+
+          <!-- 워크플로우 상태 -->
+          <article class="card" style="grid-column: 2; grid-row: 1;">
+            <div class="card-head">
+              <div>
+                <div class="card-title">워크플로우 상태</div>
+                <div class="card-sub">수집 → Reading 흐름</div>
+              </div>
+            </div>
+            <div class="funnel">
+              <div class="funnel-row"><span class="funnel-label">수집됨</span><div class="funnel-bar"><span style="width:100%; background:#2a2a2e"></span></div><span class="funnel-val mono">248</span><span class="funnel-pct mono">100%</span></div>
+              <div class="funnel-row"><span class="funnel-label">폴더 지정</span><div class="funnel-bar"><span style="width:62%; background:#8957c9"></span></div><span class="funnel-val mono">154</span><span class="funnel-pct mono">62%</span></div>
+              <div class="funnel-row"><span class="funnel-label">태그 생성</span><div class="funnel-bar"><span style="width:58%; background:#5e6ad2"></span></div><span class="funnel-val mono">144</span><span class="funnel-pct mono">58%</span></div>
+              <div class="funnel-row"><span class="funnel-label">Reading queue</span><div class="funnel-bar"><span style="width:17%; background:#3fa8a1"></span></div><span class="funnel-val mono">42</span><span class="funnel-pct mono">17%</span></div>
+              <div class="funnel-row"><span class="funnel-label">PDF 수집</span><div class="funnel-bar"><span style="width:23%; background:#5e9c6f"></span></div><span class="funnel-val mono">56</span><span class="funnel-pct mono">23%</span></div>
+            </div>
+          </article>
+
+          <!-- ROW 2: 폴더별 / 출처 / 태그 -->
+          <div class="row2">
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <div class="card-title">폴더별 분포</div>
+                  <div class="card-sub">7개 폴더 · 94건 미분류</div>
+                </div>
+                <span class="card-sub" style="cursor:pointer">Manage →</span>
+              </div>
+              <div class="bars">
+                <div class="row"><span class="swatch" style="background:#8957c9"></span><span class="label">Trust-region core</span><div class="bar"><span style="width:78%; background:#8957c9"></span></div><span class="n mono">38</span></div>
+                <div class="row"><span class="swatch" style="background:#5e9c6f"></span><span class="label">Policy optimization</span><div class="bar"><span style="width:66%; background:#5e9c6f"></span></div><span class="n mono">32</span></div>
+                <div class="row"><span class="swatch" style="background:#c48a3e"></span><span class="label">Constraint handling</span><div class="bar"><span style="width:48%; background:#c48a3e"></span></div><span class="n mono">23</span></div>
+                <div class="row"><span class="swatch" style="background:#3fa8a1"></span><span class="label">Sample efficiency</span><div class="bar"><span style="width:42%; background:#3fa8a1"></span></div><span class="n mono">20</span></div>
+                <div class="row"><span class="swatch" style="background:#5e6ad2"></span><span class="label">Benchmarks</span><div class="bar"><span style="width:38%; background:#5e6ad2"></span></div><span class="n mono">18</span></div>
+                <div class="row"><span class="swatch" style="background:#a67c3f"></span><span class="label">Safety / bounds</span><div class="bar"><span style="width:28%; background:#a67c3f"></span></div><span class="n mono">13</span></div>
+                <div class="row"><span class="swatch" style="background:#b0b0b8"></span><span class="label" style="color:var(--warn)">미분류</span><div class="bar"><span style="width:96%; background:#b0b0b8"></span></div><span class="n mono" style="color:var(--warn)">94</span></div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <div class="card-title">출처 분포</div>
+                  <div class="card-sub">venue 기준</div>
+                </div>
+                <div class="toggle-group"><button class="active">Venue</button><button>Year</button></div>
+              </div>
+              <div class="donut-wrap">
+                <svg class="donut" width="130" height="130" viewBox="0 0 42 42">
+                  <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#f0efed" stroke-width="6"/>
+                  <!-- segments -->
+                  <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#2a2a2e" stroke-width="6" stroke-dasharray="24 100" stroke-dashoffset="0" transform="rotate(-90 21 21)"/>
+                  <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#5e6ad2" stroke-width="6" stroke-dasharray="20 100" stroke-dashoffset="-24" transform="rotate(-90 21 21)"/>
+                  <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#5e9c6f" stroke-width="6" stroke-dasharray="18 100" stroke-dashoffset="-44" transform="rotate(-90 21 21)"/>
+                  <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#c48a3e" stroke-width="6" stroke-dasharray="14 100" stroke-dashoffset="-62" transform="rotate(-90 21 21)"/>
+                  <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#b0b0b8" stroke-width="6" stroke-dasharray="24 100" stroke-dashoffset="-76" transform="rotate(-90 21 21)"/>
+                  <g font-family="Inter" text-anchor="middle">
+                    <text x="21" y="20" font-size="6" font-weight="600" fill="#0a0a0b">248</text>
+                    <text x="21" y="26" font-size="3.2" fill="#8a8a92">papers</text>
+                  </g>
+                </svg>
+                <div class="donut-legend" style="flex:1;">
+                  <div class="item"><span class="sw" style="background:#2a2a2e"></span>NeurIPS<span class="n mono">60</span></div>
+                  <div class="item"><span class="sw" style="background:#5e6ad2"></span>ICML<span class="n mono">50</span></div>
+                  <div class="item"><span class="sw" style="background:#5e9c6f"></span>ICLR<span class="n mono">46</span></div>
+                  <div class="item"><span class="sw" style="background:#c48a3e"></span>arXiv<span class="n mono">34</span></div>
+                  <div class="item"><span class="sw" style="background:#b0b0b8"></span>Other<span class="n mono">58</span></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <div class="card-title">태그 분포</div>
+                  <div class="card-sub">상위 주제 · 자동/수동</div>
+                </div>
+              </div>
+              <div class="tag-cloud">
+                <span class="tag-item auto" style="font-size:13.5px;">trust-region<span class="count mono">48</span></span>
+                <span class="tag-item auto" style="font-size:12.5px;">policy-gradient<span class="count mono">36</span></span>
+                <span class="tag-item manual" style="font-size:12.5px;">must-read<span class="count mono">22</span></span>
+                <span class="tag-item auto" style="font-size:12px;">KL-constraint<span class="count mono">28</span></span>
+                <span class="tag-item auto">natural-gradient<span class="count mono">19</span></span>
+                <span class="tag-item manual" style="font-size:12px;">baseline<span class="count mono">17</span></span>
+                <span class="tag-item auto">PPO<span class="count mono">16</span></span>
+                <span class="tag-item auto">TRPO<span class="count mono">15</span></span>
+                <span class="tag-item manual">compare-later<span class="count mono">12</span></span>
+                <span class="tag-item auto">actor-critic<span class="count mono">14</span></span>
+                <span class="tag-item auto">constrained-MDP<span class="count mono">11</span></span>
+                <span class="tag-item manual">for-proposal<span class="count mono">9</span></span>
+                <span class="tag-item auto">robustness<span class="count mono">9</span></span>
+                <span class="tag-item auto">entropy-reg<span class="count mono">8</span></span>
+                <span class="tag-item manual">skim<span class="count mono">7</span></span>
+              </div>
+              <div class="tag-legend">
+                <span><span class="swatch" style="background:rgba(94,106,210,0.35)"></span>자동 (Reading AI)</span>
+                <span><span class="swatch" style="background:rgba(137,87,201,0.35)"></span>수동 (사용자)</span>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <!-- COLLECTION TABLE -->
+        <div class="tbl-head">
+          <h2>Collection worklist</h2>
+          <div class="filter-chips">
+            <button class="f-chip active">전체<span class="n">248</span></button>
+            <button class="f-chip">폴더 미분류<span class="n">94</span></button>
+            <button class="f-chip">Reading 대기<span class="n">42</span></button>
+            <button class="f-chip">태그 생성됨<span class="n">144</span></button>
+            <button class="f-chip">PDF 없음<span class="n">192</span></button>
+            <button class="f-chip">PDF 수집됨<span class="n">56</span></button>
+            <button class="f-chip">최근 수집<span class="n">14</span></button>
+          </div>
+          <div class="tool">
+            <button class="tool-btn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+              Sort · 최근 수집순
+            </button>
+            <button class="tool-btn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
+              Columns
+            </button>
+          </div>
+        </div>
+        <div class="tbl">
+          <!-- HEADER -->
+          <div class="tbl-row header">
+            <span><span class="ck"></span></span>
+            <span>Title · Authors</span>
+            <span>Venue</span>
+            <span>Saved</span>
+            <span>Folder</span>
+            <span>Tags</span>
+            <span>Reading</span>
+            <span>PDF</span>
+          </div>
+          <!-- ROW 1 -->
+          <div class="tbl-row data selected">
+            <span><span class="ck on"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span></span>
+            <span class="tbl-title"><span class="t">Trust Region Policy Optimization with Natural Gradient Approximations</span><span class="a">Schulman, Levine, Moritz, Jordan, Abbeel</span></span>
+            <span class="venue"><span class="vbar" style="background:#5e6ad2"></span>ICML</span>
+            <span class="year mono">'25 · 2d</span>
+            <span><span class="cell-folder"><span class="swatch" style="background:#8957c9"></span>Trust-region core</span></span>
+            <span class="cell-tags">
+              <span class="tag-pill auto">trust-region</span>
+              <span class="tag-pill auto">natural-gradient</span>
+              <span class="tag-pill manual">must-read</span>
+              <span class="tag-add">+</span>
+            </span>
+            <span><span class="cell-queue on"><span class="dot" style="background:#3fa8a1"></span>queued</span></span>
+            <span><span class="cell-pdf on"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m5 12 5 5L20 7"/></svg>수집됨</span></span>
+          </div>
+          <!-- ROW 2 -->
+          <div class="tbl-row data">
+            <span><span class="ck"></span></span>
+            <span class="tbl-title"><span class="t">Proximal Policy Optimization Algorithms</span><span class="a">Schulman, Wolski, Dhariwal, Radford, Klimov</span></span>
+            <span class="venue"><span class="vbar" style="background:#c48a3e"></span>arXiv</span>
+            <span class="year mono">'24 · 3d</span>
+            <span><span class="cell-folder"><span class="swatch" style="background:#5e9c6f"></span>Policy optimization</span></span>
+            <span class="cell-tags">
+              <span class="tag-pill auto">PPO</span>
+              <span class="tag-pill auto">policy-gradient</span>
+              <span class="tag-add">+</span>
+            </span>
+            <span><span class="cell-queue off">—</span></span>
+            <span><span class="cell-pdf empty"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>drop PDF</span></span>
+          </div>
+          <!-- ROW 3 -->
+          <div class="tbl-row data">
+            <span><span class="ck"></span></span>
+            <span class="tbl-title"><span class="t">Constrained Policy Optimization via Lagrangian Multipliers</span><span class="a">Achiam, Held, Tamar, Abbeel</span></span>
+            <span class="venue"><span class="vbar" style="background:#2a2a2e"></span>NeurIPS</span>
+            <span class="year mono">'25 · 4d</span>
+            <span><span class="cell-folder"><span class="swatch" style="background:#c48a3e"></span>Constraint handling</span></span>
+            <span class="cell-tags">
+              <span class="tag-pill auto">constrained-MDP</span>
+              <span class="tag-pill auto">Lagrangian</span>
+              <span class="tag-pill manual">baseline</span>
+              <span class="tag-add">+</span>
+            </span>
+            <span><span class="cell-queue on"><span class="dot" style="background:#3fa8a1"></span>queued</span></span>
+            <span><span class="cell-pdf empty">drop PDF</span></span>
+          </div>
+          <!-- ROW 4 -->
+          <div class="tbl-row data">
+            <span><span class="ck"></span></span>
+            <span class="tbl-title"><span class="t">Actor-Critic with Generalized Advantage Estimation for Continuous Control</span><span class="a">Mnih, Badia, Mirza, Graves, Lillicrap, Harley</span></span>
+            <span class="venue"><span class="vbar" style="background:#5e6ad2"></span>ICML</span>
+            <span class="year mono">'24 · 6d</span>
+            <span><span class="cell-folder empty">+ 폴더 지정</span></span>
+            <span class="cell-tags">
+              <span class="tag-pill auto">actor-critic</span>
+              <span class="tag-pill auto">GAE</span>
+              <span class="tag-add">+</span>
+            </span>
+            <span><span class="cell-queue off">—</span></span>
+            <span><span class="cell-pdf on">수집됨</span></span>
+          </div>
+          <!-- ROW 5 -->
+          <div class="tbl-row data">
+            <span><span class="ck"></span></span>
+            <span class="tbl-title"><span class="t">Sample-Efficient Trust Region Methods for Robotic Manipulation</span><span class="a">Kumar, Singh, Finn, Levine</span></span>
+            <span class="venue"><span class="vbar" style="background:#5e9c6f"></span>ICLR</span>
+            <span class="year mono">'25 · 7d</span>
+            <span><span class="cell-folder"><span class="swatch" style="background:#3fa8a1"></span>Sample efficiency</span></span>
+            <span class="cell-tags">
+              <span class="tag-pill auto">sample-efficiency</span>
+              <span class="tag-pill auto">robotics</span>
+              <span class="tag-pill manual">compare-later</span>
+              <span class="tag-add">+</span>
+            </span>
+            <span><span class="cell-queue off">—</span></span>
+            <span><span class="cell-pdf empty">drop PDF</span></span>
+          </div>
+          <!-- ROW 6 -->
+          <div class="tbl-row data">
+            <span><span class="ck"></span></span>
+            <span class="tbl-title"><span class="t">KL-Regularized Policy Gradients for Safe Exploration</span><span class="a">Haarnoja, Zhou, Abbeel, Levine</span></span>
+            <span class="venue"><span class="vbar" style="background:#2a2a2e"></span>NeurIPS</span>
+            <span class="year mono">'25 · 9d</span>
+            <span><span class="cell-folder empty">+ 폴더 지정</span></span>
+            <span class="cell-tags">
+              <span class="tag-pill auto">KL-constraint</span>
+              <span class="tag-pill auto">safe-exploration</span>
+              <span class="tag-add">+</span>
+            </span>
+            <span><span class="cell-queue on"><span class="dot" style="background:#3fa8a1"></span>queued</span></span>
+            <span><span class="cell-pdf empty">drop PDF</span></span>
+          </div>
+          <!-- ROW 7 -->
+          <div class="tbl-row data">
+            <span><span class="ck"></span></span>
+            <span class="tbl-title"><span class="t">Robust Trust-Region Updates under Model Mismatch</span><span class="a">Rajeswaran, Mordatch, Kumar</span></span>
+            <span class="venue"><span class="vbar" style="background:#5e6ad2"></span>ICML</span>
+            <span class="year mono">'24 · 11d</span>
+            <span><span class="cell-folder"><span class="swatch" style="background:#8957c9"></span>Trust-region core</span></span>
+            <span class="cell-tags">
+              <span class="tag-pill auto">robustness</span>
+              <span class="tag-pill auto">trust-region</span>
+              <span class="tag-add">+</span>
+            </span>
+            <span><span class="cell-queue off">—</span></span>
+            <span><span class="cell-pdf on">수집됨</span></span>
+          </div>
+          <!-- ROW 8 -->
+          <div class="tbl-row data">
+            <span><span class="ck"></span></span>
+            <span class="tbl-title"><span class="t">Entropy-Regularized Objectives in Continuous Control</span><span class="a">Ziebart, Maas, Bagnell, Dey</span></span>
+            <span class="venue"><span class="vbar" style="background:#c48a3e"></span>arXiv</span>
+            <span class="year mono">'23 · 13d</span>
+            <span><span class="cell-folder empty">+ 폴더 지정</span></span>
+            <span class="cell-tags">
+              <span class="tag-pill auto">entropy-reg</span>
+              <span class="tag-add">+</span>
+            </span>
+            <span><span class="cell-queue off">—</span></span>
+            <span><span class="cell-pdf empty">drop PDF</span></span>
+          </div>
+
+          <!-- FOOTER -->
+          <div class="tbl-foot">
+            <span>1–8 of 248 · <span style="color:var(--t2); cursor:pointer;">전체 보기</span></span>
+            <div class="page-btns">
+              <button class="page-btn">‹</button>
+              <button class="page-btn active">1</button>
+              <button class="page-btn">2</button>
+              <button class="page-btn">3</button>
+              <button class="page-btn">…</button>
+              <button class="page-btn">31</button>
+              <button class="page-btn">›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT DRAWER (collapsed) -->
+  <aside class="drawer">
+    <button class="dr-btn badge" title="Detail">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg>
+    </button>
+    <button class="dr-btn" title="Notes">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4v16h16v-7"/><path d="m18.5 2.5 3 3L12 15l-3.5.5.5-3.5 9.5-9.5z"/></svg>
+    </button>
+    <button class="dr-btn" title="Assets">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+    </button>
+  </aside>
+</div>
+
+<div class="variant-badge">
+  <strong>V1</strong>
+  <span>Analytics-First · 차트 주도형</span>
+</div>
+</body>
+</html>

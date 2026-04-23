@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ARES · Search Dashboard · V2 Worklist-First</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #fbfbfa;
+    --sb: #f5f5f4;
+    --s1: #ffffff;
+    --s2: #f7f7f6;
+    --s3: #f0efed;
+    --b1: #e8e8e6;
+    --b2: #d4d4d2;
+    --tx: #0a0a0b;
+    --t2: #4a4a50;
+    --t3: #8a8a92;
+    --t4: #b0b0b8;
+    --accent: #5e6ad2;
+    --c-search: #5e9c6f;
+    --c-scout: #5e6ad2;
+    --c-read: #8957c9;
+    --c-research: #c48a3e;
+    --c-result: #3fa8a1;
+    --warn: #c87f3a;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    background: var(--bg);
+    color: var(--tx);
+    font-size: 13px;
+    letter-spacing: -0.006em;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace; font-feature-settings: 'zero'; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #d8d7d3; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #b8b7b3; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------- APP SHELL (with persistent detail panel) ---------- */
+  .app { display: grid; grid-template-columns: 56px 1fr 340px; height: 100vh; }
+  .rail {
+    background: var(--sb); border-right: 1px solid var(--b1);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 10px 0; gap: 2px;
+  }
+  .rail-brand {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(135deg, #2a2a2e, #0a0a0b);
+    color: white; display: grid; place-items: center;
+    font-weight: 700; font-size: 12px; letter-spacing: -0.02em;
+    margin-bottom: 10px;
+  }
+  .rail-btn {
+    width: 36px; height: 36px; border-radius: 6px;
+    display: grid; place-items: center;
+    color: var(--t3); cursor: pointer;
+    border: none; background: transparent;
+  }
+  .rail-btn:hover { background: rgba(0,0,0,0.04); color: var(--t2); }
+  .rail-btn.active { background: var(--s1); color: var(--tx); box-shadow: 0 0 0 1px var(--b1); }
+  .rail-sep { flex: 1; }
+
+  /* ---------- MAIN ---------- */
+  .main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border-right: 1px solid var(--b1); }
+  .topbar {
+    height: 44px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 16px; border-bottom: 1px solid var(--b1);
+    background: var(--bg);
+  }
+  .crumb { color: var(--t3); font-size: 12px; }
+  .crumb strong { color: var(--tx); font-weight: 500; }
+  .stage-chips { display: flex; gap: 2px; margin-left: 18px; }
+  .stage-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 9px; border-radius: 5px;
+    font-size: 12px; color: var(--t2); cursor: pointer;
+    border: none; background: transparent;
+  }
+  .stage-chip:hover { background: var(--s2); }
+  .stage-chip.active { background: var(--s1); box-shadow: 0 0 0 1px var(--b1); color: var(--tx); }
+  .stage-chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .topbar-spacer { flex: 1; }
+  .top-action { width: 28px; height: 28px; display: grid; place-items: center; color: var(--t3); border-radius: 5px; cursor: pointer; }
+  .top-action:hover { background: var(--s2); color: var(--t2); }
+  .avatar { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, #d4b37a, #a67c3f); color: white; display: grid; place-items: center; font-size: 10px; font-weight: 600; margin-left: 8px; }
+
+  /* ---------- HERO SEARCH (compact) ---------- */
+  .hero {
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--b1);
+    background: var(--bg);
+  }
+  .hero-row { display: flex; align-items: center; gap: 10px; }
+  .hero-input {
+    flex: 1;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--s1); border: 1px solid var(--b1); border-radius: 8px;
+    padding: 0 6px 0 12px; height: 36px;
+  }
+  .hero-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(94,106,210,0.1); }
+  .hero-input svg.lead { color: var(--t3); flex-shrink: 0; }
+  .hero-input input { flex: 1; border: none; outline: none; background: transparent; font-family: inherit; font-size: 13px; color: var(--tx); }
+  .hero-input input::placeholder { color: var(--t4); }
+  .mode-toggle { display: flex; gap: 2px; padding: 2px; background: var(--s2); border-radius: 6px; }
+  .mode-btn {
+    border: none; background: transparent;
+    padding: 4px 10px; border-radius: 4px;
+    font-family: inherit; font-size: 11.5px; font-weight: 500;
+    color: var(--t2); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .mode-btn.active { background: var(--s1); color: var(--tx); }
+  .submit-btn {
+    background: var(--tx); color: white; border: none;
+    padding: 0 12px; height: 28px; border-radius: 5px;
+    font-family: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+  }
+  .scope-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .scope-lbl { font-size: 11px; color: var(--t3); }
+  .scope-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 10px;
+    background: var(--s2); border: 1px solid var(--b1);
+    font-size: 11px; color: var(--t2);
+  }
+  .scope-add {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 10px;
+    background: transparent; border: 1px dashed var(--b2);
+    font-size: 11px; color: var(--t3); cursor: pointer;
+  }
+
+  /* ---------- STATUS RIBBON (compact KPI + mini funnel in one bar) ---------- */
+  .ribbon {
+    padding: 12px 24px; border-bottom: 1px solid var(--b1);
+    display: grid; grid-template-columns: repeat(5, 1fr) 1.5fr; gap: 0;
+    background: var(--s1);
+  }
+  .ribbon-cell {
+    padding: 0 20px; position: relative;
+    border-right: 1px solid var(--b1);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .ribbon-cell:first-child { padding-left: 0; }
+  .ribbon-cell:last-child { border-right: none; padding-right: 0; }
+  .rb-label { font-size: 10.5px; color: var(--t3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
+  .rb-val { display: flex; align-items: baseline; gap: 6px; }
+  .rb-val .n { font-size: 22px; font-weight: 600; color: var(--tx); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .rb-val .of { font-size: 11.5px; color: var(--t3); }
+  .rb-val .delta { font-size: 11px; font-weight: 500; color: var(--c-search); margin-left: auto; }
+  .rb-val .delta.neg { color: var(--warn); }
+  .rb-bar { height: 3px; background: var(--s3); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+  .rb-bar span { display: block; height: 100%; border-radius: 2px; }
+
+  /* Mini funnel in last cell */
+  .rb-funnel { display: flex; flex-direction: column; gap: 3px; padding-top: 2px; }
+  .rb-funnel-row { display: flex; align-items: center; gap: 6px; font-size: 10.5px; }
+  .rb-funnel-row .lbl { width: 70px; color: var(--t3); flex-shrink: 0; }
+  .rb-funnel-row .bar { flex: 1; height: 4px; background: var(--s3); border-radius: 2px; overflow: hidden; }
+  .rb-funnel-row .bar span { display: block; height: 100%; border-radius: 2px; }
+  .rb-funnel-row .n { width: 28px; text-align: right; color: var(--t2); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+
+  /* ---------- FILTER / ACTION BAR ---------- */
+  .action-bar {
+    padding: 10px 24px; border-bottom: 1px solid var(--b1);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: var(--bg);
+  }
+  .filter-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .f-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 12px;
+    background: transparent; border: 1px solid var(--b1);
+    font-size: 11.5px; color: var(--t2); cursor: pointer;
+  }
+  .f-chip:hover { background: var(--s2); }
+  .f-chip.active { background: var(--tx); color: white; border-color: var(--tx); }
+  .f-chip .n { color: var(--t4); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .f-chip.active .n { color: rgba(255,255,255,0.6); }
+  .f-chip.warn { border-color: rgba(200,127,58,0.3); color: var(--warn); background: rgba(200,127,58,0.06); }
+  .f-chip.warn.active { background: var(--warn); color: white; border-color: var(--warn); }
+
+  .action-spacer { flex: 1; }
+  .tool-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 6px;
+    background: var(--s1); border: 1px solid var(--b1);
+    font-size: 11.5px; color: var(--t2); cursor: pointer;
+  }
+  .tool-btn:hover { background: var(--s2); }
+
+  /* ---------- TABLE AREA ---------- */
+  .tbl-wrap { flex: 1; overflow-y: auto; position: relative; }
+  .tbl-header-sticky {
+    position: sticky; top: 0; z-index: 4;
+    background: var(--s2);
+    border-bottom: 1px solid var(--b1);
+    display: grid;
+    grid-template-columns: 34px minmax(280px,1fr) 120px 100px 160px 220px 110px 100px 28px;
+    align-items: center; gap: 10px;
+    padding: 8px 24px;
+    font-size: 10.5px; color: var(--t3);
+    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;
+  }
+  .tbl-header-sticky .sortable { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+  .tbl-header-sticky .sortable.active { color: var(--tx); }
+
+  .tbl-row {
+    display: grid;
+    grid-template-columns: 34px minmax(280px,1fr) 120px 100px 160px 220px 110px 100px 28px;
+    align-items: center; gap: 10px;
+    padding: 12px 24px;
+    border-bottom: 1px solid var(--b1);
+    font-size: 12.5px;
+    min-height: 58px;
+    background: var(--s1);
+    transition: background 100ms;
+  }
+  .tbl-row:hover { background: var(--s2); }
+  .tbl-row.selected { background: rgba(94,106,210,0.04); box-shadow: inset 3px 0 0 var(--accent); }
+
+  .ck { width: 15px; height: 15px; border: 1px solid var(--b2); border-radius: 3px; background: var(--s1); display: grid; place-items: center; cursor: pointer; }
+  .ck.on { background: var(--accent); border-color: var(--accent); color: white; }
+
+  .tbl-title { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .tbl-title .t { color: var(--tx); font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tbl-title .a { color: var(--t3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tbl .venue { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--t2); }
+  .tbl .venue .vbar { width: 3px; height: 14px; border-radius: 2px; }
+  .tbl .year { color: var(--t3); font-size: 11.5px; }
+
+  /* Inline editor cells */
+  .cell-folder {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 9px 4px 7px; border-radius: 6px;
+    background: var(--s2); border: 1px solid var(--b1);
+    font-size: 11.5px; color: var(--t2); cursor: pointer;
+    width: fit-content; max-width: 100%;
+  }
+  .cell-folder:hover { background: var(--s1); border-color: var(--b2); box-shadow: 0 0 0 2px rgba(94,106,210,0.06); }
+  .cell-folder .swatch { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+  .cell-folder .caret { color: var(--t4); margin-left: 2px; }
+  .cell-folder.empty { border-style: dashed; color: var(--t3); background: transparent; }
+  .cell-folder.empty:hover { color: var(--accent); border-color: var(--accent); border-style: solid; background: rgba(94,106,210,0.04); }
+  .cell-folder.active-editor {
+    border-style: solid; border-color: var(--accent);
+    background: var(--s1);
+    box-shadow: 0 0 0 3px rgba(94,106,210,0.12);
+  }
+  .folder-popup {
+    position: absolute; left: 0; top: calc(100% + 4px); z-index: 10;
+    background: var(--s1); border: 1px solid var(--b1);
+    border-radius: 8px; padding: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+    min-width: 180px;
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .folder-opt { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 5px; cursor: pointer; font-size: 11.5px; color: var(--t2); }
+  .folder-opt:hover { background: var(--s2); }
+  .folder-opt .swatch { width: 7px; height: 7px; border-radius: 2px; }
+  .folder-opt .kbd { margin-left: auto; font-size: 10px; color: var(--t4); }
+  .folder-opt-new { color: var(--accent); border-top: 1px solid var(--b1); margin-top: 2px; padding-top: 8px; }
+
+  .cell-tags { display: flex; gap: 3px; flex-wrap: wrap; min-width: 0; align-items: center; }
+  .tag-pill {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 3px 7px; border-radius: 10px;
+    font-size: 10.5px; line-height: 1.4;
+  }
+  .tag-pill.auto { background: rgba(94,106,210,0.08); color: #434ba8; }
+  .tag-pill.manual { background: rgba(137,87,201,0.1); color: #6b3f9f; cursor: pointer; }
+  .tag-pill.manual .x { color: rgba(107,63,159,0.4); font-size: 10px; margin-left: 2px; }
+  .tag-pill.manual:hover .x { color: #6b3f9f; }
+  .tag-add { color: var(--t3); padding: 3px 7px; font-size: 11px; cursor: pointer; border-radius: 10px; border: 1px dashed var(--b2); }
+  .tag-add:hover { color: var(--accent); border-color: var(--accent); background: rgba(94,106,210,0.04); border-style: solid; }
+
+  .cell-queue {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 11px;
+    font-size: 11px; cursor: pointer;
+  }
+  .cell-queue.on { background: rgba(63,168,161,0.1); color: #2e7873; }
+  .cell-queue.off { color: var(--t3); border: 1px dashed var(--b2); background: transparent; }
+  .cell-queue.off:hover { color: var(--c-result); border-color: var(--c-result); border-style: solid; background: rgba(63,168,161,0.06); }
+  .cell-queue .dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  .cell-pdf {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 8px 10px; border-radius: 7px;
+    font-size: 11px; font-weight: 500;
+    cursor: pointer;
+    border: 1px dashed var(--b2);
+    color: var(--t3); background: var(--s2);
+    min-width: 90px; min-height: 34px;
+    transition: all 120ms;
+  }
+  .cell-pdf:hover { color: var(--accent); border-color: var(--accent); border-style: solid; background: rgba(94,106,210,0.04); }
+  .cell-pdf.on { color: #5e9c6f; background: rgba(94,156,111,0.1); border: 1px solid rgba(94,156,111,0.3); border-style: solid; }
+  .cell-pdf.on:hover { background: rgba(94,156,111,0.16); }
+  .cell-pdf.dragging {
+    color: var(--accent); border-color: var(--accent); border-style: solid;
+    background: rgba(94,106,210,0.08);
+    box-shadow: 0 0 0 3px rgba(94,106,210,0.14);
+  }
+
+  .row-action {
+    width: 22px; height: 22px; display: grid; place-items: center;
+    color: var(--t3); border-radius: 4px; cursor: pointer;
+    opacity: 0; transition: opacity 100ms;
+  }
+  .tbl-row:hover .row-action { opacity: 1; }
+  .row-action:hover { background: var(--s1); color: var(--t2); }
+
+  /* ---------- BULK ACTION BAR ---------- */
+  .bulk-bar {
+    position: sticky; bottom: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 24px;
+    background: var(--tx); color: white;
+    border-top: 1px solid #2a2a2e;
+    font-size: 12.5px;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+  }
+  .bulk-count { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; }
+  .bulk-count .n-pill { background: var(--accent); color: white; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .bulk-spacer { flex: 1; }
+  .bulk-btn {
+    background: rgba(255,255,255,0.08); color: white; border: 1px solid rgba(255,255,255,0.1);
+    padding: 5px 10px; border-radius: 6px;
+    font-family: inherit; font-size: 11.5px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .bulk-btn:hover { background: rgba(255,255,255,0.15); }
+  .bulk-btn.primary { background: var(--accent); border-color: var(--accent); }
+  .bulk-close { color: rgba(255,255,255,0.5); width: 22px; height: 22px; display: grid; place-items: center; cursor: pointer; border-radius: 4px; }
+  .bulk-close:hover { color: white; background: rgba(255,255,255,0.08); }
+
+  /* ---------- DETAIL PANEL (persistent) ---------- */
+  .detail {
+    background: var(--sb);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .detail-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--b1);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .detail-head h3 { font-size: 12px; font-weight: 600; color: var(--tx); text-transform: uppercase; letter-spacing: 0.05em; }
+  .detail-head .close { color: var(--t3); cursor: pointer; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 4px; }
+  .detail-head .close:hover { background: var(--s2); color: var(--t2); }
+
+  .detail-tabs { display: flex; padding: 0 14px; border-bottom: 1px solid var(--b1); gap: 14px; }
+  .d-tab { padding: 10px 0; font-size: 11.5px; color: var(--t3); cursor: pointer; position: relative; }
+  .d-tab.active { color: var(--tx); font-weight: 500; }
+  .d-tab.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--tx); }
+
+  .detail-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
+  .d-title { font-size: 15px; font-weight: 600; color: var(--tx); line-height: 1.4; letter-spacing: -0.015em; }
+  .d-authors { font-size: 11.5px; color: var(--t2); margin-top: 6px; line-height: 1.5; }
+  .d-meta { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; font-size: 11px; color: var(--t3); }
+  .d-meta .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; background: var(--s2); color: var(--t2); }
+  .d-meta .chip .vb { width: 3px; height: 9px; border-radius: 2px; }
+  .d-score { margin-top: 14px; padding: 10px 12px; background: var(--s1); border: 1px solid var(--b1); border-radius: 7px; display: flex; align-items: center; gap: 10px; }
+  .d-score .big { font-size: 20px; font-weight: 600; color: var(--c-search); }
+  .d-score .lbl { font-size: 11px; color: var(--t3); }
+  .d-score .bar { flex: 1; height: 4px; background: var(--s3); border-radius: 2px; overflow: hidden; }
+  .d-score .bar span { display: block; height: 100%; background: var(--c-search); width: 78%; }
+
+  .d-sec { margin-top: 18px; }
+  .d-sec-label { font-size: 10.5px; color: var(--t3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .d-abstract { font-size: 12.5px; line-height: 1.6; color: var(--t2); }
+  .d-tags-row { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  .d-quick { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--b1); display: flex; flex-direction: column; gap: 6px; }
+  .d-quick-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+  .d-quick-row .k { color: var(--t3); }
+  .d-quick-row .v { color: var(--tx); }
+
+  .d-actions { margin-top: 18px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .d-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 10px; border-radius: 6px;
+    background: var(--s1); border: 1px solid var(--b1);
+    font-family: inherit; font-size: 11.5px; color: var(--t2);
+    cursor: pointer;
+  }
+  .d-btn:hover { background: var(--s2); }
+  .d-btn.primary { background: var(--tx); color: white; border-color: var(--tx); }
+  .d-btn.primary:hover { background: #2a2a2e; }
+
+  /* ---------- VARIANT BADGE ---------- */
+  .variant-badge {
+    position: fixed; left: 68px; bottom: 12px; z-index: 20;
+    padding: 6px 10px 6px 28px; border-radius: 6px;
+    background: var(--s1); border: 1px solid var(--b1);
+    font-size: 10.5px; color: var(--t2);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .variant-badge::before {
+    content: ''; position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 8px; height: 8px; border-radius: 50%; background: var(--c-read);
+  }
+  .variant-badge strong { color: var(--tx); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- LEFT RAIL -->
+  <aside class="rail">
+    <div class="rail-brand">A</div>
+    <button class="rail-btn active" title="Search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    </button>
+    <button class="rail-btn" title="Reading">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h6a2 2 0 0 1 2 2 2 2 0 0 1 2-2h6V4h-6a4 4 0 0 0-2 1 4 4 0 0 0-2-1H4z"/></svg>
+    </button>
+    <button class="rail-btn" title="Research">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+    </button>
+    <button class="rail-btn" title="Result">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+    </button>
+    <div class="rail-sep"></div>
+    <button class="rail-btn" title="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.08 7.08 4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.08-7.08 4.24-4.24"/></svg>
+    </button>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <span class="crumb"><strong>Literature Review — Trust-region methods</strong></span>
+      <nav class="stage-chips">
+        <button class="stage-chip active"><span class="dot" style="background:var(--c-search)"></span>Search</button>
+        <button class="stage-chip"><span class="dot" style="background:var(--c-read)"></span>Reading</button>
+        <button class="stage-chip"><span class="dot" style="background:var(--c-research)"></span>Research</button>
+        <button class="stage-chip"><span class="dot" style="background:var(--c-result)"></span>Result</button>
+      </nav>
+      <div class="topbar-spacer"></div>
+      <button class="top-action" title="Command">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
+      </button>
+      <div class="avatar">MP</div>
+    </header>
+
+    <!-- HERO SEARCH (compact, always visible) -->
+    <section class="hero">
+      <div class="hero-row">
+        <div class="hero-input">
+          <svg class="lead" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input placeholder="논문을 검색하거나, Scout에게 주제를 맡기세요..." />
+          <div class="mode-toggle">
+            <button class="mode-btn active">Search</button>
+            <button class="mode-btn">Scout</button>
+          </div>
+          <button class="submit-btn">Go ⏎</button>
+        </div>
+      </div>
+      <div class="scope-row">
+        <span class="scope-lbl">Target</span>
+        <span class="scope-chip">NeurIPS '21–'25</span>
+        <span class="scope-chip">ICML '22–'25</span>
+        <span class="scope-chip">arXiv · cs.LG</span>
+        <button class="scope-add">+ Add</button>
+      </div>
+    </section>
+
+    <!-- STATUS RIBBON -->
+    <section class="ribbon">
+      <div class="ribbon-cell">
+        <div class="rb-label">Collected</div>
+        <div class="rb-val"><span class="n">248</span><span class="delta">+14</span></div>
+        <div class="rb-bar"><span style="width:100%; background:#2a2a2e"></span></div>
+      </div>
+      <div class="ribbon-cell">
+        <div class="rb-label">Foldered</div>
+        <div class="rb-val"><span class="n">154</span><span class="of">/248</span><span class="delta neg">94 미분류</span></div>
+        <div class="rb-bar"><span style="width:62%; background:#8957c9"></span></div>
+      </div>
+      <div class="ribbon-cell">
+        <div class="rb-label">Reading queue</div>
+        <div class="rb-val"><span class="n">42</span><span class="delta">+6</span></div>
+        <div class="rb-bar"><span style="width:17%; background:#3fa8a1"></span></div>
+      </div>
+      <div class="ribbon-cell">
+        <div class="rb-label">Tagged</div>
+        <div class="rb-val"><span class="n">144</span><span class="of">자동 118·수동 26</span></div>
+        <div class="rb-bar"><span style="width:58%; background:#5e6ad2"></span></div>
+      </div>
+      <div class="ribbon-cell">
+        <div class="rb-label">PDF ready</div>
+        <div class="rb-val"><span class="n">56</span><span class="of">/248</span><span class="delta neg">192 없음</span></div>
+        <div class="rb-bar"><span style="width:23%; background:#5e9c6f"></span></div>
+      </div>
+      <div class="ribbon-cell">
+        <div class="rb-label">Pipeline · to Reading</div>
+        <div class="rb-funnel">
+          <div class="rb-funnel-row"><span class="lbl">수집됨</span><div class="bar"><span style="width:100%; background:#2a2a2e"></span></div><span class="n mono">248</span></div>
+          <div class="rb-funnel-row"><span class="lbl">정리됨</span><div class="bar"><span style="width:62%; background:#8957c9"></span></div><span class="n mono">154</span></div>
+          <div class="rb-funnel-row"><span class="lbl">PDF 준비</span><div class="bar"><span style="width:23%; background:#5e9c6f"></span></div><span class="n mono">56</span></div>
+          <div class="rb-funnel-row"><span class="lbl">Reading 큐</span><div class="bar"><span style="width:17%; background:#3fa8a1"></span></div><span class="n mono">42</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FILTER/ACTION BAR -->
+    <section class="action-bar">
+      <div class="filter-chips">
+        <button class="f-chip active">전체<span class="n">248</span></button>
+        <button class="f-chip warn">폴더 미분류<span class="n">94</span></button>
+        <button class="f-chip warn">PDF 없음<span class="n">192</span></button>
+        <button class="f-chip">Reading 대기<span class="n">42</span></button>
+        <button class="f-chip">태그 생성됨<span class="n">144</span></button>
+        <button class="f-chip">PDF 수집됨<span class="n">56</span></button>
+        <button class="f-chip">최근 수집<span class="n">14</span></button>
+      </div>
+      <div class="action-spacer"></div>
+      <button class="tool-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+        Sort · 최근 수집순
+      </button>
+      <button class="tool-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
+        Columns
+      </button>
+      <button class="tool-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 10h6M9 14h4"/></svg>
+        Analytics
+      </button>
+    </section>
+
+    <!-- TABLE -->
+    <section class="tbl-wrap tbl">
+      <div class="tbl-header-sticky">
+        <span><div class="ck"></div></span>
+        <span class="sortable active">Title · Authors <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></span>
+        <span>Venue</span>
+        <span class="sortable">Saved</span>
+        <span>Folder</span>
+        <span>Tags</span>
+        <span>Reading</span>
+        <span>PDF</span>
+        <span></span>
+      </div>
+
+      <!-- ROW 1 (selected) -->
+      <div class="tbl-row selected">
+        <span><div class="ck on"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></div></span>
+        <span class="tbl-title"><span class="t">Trust Region Policy Optimization with Natural Gradient Approximations</span><span class="a">Schulman, Levine, Moritz, Jordan, Abbeel</span></span>
+        <span class="venue"><span class="vbar" style="background:#5e6ad2"></span>ICML <span class="year mono">'25</span></span>
+        <span class="year mono">2d ago</span>
+        <span style="position:relative;"><div class="cell-folder active-editor"><span class="swatch" style="background:#8957c9"></span>Trust-region core<svg class="caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div>
+          <div class="folder-popup">
+            <div class="folder-opt"><span class="swatch" style="background:#8957c9"></span>Trust-region core<span class="kbd">✓</span></div>
+            <div class="folder-opt"><span class="swatch" style="background:#5e9c6f"></span>Policy optimization</div>
+            <div class="folder-opt"><span class="swatch" style="background:#c48a3e"></span>Constraint handling</div>
+            <div class="folder-opt"><span class="swatch" style="background:#3fa8a1"></span>Sample efficiency</div>
+            <div class="folder-opt"><span class="swatch" style="background:#5e6ad2"></span>Benchmarks</div>
+            <div class="folder-opt folder-opt-new">+ 새 폴더</div>
+          </div>
+        </span>
+        <span class="cell-tags">
+          <span class="tag-pill auto">trust-region</span>
+          <span class="tag-pill auto">natural-gradient</span>
+          <span class="tag-pill manual">must-read<span class="x">×</span></span>
+          <span class="tag-add">+</span>
+        </span>
+        <span><span class="cell-queue on"><span class="dot" style="background:#3fa8a1"></span>queued</span></span>
+        <span><span class="cell-pdf on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m5 12 5 5L20 7"/></svg>PDF</span></span>
+        <span><div class="row-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></div></span>
+      </div>
+
+      <!-- ROW 2 -->
+      <div class="tbl-row">
+        <span><div class="ck"></div></span>
+        <span class="tbl-title"><span class="t">Proximal Policy Optimization Algorithms</span><span class="a">Schulman, Wolski, Dhariwal, Radford, Klimov</span></span>
+        <span class="venue"><span class="vbar" style="background:#c48a3e"></span>arXiv <span class="year mono">'24</span></span>
+        <span class="year mono">3d ago</span>
+        <span><div class="cell-folder"><span class="swatch" style="background:#5e9c6f"></span>Policy optimization<svg class="caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div></span>
+        <span class="cell-tags">
+          <span class="tag-pill auto">PPO</span>
+          <span class="tag-pill auto">policy-gradient</span>
+          <span class="tag-add">+</span>
+        </span>
+        <span><span class="cell-queue off">+ 큐 추가</span></span>
+        <span><div class="cell-pdf"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Drop PDF</div></span>
+        <span><div class="row-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></div></span>
+      </div>
+
+      <!-- ROW 3 -->
+      <div class="tbl-row">
+        <span><div class="ck"></div></span>
+        <span class="tbl-title"><span class="t">Constrained Policy Optimization via Lagrangian Multipliers</span><span class="a">Achiam, Held, Tamar, Abbeel</span></span>
+        <span class="venue"><span class="vbar" style="background:#2a2a2e"></span>NeurIPS <span class="year mono">'25</span></span>
+        <span class="year mono">4d ago</span>
+        <span><div class="cell-folder"><span class="swatch" style="background:#c48a3e"></span>Constraint handling<svg class="caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div></span>
+        <span class="cell-tags">
+          <span class="tag-pill auto">constrained-MDP</span>
+          <span class="tag-pill auto">Lagrangian</span>
+          <span class="tag-pill manual">baseline<span class="x">×</span></span>
+          <span class="tag-add">+</span>
+        </span>
+        <span><span class="cell-queue on"><span class="dot" style="background:#3fa8a1"></span>queued</span></span>
+        <span><div class="cell-pdf"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Drop PDF</div></span>
+        <span><div class="row-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></div></span>
+      </div>
+
+      <!-- ROW 4 (dragging PDF - hover state) -->
+      <div class="tbl-row">
+        <span><div class="ck on"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></div></span>
+        <span class="tbl-title"><span class="t">Actor-Critic with Generalized Advantage Estimation for Continuous Control</span><span class="a">Mnih, Badia, Mirza, Graves, Lillicrap, Harley</span></span>
+        <span class="venue"><span class="vbar" style="background:#5e6ad2"></span>ICML <span class="year mono">'24</span></span>
+        <span class="year mono">6d ago</span>
+        <span><div class="cell-folder empty"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>폴더 지정</div></span>
+        <span class="cell-tags">
+          <span class="tag-pill auto">actor-critic</span>
+          <span class="tag-pill auto">GAE</span>
+          <span class="tag-add">+</span>
+        </span>
+        <span><span class="cell-queue off">+ 큐 추가</span></span>
+        <span><div class="cell-pdf dragging"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m-5-5 5 5 5-5"/></svg>Drop here</div></span>
+        <span><div class="row-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></div></span>
+      </div>
+
+      <!-- ROW 5 -->
+      <div class="tbl-row">
+        <span><div class="ck on"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></div></span>
+        <span class="tbl-title"><span class="t">Sample-Efficient Trust Region Methods for Robotic Manipulation</span><span class="a">Kumar, Singh, Finn, Levine</span></span>
+        <span class="venue"><span class="vbar" style="background:#5e9c6f"></span>ICLR <span class="year mono">'25</span></span>
+        <span class="year mono">7d ago</span>
+        <span><div class="cell-folder"><span class="swatch" style="background:#3fa8a1"></span>Sample efficiency<svg class="caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div></span>
+        <span class="cell-tags">
+          <span class="tag-pill auto">sample-efficiency</span>
+          <span class="tag-pill auto">robotics</span>
+          <span class="tag-pill manual">compare-later<span class="x">×</span></span>
+        </span>
+        <span><span class="cell-queue off">+ 큐 추가</span></span>
+        <span><div class="cell-pdf"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Drop PDF</div></span>
+        <span><div class="row-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></div></span>
+      </div>
+
+      <!-- ROW 6 -->
+      <div class="tbl-row">
+        <span><div class="ck"></div></span>
+        <span class="tbl-title"><span class="t">KL-Regularized Policy Gradients for Safe Exploration</span><span class="a">Haarnoja, Zhou, Abbeel, Levine</span></span>
+        <span class="venue"><span class="vbar" style="background:#2a2a2e"></span>NeurIPS <span class="year mono">'25</span></span>
+        <span class="year mono">9d ago</span>
+        <span><div class="cell-folder empty"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>폴더 지정</div></span>
+        <span class="cell-tags">
+          <span class="tag-pill auto">KL-constraint</span>
+          <span class="tag-pill auto">safe-exploration</span>
+          <span class="tag-add">+</span>
+        </span>
+        <span><span class="cell-queue on"><span class="dot" style="background:#3fa8a1"></span>queued</span></span>
+        <span><div class="cell-pdf"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Drop PDF</div></span>
+        <span><div class="row-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></div></span>
+      </div>
+
+      <!-- ROW 7 -->
+      <div class="tbl-row">
+        <span><div class="ck"></div></span>
+        <span class="tbl-title"><span class="t">Robust Trust-Region Updates under Model Mismatch</span><span class="a">Rajeswaran, Mordatch, Kumar</span></span>
+        <span class="venue"><span class="vbar" style="background:#5e6ad2"></span>ICML <span class="year mono">'24</span></span>
+        <span class="year mono">11d ago</span>
+        <span><div class="cell-folder"><span class="swatch" style="background:#8957c9"></span>Trust-region core<svg class="caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></div></span>
+        <span class="cell-tags">
+          <span class="tag-pill auto">robustness</span>
+          <span class="tag-pill auto">trust-region</span>
+          <span class="tag-add">+</span>
+        </span>
+        <span><span class="cell-queue off">+ 큐 추가</span></span>
+        <span><span class="cell-pdf on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m5 12 5 5L20 7"/></svg>PDF</span></span>
+        <span><div class="row-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></div></span>
+      </div>
+
+      <!-- ROW 8 -->
+      <div class="tbl-row">
+        <span><div class="ck"></div></span>
+        <span class="tbl-title"><span class="t">Entropy-Regularized Objectives in Continuous Control</span><span class="a">Ziebart, Maas, Bagnell, Dey</span></span>
+        <span class="venue"><span class="vbar" style="background:#c48a3e"></span>arXiv <span class="year mono">'23</span></span>
+        <span class="year mono">13d ago</span>
+        <span><div class="cell-folder empty"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>폴더 지정</div></span>
+        <span class="cell-tags">
+          <span class="tag-pill auto">entropy-reg</span>
+          <span class="tag-add">+</span>
+        </span>
+        <span><span class="cell-queue off">+ 큐 추가</span></span>
+        <span><div class="cell-pdf"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Drop PDF</div></span>
+        <span><div class="row-action"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg></div></span>
+      </div>
+
+      <!-- BULK BAR (appears when selected > 0) -->
+      <div class="bulk-bar">
+        <span class="bulk-count"><span class="n-pill">2</span> papers selected</span>
+        <div class="bulk-spacer"></div>
+        <button class="bulk-btn">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7M16 3H8a2 2 0 0 0-2 2v2h12V5a2 2 0 0 0-2-2z"/></svg>
+          폴더 이동
+        </button>
+        <button class="bulk-btn">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7h-.01M20.59 13.41 13.41 20.59a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg>
+          태그 일괄 지정
+        </button>
+        <button class="bulk-btn primary">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4v16h6a2 2 0 0 1 2 2 2 2 0 0 1 2-2h6V4h-6a4 4 0 0 0-2 1 4 4 0 0 0-2-1H4z"/></svg>
+          Reading 큐로 보내기
+        </button>
+        <span class="bulk-close">×</span>
+      </div>
+    </section>
+  </main>
+
+  <!-- DETAIL PANEL (persistent) -->
+  <aside class="detail">
+    <div class="detail-head">
+      <h3>Paper detail</h3>
+      <span class="close">×</span>
+    </div>
+    <div class="detail-tabs">
+      <span class="d-tab active">Overview</span>
+      <span class="d-tab">Abstract</span>
+      <span class="d-tab">Citations</span>
+      <span class="d-tab">Notes</span>
+    </div>
+    <div class="detail-body">
+      <div class="d-title">Trust Region Policy Optimization with Natural Gradient Approximations</div>
+      <div class="d-authors">Schulman, J., Levine, S., Moritz, P., Jordan, M., &amp; Abbeel, P.</div>
+      <div class="d-meta">
+        <span class="chip"><span class="vb" style="background:#5e6ad2"></span>ICML 2025</span>
+        <span class="chip">48 citations</span>
+        <span class="chip">Open access</span>
+      </div>
+      <div class="d-score">
+        <span class="big">94</span>
+        <div>
+          <div class="lbl">Relevance to project</div>
+          <div class="bar"><span></span></div>
+        </div>
+      </div>
+
+      <div class="d-sec">
+        <div class="d-sec-label">Abstract</div>
+        <div class="d-abstract">We propose a refinement of trust-region policy optimization that approximates the natural gradient using Fisher-vector products without explicit Hessian inversion. On a suite of continuous-control benchmarks, the approach matches second-order methods in monotonic improvement guarantees while preserving the runtime envelope of first-order policy gradients...</div>
+      </div>
+
+      <div class="d-sec">
+        <div class="d-sec-label">Auto tags <span style="color:#434ba8">(Reading AI)</span></div>
+        <div class="d-tags-row">
+          <span class="tag-pill auto">trust-region</span>
+          <span class="tag-pill auto">natural-gradient</span>
+          <span class="tag-pill auto">policy-gradient</span>
+          <span class="tag-pill auto">continuous-control</span>
+          <span class="tag-pill auto">Fisher-matrix</span>
+        </div>
+      </div>
+
+      <div class="d-sec">
+        <div class="d-sec-label">Manual tags</div>
+        <div class="d-tags-row">
+          <span class="tag-pill manual">must-read<span class="x">×</span></span>
+          <span class="tag-pill manual">baseline<span class="x">×</span></span>
+          <span class="tag-add">+ 태그 추가</span>
+        </div>
+      </div>
+
+      <div class="d-quick">
+        <div class="d-quick-row"><span class="k">Folder</span><span class="v" style="display:inline-flex; align-items:center; gap:5px;"><span style="width:7px;height:7px;border-radius:2px;background:#8957c9;"></span>Trust-region core</span></div>
+        <div class="d-quick-row"><span class="k">Reading queue</span><span class="v" style="color:#2e7873;">● Queued</span></div>
+        <div class="d-quick-row"><span class="k">PDF</span><span class="v" style="color:#5e9c6f;">✓ 수집됨 · 312 KB</span></div>
+        <div class="d-quick-row"><span class="k">Saved</span><span class="v">2026-04-21 14:32</span></div>
+        <div class="d-quick-row"><span class="k">DOI</span><span class="v mono" style="font-size:11px;">10.48550/2503.10842</span></div>
+      </div>
+
+      <div class="d-actions">
+        <button class="d-btn primary">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4v16h6a2 2 0 0 1 2 2 2 2 0 0 1 2-2h6V4"/></svg>
+          Open in Reading
+        </button>
+        <button class="d-btn">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 3h6v6M10 14 21 3M21 14v7H3V3h7"/></svg>
+          Paper page
+        </button>
+        <button class="d-btn">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          Export cite
+        </button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="variant-badge">
+  <strong>V2</strong>
+  <span>Worklist-First · 작업 주도형</span>
+</div>
+</body>
+</html>
