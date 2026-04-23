@@ -9,6 +9,8 @@ else
 fi
 
 REF_INPUT="${1:-main}"
+DEV_RUNTIME_SOURCE="${DEV_RUNTIME_SOURCE:-current}"
+DEV_RUNTIME_PATH="${DEV_RUNTIME_PATH:-${ROOT_DIR}}"
 DEV_WORKTREE_PATH="${DEV_WORKTREE_PATH:-${ROOT_DIR}/.worktrees/dev-web-live}"
 RUNTIME_ROOT="${RUNTIME_ROOT:-${ROOT_DIR}/.runtime/dev-web}"
 CURRENT_LINK="${RUNTIME_ROOT}/current"
@@ -18,10 +20,12 @@ APP_HOST="${APP_HOST:-0.0.0.0}"
 PM2_NAME="${PM2_NAME:-ares-web-dev}"
 PM2_SAVE="${PM2_SAVE:-1}"
 NODE_ENV="${NODE_ENV:-development}"
-ARES_LIVE_RELOAD="${ARES_LIVE_RELOAD:-0}"
+ARES_LIVE_RELOAD="${ARES_LIVE_RELOAD:-1}"
 SKIP_GIT_FETCH="${SKIP_GIT_FETCH:-0}"
 SKIP_VALIDATION="${SKIP_VALIDATION:-0}"
 DEPLOY_HEALTH_TIMEOUT_SECONDS="${DEPLOY_HEALTH_TIMEOUT_SECONDS:-30}"
+DEPLOY_SOURCE_PATH=""
+RESOLVED_REF=""
 
 load_ref() {
   local ref="$1"
@@ -54,7 +58,7 @@ run_validation() {
 
   echo "▶ 코드 검증"
   (
-    cd "$DEV_WORKTREE_PATH"
+    cd "$DEPLOY_SOURCE_PATH"
     node --check services/backend/index.mjs
     node --check web/app.js
     npm test
@@ -62,14 +66,14 @@ run_validation() {
 }
 
 install_dependencies() {
-  if [[ ! -f "$DEV_WORKTREE_PATH/package.json" ]]; then
-    echo "✗ package.json을 찾을 수 없습니다: $DEV_WORKTREE_PATH" >&2
+  if [[ ! -f "$DEPLOY_SOURCE_PATH/package.json" ]]; then
+    echo "✗ package.json을 찾을 수 없습니다: $DEPLOY_SOURCE_PATH" >&2
     exit 1
   fi
 
   echo "▶ 의존성 확인"
   (
-    cd "$DEV_WORKTREE_PATH"
+    cd "$DEPLOY_SOURCE_PATH"
     npm install --no-fund --no-audit --package-lock=false
   )
 }
@@ -116,7 +120,15 @@ rollback_runtime() {
 echo "▶ ARES 개발 배포 시작"
 echo "  repo: $ROOT_DIR"
 echo "  ref input: $REF_INPUT"
-echo "  worktree: $DEV_WORKTREE_PATH"
+echo "  runtime source: $DEV_RUNTIME_SOURCE"
+if [[ "$DEV_RUNTIME_SOURCE" == "current" ]]; then
+  echo "  runtime path: $DEV_RUNTIME_PATH"
+else
+  echo "  runtime path: $DEV_WORKTREE_PATH"
+fi
+if [[ "$DEV_RUNTIME_SOURCE" == "worktree" ]]; then
+  echo "  worktree: $DEV_WORKTREE_PATH"
+fi
 echo "  runtime: $CURRENT_LINK"
 echo "  port: $WEB_PORT"
 echo "  pm2: $PM2_NAME"
@@ -127,32 +139,49 @@ if [[ "$SKIP_GIT_FETCH" != "1" ]]; then
   git -C "$ROOT_DIR" fetch origin --prune
 fi
 
-RESOLVED_REF="$(load_ref "$REF_INPUT")" || {
-  echo "✗ git ref를 찾을 수 없습니다: $REF_INPUT" >&2
-  exit 1
-}
-
-if [[ ! -d "$DEV_WORKTREE_PATH/.git" && ! -f "$DEV_WORKTREE_PATH/.git" ]]; then
-  echo "▶ worktree 생성"
-  git -C "$ROOT_DIR" worktree add --detach "$DEV_WORKTREE_PATH" "$RESOLVED_REF"
-else
-  echo "▶ worktree 업데이트"
-  if [[ "$SKIP_GIT_FETCH" != "1" ]]; then
-    git -C "$DEV_WORKTREE_PATH" fetch origin --prune
+if [[ "$DEV_RUNTIME_SOURCE" == "current" ]]; then
+  if [[ ! -f "$DEV_RUNTIME_PATH/package.json" ]]; then
+    echo "✗ 현재 체크아웃 런타임 경로에 package.json이 없습니다: $DEV_RUNTIME_PATH" >&2
+    exit 1
   fi
-  git -C "$DEV_WORKTREE_PATH" checkout --detach "$RESOLVED_REF"
+
+  DEPLOY_SOURCE_PATH="$(cd "$DEV_RUNTIME_PATH" && pwd)"
+  echo "▶ 현재 체크아웃 런타임 사용"
+  echo "  source: $DEPLOY_SOURCE_PATH"
+  echo "  note: current 모드는 ref checkout 대신 현재 파일 상태를 그대로 서빙합니다"
+else
+  RESOLVED_REF="$(load_ref "$REF_INPUT")" || {
+    echo "✗ git ref를 찾을 수 없습니다: $REF_INPUT" >&2
+    exit 1
+  }
+
+  if [[ ! -d "$DEV_WORKTREE_PATH/.git" && ! -f "$DEV_WORKTREE_PATH/.git" ]]; then
+    echo "▶ worktree 생성"
+    git -C "$ROOT_DIR" worktree add --detach "$DEV_WORKTREE_PATH" "$RESOLVED_REF"
+  else
+    echo "▶ worktree 업데이트"
+    if [[ "$SKIP_GIT_FETCH" != "1" ]]; then
+      git -C "$DEV_WORKTREE_PATH" fetch origin --prune
+    fi
+    git -C "$DEV_WORKTREE_PATH" checkout --detach "$RESOLVED_REF"
+  fi
+
+  DEPLOY_SOURCE_PATH="$DEV_WORKTREE_PATH"
 fi
 
 mkdir -p "$RUNTIME_ROOT"
 PREVIOUS_TARGET="$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)"
-DEPLOY_COMMIT="$(git -C "$DEV_WORKTREE_PATH" rev-parse HEAD)"
-DEPLOY_COMMIT_SHORT="$(git -C "$DEV_WORKTREE_PATH" rev-parse --short HEAD)"
+DEPLOY_COMMIT="$(git -C "$DEPLOY_SOURCE_PATH" rev-parse HEAD)"
+DEPLOY_COMMIT_SHORT="$(git -C "$DEPLOY_SOURCE_PATH" rev-parse --short HEAD)"
+if ! git -C "$DEPLOY_SOURCE_PATH" diff --quiet --ignore-submodules -- 2>/dev/null || ! git -C "$DEPLOY_SOURCE_PATH" diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+  echo "▶ 경고: 현재 체크아웃에 커밋되지 않은 변경이 포함되어 런타임에 즉시 반영됩니다"
+fi
 
 install_dependencies
 run_validation
 
 echo "▶ current 심링크 전환"
-switch_current_link "$DEV_WORKTREE_PATH"
+switch_current_link "$DEPLOY_SOURCE_PATH"
 
 echo "▶ PM2 개발 서버 반영"
 if ! RUNTIME_ROOT="$RUNTIME_ROOT" \
@@ -185,7 +214,11 @@ if ! WEB_PORT="$WEB_PORT" EXPECTED_DEPLOY_COMMIT="$DEPLOY_COMMIT" "${SCRIPT_DIR}
 fi
 
 echo "✓ 개발 배포 완료"
-echo "  ref: $RESOLVED_REF"
+if [[ "$DEV_RUNTIME_SOURCE" == "current" ]]; then
+  echo "  ref: current checkout"
+else
+  echo "  ref: $RESOLVED_REF"
+fi
 echo "  commit: $DEPLOY_COMMIT_SHORT"
 echo "  runtime: $CURRENT_LINK"
 echo "  url: http://127.0.0.1:${WEB_PORT}"
