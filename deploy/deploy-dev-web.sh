@@ -2,7 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if GIT_COMMON_DIR="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+  ROOT_DIR="$(cd "${GIT_COMMON_DIR}/.." && pwd)"
+else
+  ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 
 REF_INPUT="${1:-main}"
 DEV_WORKTREE_PATH="${DEV_WORKTREE_PATH:-${ROOT_DIR}/.worktrees/dev-web-live}"
@@ -141,6 +145,8 @@ fi
 
 mkdir -p "$RUNTIME_ROOT"
 PREVIOUS_TARGET="$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)"
+DEPLOY_COMMIT="$(git -C "$DEV_WORKTREE_PATH" rev-parse HEAD)"
+DEPLOY_COMMIT_SHORT="$(git -C "$DEV_WORKTREE_PATH" rev-parse --short HEAD)"
 
 install_dependencies
 run_validation
@@ -157,6 +163,8 @@ if ! RUNTIME_ROOT="$RUNTIME_ROOT" \
   PM2_SAVE="$PM2_SAVE" \
   NODE_ENV="$NODE_ENV" \
   ARES_LIVE_RELOAD="$ARES_LIVE_RELOAD" \
+  ARES_DEPLOY_REF="$RESOLVED_REF" \
+  ARES_DEPLOY_COMMIT="$DEPLOY_COMMIT" \
   OPENALEX_API_KEY="${OPENALEX_API_KEY:-}" \
   OPENALEX_MAILTO="${OPENALEX_MAILTO:-}" \
   "${SCRIPT_DIR}/ensure-dev-web-pm2.sh"; then
@@ -171,13 +179,13 @@ if ! wait_for_http_ready "http://127.0.0.1:${WEB_PORT}/api/health" "$DEPLOY_HEAL
 fi
 
 echo "▶ 스모크 테스트"
-if ! WEB_PORT="$WEB_PORT" "${SCRIPT_DIR}/smoke-dev-web.sh"; then
+if ! WEB_PORT="$WEB_PORT" EXPECTED_DEPLOY_COMMIT="$DEPLOY_COMMIT" "${SCRIPT_DIR}/smoke-dev-web.sh"; then
   rollback_runtime "$PREVIOUS_TARGET"
   exit 1
 fi
 
 echo "✓ 개발 배포 완료"
 echo "  ref: $RESOLVED_REF"
-echo "  commit: $(git -C "$DEV_WORKTREE_PATH" rev-parse --short HEAD)"
+echo "  commit: $DEPLOY_COMMIT_SHORT"
 echo "  runtime: $CURRENT_LINK"
 echo "  url: http://127.0.0.1:${WEB_PORT}"

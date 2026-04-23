@@ -63,6 +63,8 @@ const PORT = Number(process.env.PORT || 3100);
 const HOST = process.env.HOST || '0.0.0.0';
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY || '';
 const OPENALEX_MAILTO = process.env.OPENALEX_MAILTO || '';
+const ARES_DEPLOY_REF = process.env.ARES_DEPLOY_REF || '';
+const ARES_DEPLOY_COMMIT = process.env.ARES_DEPLOY_COMMIT || '';
 const STORE_BACKEND = process.env.ARES_STORE_BACKEND || '';
 const DATABASE_URL = process.env.ARES_DATABASE_URL || process.env.DATABASE_URL || '';
 const DATABASE_SSL = process.env.ARES_DATABASE_SSL || '';
@@ -475,6 +477,10 @@ const server = http.createServer(async (request, response) => {
       const storage = typeof store.getBackendInfo === 'function' ? store.getBackendInfo() : { backend: store.backend || 'unknown' };
       json(response, 200, {
         codexAvailable,
+        deploy: {
+          commit: ARES_DEPLOY_COMMIT,
+          ref: ARES_DEPLOY_REF,
+        },
         ok: true,
         profileDetails: profiles,
         profiles: profiles.map((profile) => profile.id),

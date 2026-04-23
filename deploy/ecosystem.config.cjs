@@ -26,6 +26,8 @@ module.exports = {
         HOST: process.env.APP_HOST || process.env.HOST || '0.0.0.0',
         PORT: port,
         ARES_LIVE_RELOAD: process.env.ARES_LIVE_RELOAD || '0',
+        ARES_DEPLOY_REF: process.env.ARES_DEPLOY_REF || '',
+        ARES_DEPLOY_COMMIT: process.env.ARES_DEPLOY_COMMIT || '',
         OPENALEX_API_KEY: process.env.OPENALEX_API_KEY || '',
         OPENALEX_MAILTO: process.env.OPENALEX_MAILTO || '',
       },

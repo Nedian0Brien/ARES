@@ -2,7 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if GIT_COMMON_DIR="$(git -C "$SCRIPT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+  ROOT_DIR="$(cd "${GIT_COMMON_DIR}/.." && pwd)"
+else
+  ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 ECOSYSTEM_FILE="${SCRIPT_DIR}/ecosystem.config.cjs"
 
 RUNTIME_ROOT="${RUNTIME_ROOT:-${ROOT_DIR}/.runtime/dev-web}"
@@ -13,6 +17,8 @@ PM2_NAME="${PM2_NAME:-ares-web-dev}"
 PM2_SAVE="${PM2_SAVE:-1}"
 NODE_ENV="${NODE_ENV:-development}"
 ARES_LIVE_RELOAD="${ARES_LIVE_RELOAD:-0}"
+PORT_CONFLICT_POLICY="${PORT_CONFLICT_POLICY:-fail}"
+PM2_READY_TIMEOUT_SECONDS="${PM2_READY_TIMEOUT_SECONDS:-15}"
 EXPECTED_CWD="${CURRENT_LINK}"
 EXPECTED_EXEC_PATH="${CURRENT_LINK}/services/backend/index.mjs"
 
@@ -33,6 +39,7 @@ echo "  host: $APP_HOST"
 echo "  port: $WEB_PORT"
 echo "  node env: $NODE_ENV"
 echo "  live reload: $ARES_LIVE_RELOAD"
+echo "  port conflict policy: $PORT_CONFLICT_POLICY"
 
 run_pm2() {
   PM2_NAME="$PM2_NAME" \
@@ -41,9 +48,64 @@ run_pm2() {
   APP_HOST="$APP_HOST" \
   NODE_ENV="$NODE_ENV" \
   ARES_LIVE_RELOAD="$ARES_LIVE_RELOAD" \
+  ARES_DEPLOY_REF="${ARES_DEPLOY_REF:-}" \
+  ARES_DEPLOY_COMMIT="${ARES_DEPLOY_COMMIT:-}" \
   OPENALEX_API_KEY="${OPENALEX_API_KEY:-}" \
   OPENALEX_MAILTO="${OPENALEX_MAILTO:-}" \
   pm2 "$@"
+}
+
+pm2_port_conflicts() {
+  pm2 jlist | TARGET_PM2_NAME="$PM2_NAME" TARGET_PORT="$WEB_PORT" node -e '
+const fs = require("fs");
+
+const targetName = process.env.TARGET_PM2_NAME;
+const targetPort = String(process.env.TARGET_PORT || "");
+const activeStatuses = new Set(["online", "launching", "waiting restart"]);
+const apps = JSON.parse(fs.readFileSync(0, "utf8"));
+
+for (const app of apps) {
+  if (!app || app.name === targetName) {
+    continue;
+  }
+
+  const env = app.pm2_env || {};
+  const runtimeEnv = env.env || {};
+  const port = String(runtimeEnv.PORT ?? env.PORT ?? runtimeEnv.WEB_PORT ?? env.WEB_PORT ?? "");
+  const status = String(env.status || "");
+
+  if (port !== targetPort || !activeStatuses.has(status)) {
+    continue;
+  }
+
+  process.stdout.write(`${app.name}|${status}|${port}\n`);
+}
+'
+}
+
+handle_port_conflicts() {
+  local conflicts
+
+  conflicts="$(pm2_port_conflicts || true)"
+  if [[ -z "$conflicts" ]]; then
+    return 0
+  fi
+
+  if [[ "$PORT_CONFLICT_POLICY" == "takeover" ]]; then
+    while IFS='|' read -r conflict_name conflict_status conflict_port; do
+      [[ -n "$conflict_name" ]] || continue
+      printf '▶ 포트 %s 기존 앱 정리: %s (%s)\n' "$conflict_port" "$conflict_name" "$conflict_status"
+      pm2 delete "$conflict_name"
+    done <<<"$conflicts"
+    return 0
+  fi
+
+  echo "✗ 포트 ${WEB_PORT}를 다른 PM2 앱이 사용 중입니다. PM2_NAME 또는 PORT_CONFLICT_POLICY를 확인하세요." >&2
+  while IFS='|' read -r conflict_name conflict_status conflict_port; do
+    [[ -n "$conflict_name" ]] || continue
+    printf '  - %s (%s, port=%s)\n' "$conflict_name" "$conflict_status" "$conflict_port" >&2
+  done <<<"$conflicts"
+  return 1
 }
 
 pm2_snapshot() {
@@ -120,6 +182,36 @@ pm2_needs_recreate() {
   return 0
 }
 
+wait_for_pm2_ready() {
+  local attempt
+  local snapshot
+  local current_status
+
+  for ((attempt = 1; attempt <= PM2_READY_TIMEOUT_SECONDS; attempt++)); do
+    if snapshot="$(pm2_snapshot 2>/dev/null)"; then
+      mapfile -t snapshot_lines <<<"$snapshot"
+      current_status="${snapshot_lines[2]:-}"
+
+      if [[ "$current_status" == "online" ]]; then
+        return 0
+      fi
+
+      if [[ "$current_status" == "errored" ]]; then
+        echo "✗ PM2 앱이 errored 상태입니다: $PM2_NAME" >&2
+        pm2 describe "$PM2_NAME" >&2 || true
+        return 1
+      fi
+    fi
+    sleep 1
+  done
+
+  echo "✗ PM2 준비 시간 초과: $PM2_NAME" >&2
+  pm2 describe "$PM2_NAME" >&2 || true
+  return 1
+}
+
+handle_port_conflicts
+
 if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
   if pm2_needs_recreate; then
     pm2 delete "$PM2_NAME"
@@ -130,6 +222,8 @@ if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
 else
   run_pm2 start "$ECOSYSTEM_FILE" --only "$PM2_NAME" --update-env
 fi
+
+wait_for_pm2_ready
 
 if [[ "$PM2_SAVE" == "1" ]]; then
   pm2 save
