@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createAgentRunService } from './lib/agent-runs.mjs';
 import { normalizeRequestPath } from './lib/path-utils.mjs';
+import { createReadingService } from './lib/reading-service.mjs';
 import { createScoutSearchService } from './lib/scout-search.mjs';
 import { parseSearchPayload, parseSearchQuery, sanitisePaperRecord } from './lib/search-contract.mjs';
 import { createStore } from './lib/store.mjs';
@@ -12,15 +13,17 @@ import { normaliseVenueLabel } from './lib/search-utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
+const DATA_ROOT_DIR = path.resolve(process.env.ARES_DATA_ROOT_DIR || ROOT_DIR);
 const WEB_DIR = path.join(ROOT_DIR, 'web');
-const SEED_FILE = path.join(ROOT_DIR, 'data', 'store.seed.json');
-const RUNTIME_FILE = path.join(ROOT_DIR, 'data', 'runtime', 'store.json');
+const SEED_FILE = path.join(DATA_ROOT_DIR, 'data', 'store.seed.json');
+const RUNTIME_FILE = path.join(DATA_ROOT_DIR, 'data', 'runtime', 'store.json');
 
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
@@ -86,6 +89,11 @@ const store = await createStore({
 });
 const agentRunService = createAgentRunService({
   rootDir: ROOT_DIR,
+  runtimeName: ARES_AGENT_RUNTIME,
+  store,
+});
+const readingService = createReadingService({
+  rootDir: DATA_ROOT_DIR,
   runtimeName: ARES_AGENT_RUNTIME,
   store,
 });
@@ -346,34 +354,33 @@ function parseAgentRunActionId(requestPath) {
   return match ? decodeURIComponent(match[1]) : '';
 }
 
-function buildReadingSessionSeed(projectId, paper, extras = {}) {
+function parseReadingSessionId(requestPath) {
+  const match = requestPath.match(/^\/api\/reading-sessions\/([^/]+)(?:\/|$)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+function parseReadingSessionNoteRoute(requestPath) {
+  const match = requestPath.match(/^\/api\/reading-sessions\/([^/]+)\/notes(?:\/([^/]+))?$/);
+  if (!match) {
+    return null;
+  }
+
   return {
-    abstract: paper.abstract || '',
-    authors: paper.authors || [],
-    citedByCount: Number(paper.citedByCount) || 0,
-    keyPoints: paper.keyPoints || [],
-    keywords: paper.keywords || [],
-    matchedKeywords: paper.matchedKeywords || [],
-    openAccess: Boolean(paper.openAccess),
-    paperId: paper.paperId,
-    paperUrl: paper.paperUrl || null,
-    pdfUrl: paper.pdfUrl || null,
-    projectId,
-    relevance: Number(paper.relevance) || 0,
-    reproParams: extras.reproParams || [],
-    runId: extras.runId || '',
-    sections: extras.sections || [],
-    sourceName: paper.sourceName || 'ARES',
-    sourceProvider: paper.sourceProvider || 'manual',
-    sourceRefs: extras.sourceRefs || [{ id: paper.paperId, type: 'paper', label: paper.title }],
-    startedAt: extras.startedAt || null,
-    status: extras.status || 'queue',
-    summary: extras.summary || paper.summary || paper.abstract || '',
-    title: paper.title,
-    venue: paper.venue,
-    warning: extras.warning || '',
-    year: paper.year ?? null,
+    noteId: match[2] ? decodeURIComponent(match[2]) : '',
+    sessionId: decodeURIComponent(match[1]),
   };
+}
+
+function resolveVendorAsset(requestPath) {
+  if (requestPath === '/__vendor/pdfjs/pdf.mjs') {
+    return path.join(ROOT_DIR, 'node_modules', 'pdfjs-dist', 'build', 'pdf.mjs');
+  }
+
+  if (requestPath === '/__vendor/pdfjs/pdf.worker.mjs') {
+    return path.join(ROOT_DIR, 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.mjs');
+  }
+
+  return '';
 }
 
 function filterSavedLibrary(projectId, query) {
@@ -393,6 +400,22 @@ function sanitisePaperPayload(payload) {
 }
 
 async function serveStatic(requestPath, response) {
+  const vendorPath = resolveVendorAsset(requestPath);
+  if (vendorPath) {
+    try {
+      const content = await fs.readFile(vendorPath);
+      response.writeHead(200, {
+        'cache-control': 'public, max-age=300',
+        'content-type': CONTENT_TYPES[path.extname(vendorPath)] || 'application/octet-stream',
+      });
+      response.end(content);
+      return;
+    } catch {
+      notFound(response);
+      return;
+    }
+  }
+
   const cleanPath = requestPath === '/' ? '/index.html' : requestPath;
   const filePath = path.join(WEB_DIR, cleanPath);
   const resolved = path.resolve(filePath);
@@ -593,13 +616,104 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && /^\/api\/reading-sessions\/[^/]+\/pdf$/.test(requestPath)) {
+      const sessionId = parseReadingSessionId(requestPath);
+      try {
+        const { buffer } = await readingService.getSessionPdf(sessionId);
+        response.writeHead(200, {
+          'cache-control': 'no-store',
+          'content-type': 'application/pdf',
+        });
+        response.end(buffer);
+      } catch (error) {
+        sendError(response, error, 409);
+      }
+      return;
+    }
+
+    if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/parse$/.test(requestPath)) {
+      const sessionId = parseReadingSessionId(requestPath);
+      json(response, 200, await readingService.parseSession(sessionId));
+      return;
+    }
+
+    if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/summarize$/.test(requestPath)) {
+      const sessionId = parseReadingSessionId(requestPath);
+      try {
+        json(response, 200, await readingService.summarizeSession(sessionId));
+      } catch (error) {
+        sendError(response, error, 409);
+      }
+      return;
+    }
+
+    if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/extract-assets$/.test(requestPath)) {
+      const sessionId = parseReadingSessionId(requestPath);
+      try {
+        json(response, 200, await readingService.extractAssets(sessionId));
+      } catch (error) {
+        sendError(response, error, 409);
+      }
+      return;
+    }
+
+    if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/chat$/.test(requestPath)) {
+      const sessionId = parseReadingSessionId(requestPath);
+      const body = await readJsonBody(request);
+      try {
+        json(response, 200, await readingService.chat(sessionId, body));
+      } catch (error) {
+        sendError(response, error, 409);
+      }
+      return;
+    }
+
+    if (
+      (request.method === 'POST' || request.method === 'PATCH' || request.method === 'DELETE') &&
+      /^\/api\/reading-sessions\/[^/]+\/notes(?:\/[^/]+)?$/.test(requestPath)
+    ) {
+      const route = parseReadingSessionNoteRoute(requestPath);
+      if (!route) {
+        notFound(response);
+        return;
+      }
+
+      if (request.method === 'POST') {
+        const body = await readJsonBody(request);
+        json(response, 200, await readingService.createNote(route.sessionId, body));
+        return;
+      }
+
+      if (!route.noteId) {
+        sendError(response, new Error('noteId is required.'), 400);
+        return;
+      }
+
+      if (request.method === 'PATCH') {
+        const body = await readJsonBody(request);
+        json(response, 200, await readingService.updateNote(route.sessionId, route.noteId, body));
+        return;
+      }
+
+      json(response, 200, await readingService.deleteNote(route.sessionId, route.noteId));
+      return;
+    }
+
+    if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/reading-sessions$/.test(requestPath)) {
+      const projectId = parseProjectRoute(requestPath, 'reading-sessions');
+      json(response, 200, {
+        results: await readingService.listProjectSessions(projectId),
+      });
+      return;
+    }
+
     if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/[a-z-]+$/.test(requestPath)) {
       const assetRoute = parseProjectAssetRoute(requestPath);
       if (assetRoute) {
         json(response, 200, {
           results:
             assetRoute.collection === 'readingSessions'
-              ? store.getReadingSessions(assetRoute.projectId)
+              ? await readingService.listProjectSessions(assetRoute.projectId)
               : store.listProjectAssets(assetRoute.projectId, assetRoute.collection),
         });
         return;
@@ -617,13 +731,13 @@ const server = http.createServer(async (request, response) => {
         return;
       }
 
-      const session = await store.upsertReadingSession(
-        buildReadingSessionSeed(projectId, paper, {
-          runId: String(body.runId || '').trim(),
-          status: String(body.status || 'queue'),
-          summary: String(body.summary || paper.summary || ''),
-        }),
-      );
+      const session = await readingService.createSession({
+        paper,
+        projectId,
+        runId: String(body.runId || '').trim(),
+        status: String(body.status || 'todo'),
+        summary: String(body.summary || paper.summary || ''),
+      });
       const queued = await store.queuePaper(projectId, paper, {
         runId: session.runId,
         sessionId: session.id,
@@ -670,12 +784,12 @@ const server = http.createServer(async (request, response) => {
       const paper = sanitisePaperPayload(body.paper);
       const session =
         (await store.getReadingSessionByPaper(projectId, paper.paperId)) ||
-        (await store.upsertReadingSession(
-          buildReadingSessionSeed(projectId, paper, {
-            runId: String(body.runId || '').trim(),
-            status: String(body.status || 'queue'),
-          }),
-        ));
+        (await readingService.createSession({
+          paper,
+          projectId,
+          runId: String(body.runId || '').trim(),
+          status: String(body.status || 'todo'),
+        }));
       const queued = await store.queuePaper(projectId, paper, {
         runId: String(body.runId || '').trim(),
         sessionId: session.id,

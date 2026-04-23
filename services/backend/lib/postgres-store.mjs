@@ -3,6 +3,8 @@ import { promises as fs } from 'node:fs';
 
 import { Pool } from 'pg';
 
+import { normaliseReadingSession } from './reading-model.mjs';
+
 const ASSET_COLLECTIONS = [
   'agentRuns',
   'readingSessions',
@@ -808,24 +810,25 @@ export async function createPostgresStore({
 
     const session = findReadingSessionByPaper(projectId, paperId);
     if (session) {
+      const normalized = normaliseReadingSession(session);
       return {
-        abstract: session.abstract || '',
-        authors: ensureStringArray(session.authors, 8),
-        citedByCount: Number(session.citedByCount) || 0,
-        keyPoints: ensureStringArray(session.keyPoints, 6),
-        keywords: ensureStringArray(session.keywords, 8),
-        matchedKeywords: ensureStringArray(session.matchedKeywords, 8),
-        openAccess: Boolean(session.openAccess),
-        paperId: session.paperId,
-        paperUrl: session.paperUrl || null,
-        pdfUrl: session.pdfUrl || null,
-        relevance: Number(session.relevance) || 0,
-        sourceName: session.sourceName || 'Reading session',
-        sourceProvider: session.sourceProvider || 'reading',
-        summary: session.summary || '',
-        title: session.title,
-        venue: session.venue || 'Unknown',
-        year: session.year ?? null,
+        abstract: normalized.abstract || '',
+        authors: ensureStringArray(normalized.authors, 8),
+        citedByCount: Number(normalized.citedByCount) || 0,
+        keyPoints: ensureStringArray(normalized.keyPoints, 6),
+        keywords: ensureStringArray(normalized.keywords, 8),
+        matchedKeywords: ensureStringArray(normalized.matchedKeywords, 8),
+        openAccess: Boolean(normalized.openAccess),
+        paperId: normalized.paperId,
+        paperUrl: normalized.paperUrl || null,
+        pdfUrl: normalized.pdfUrl || null,
+        relevance: Number(normalized.relevance) || 0,
+        sourceName: normalized.sourceName || 'Reading session',
+        sourceProvider: normalized.sourceProvider || 'reading',
+        summary: normalized.summary || normalized.summaryCards?.tldr || '',
+        title: normalized.title,
+        venue: normalized.venue || 'Unknown',
+        year: normalized.year ?? null,
       };
     }
 
@@ -977,62 +980,13 @@ export async function createPostgresStore({
 
       ensureProject(projectId);
       const existing = findReadingSessionByPaper(projectId, paperId);
-      const createdAt = existing?.createdAt || input.createdAt || nowIso();
-      const updatedAt = nowIso();
-      const next = {
-        abstract: ensureText(input.abstract, existing?.abstract || ''),
-        agent: ensureText(input.agent, existing?.agent || 'Reader agent'),
-        authors: ensureStringArray(input.authors, 8).length
-          ? ensureStringArray(input.authors, 8)
-          : ensureStringArray(existing?.authors, 8),
-        citedByCount:
-          input.citedByCount === undefined ? Number(existing?.citedByCount) || 0 : Number(input.citedByCount) || 0,
-        createdAt,
-        error: ensureText(input.error, existing?.error || ''),
-        finishedAt: input.finishedAt !== undefined ? input.finishedAt : existing?.finishedAt || null,
-        highlights: input.highlights !== undefined ? ensureObjectArray(input.highlights) : clone(existing?.highlights || []),
-        id: String(input.id || existing?.id || createId('reading')),
-        keyPoints: input.keyPoints !== undefined ? ensureStringArray(input.keyPoints, 6) : ensureStringArray(existing?.keyPoints, 6),
-        keywords: input.keywords !== undefined ? ensureStringArray(input.keywords, 8) : ensureStringArray(existing?.keywords, 8),
-        matchedKeywords:
-          input.matchedKeywords !== undefined
-            ? ensureStringArray(input.matchedKeywords, 8)
-            : ensureStringArray(existing?.matchedKeywords, 8),
-        notes: input.notes !== undefined ? ensureObjectArray(input.notes) : clone(existing?.notes || []),
-        openAccess: input.openAccess === undefined ? Boolean(existing?.openAccess) : Boolean(input.openAccess),
-        paperId,
-        paperUrl:
-          input.paperUrl === undefined
-            ? existing?.paperUrl || null
-            : input.paperUrl
-              ? String(input.paperUrl)
-              : null,
-        pdfUrl:
-          input.pdfUrl === undefined ? existing?.pdfUrl || null : input.pdfUrl ? String(input.pdfUrl) : null,
-        projectId,
-        relevance: input.relevance === undefined ? Number(existing?.relevance) || 0 : Number(input.relevance) || 0,
-        reproParams:
-          input.reproParams !== undefined ? ensureObjectArray(input.reproParams) : clone(existing?.reproParams || []),
-        runId: ensureText(input.runId, existing?.runId || ''),
-        sections: input.sections !== undefined ? ensureObjectArray(input.sections) : clone(existing?.sections || []),
-        sourceName: ensureText(input.sourceName, existing?.sourceName || 'Reading session'),
-        sourceProvider: ensureText(input.sourceProvider, existing?.sourceProvider || 'reader'),
-        sourceRefs:
-          input.sourceRefs !== undefined ? ensureObjectArray(input.sourceRefs) : clone(existing?.sourceRefs || []),
-        startedAt: input.startedAt !== undefined ? input.startedAt : existing?.startedAt || null,
-        status: normaliseStatus(input.status, existing?.status || 'todo'),
-        summary: ensureText(input.summary, existing?.summary || ''),
-        title: ensureText(input.title, existing?.title || 'Untitled paper'),
-        updatedAt,
-        venue: ensureText(input.venue, existing?.venue || 'Unknown'),
-        warning: ensureText(input.warning, existing?.warning || ''),
-        year:
-          input.year === undefined
-            ? existing?.year ?? null
-            : input.year === null || input.year === ''
-              ? null
-              : Number(input.year) || null,
-      };
+      const next = normaliseReadingSession(
+        {
+          ...clone(input),
+          updatedAt: nowIso(),
+        },
+        { existing },
+      );
 
       upsertBy(state.readingSessions, next, (entry) => entry.projectId === projectId && entry.paperId === paperId);
       await upsertReadingSessionRow(pool, next);

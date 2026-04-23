@@ -1,5 +1,6 @@
 import { createSearchFeature } from "./app/features/search.js";
 import { createReadingFeature } from "./app/features/reading.js";
+import { hydrateReadingPdfSurface, resetReadingPdfSurface } from "./app/lib/pdf-viewer.js";
 
 const TOKENS = {
   bg: "#fbfbfa",
@@ -166,6 +167,10 @@ const INITIAL_FILTER_PANEL_OPEN = INITIAL_SEARCH_LAYOUT === "desktop";
 const INITIAL_PREVIEW_PANEL_OPEN = false;
 const INITIAL_READING_HOME_LAYOUT = detectReadingHomeLayout();
 
+function defaultReadingRailOpen(layout = detectSearchLayout()) {
+  return layout === "desktop" ? "overview" : "";
+}
+
 const state = {
   booting: true,
   hasSearched: false,
@@ -187,15 +192,14 @@ const state = {
   readingView: "home",
   readingDocumentTab: "pdf",
   readingWorkbenchTab: "chat",
-  readingRailOpen: "overview",
+  readingRailOpen: defaultReadingRailOpen(INITIAL_SEARCH_LAYOUT),
   readingWorkbenchCollapsed: false,
   readingOrientation: defaultReadingOrientation(),
   readingSplitHorizontal: 62,
   readingSplitVertical: 62,
   readingRailQuery: "",
   readingAssetsFilter: "all",
-  readingParsedSessionIds: new Set(),
-  readingSummarizedSessionIds: new Set(),
+  readingRequest: null,
   readingHomeFilter: "all",
   readingHomeSelectedPaperId: "",
   readingHomePreviewOpen: false,
@@ -486,6 +490,75 @@ function api(path, options = {}) {
   });
 }
 
+function syncReadingSession(nextSession) {
+  if (!nextSession?.id) {
+    return;
+  }
+
+  const existingIndex = state.readingSessions.findIndex((entry) => entry.id === nextSession.id);
+  if (existingIndex >= 0) {
+    state.readingSessions[existingIndex] = nextSession;
+  } else {
+    state.readingSessions.unshift(nextSession);
+  }
+
+  state.readingSessions = sortReadingSessions(state.readingSessions);
+  state.activeReadingSessionId = nextSession.id;
+}
+
+function clearReadingRequest() {
+  state.readingRequest = null;
+}
+
+function readingSessionApiPath(sessionId, suffix = "") {
+  const tail = suffix ? `/${suffix.replace(/^\/+/, "")}` : "";
+  return `api/reading-sessions/${encodeURIComponent(sessionId)}${tail}`;
+}
+
+async function hydrateReadingPdfIfNeeded() {
+  if (state.activeStage !== "reading" || state.readingView !== "detail" || state.readingDocumentTab !== "pdf") {
+    resetReadingPdfSurface();
+    return;
+  }
+
+  const session = selectedReadingSession();
+  const host = document.querySelector('[data-reading-pdf-host="true"]');
+  if (!session?.id || !session.pdfUrl || !host) {
+    resetReadingPdfSurface();
+    return;
+  }
+
+  await hydrateReadingPdfSurface({
+    baseUrl: APP_BASE_URL,
+    host,
+    pdfUrl: appUrl(readingSessionApiPath(session.id, "pdf")).href,
+  });
+}
+
+function scheduleReadingHydration() {
+  window.requestAnimationFrame(() => {
+    void hydrateReadingPdfIfNeeded();
+  });
+}
+
+async function runReadingRequest(kind, sessionId, task, { preserveRailFocus = false } = {}) {
+  state.readingRequest = { kind, sessionId };
+  refreshReadingStageUI({ preserveRailFocus });
+
+  try {
+    const payload = await task();
+    const nextSession = payload?.readingSession || payload?.session || null;
+    if (nextSession?.id) {
+      syncReadingSession(nextSession);
+    }
+
+    return payload;
+  } finally {
+    clearReadingRequest();
+    refreshReadingStageUI({ preserveRailFocus });
+  }
+}
+
 function activeProject() {
   return state.projects.find((project) => project.id === state.activeProjectId) || state.projects[0] || null;
 }
@@ -682,75 +755,35 @@ function readingMatchSectionIndex(sections = [], value = "") {
 }
 
 function deriveReadingNotes(session) {
-  const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
   const notes = Array.isArray(session?.notes) ? session.notes : [];
   const sections = Array.isArray(session?.sections) ? session.sections : [];
   const cards = [];
-  const seen = new Set();
-
-  highlights.forEach((highlight, index) => {
-    const text = readingExcerpt(highlight.text, "", 170);
-    if (!text) {
-      return;
-    }
-
-    const key = text.toLowerCase();
-    if (seen.has(key)) {
-      return;
-    }
-
-    const meta = readingCategoryMeta(highlight.type);
-    const sectionIndex = readingMatchSectionIndex(sections, highlight.section);
-    cards.push({
-      id: highlight.id || `${session?.id || "reading"}-highlight-${index}`,
-      cat: meta.label,
-      color: meta.color,
-      text,
-      memo: readingExcerpt(
-        notes[index]?.value || (sectionIndex >= 0 ? sections[sectionIndex]?.summary : session?.summary),
-        "Reader note is being refined.",
-        180,
-      ),
-      pg: readingSectionPage(sectionIndex >= 0 ? sectionIndex + 2 : index + 3),
-    });
-    seen.add(key);
-  });
 
   notes.forEach((note, index) => {
-    const text = readingExcerpt(note.value || note.text, "", 170);
-    if (!text) {
-      return;
-    }
-
-    const key = text.toLowerCase();
-    if (seen.has(key)) {
-      return;
-    }
-
-    const meta = readingCategoryMeta(note.label);
+    const meta = readingCategoryMeta(note.kind || note.label);
+    const sectionIndex = readingMatchSectionIndex(sections, note.sectionId || note.section);
     cards.push({
       id: note.id || `${session?.id || "reading"}-note-${index}`,
       cat: meta.label,
       color: meta.color,
-      text,
-      memo: readingExcerpt(sections[index]?.summary || session?.summary, "추가 메모가 이어질 예정입니다.", 180),
-      pg: readingSectionPage(index + 4),
+      text: readingExcerpt(note.quote || note.text || note.value, "", 170),
+      memo: readingExcerpt(note.body || note.value || sections[index]?.summary || session?.summary, "추가 메모가 이어질 예정입니다.", 180),
+      pg: note.page || (sectionIndex >= 0 ? readingSectionPage(sectionIndex + 1) : readingSectionPage(index + 1)),
     });
-    seen.add(key);
   });
 
-  if (!cards.length) {
-    cards.push({
-      id: `${session?.id || "reading"}-fallback-note`,
-      cat: "Summary",
-      color: TOKENS.read,
-      text: readingExcerpt(session?.summary || session?.abstract, "Reader note is being prepared.", 170),
-      memo: readingExcerpt(session?.warning || session?.abstract, "구조화 노트가 생성되면 이 영역을 채웁니다.", 180),
-      pg: 1,
-    });
+  if (cards.length) {
+    return cards.slice(0, 6);
   }
 
-  return cards.slice(0, 6);
+  return (Array.isArray(session?.highlights) ? session.highlights : []).slice(0, 6).map((highlight, index) => ({
+    id: highlight.id || `${session?.id || "reading"}-highlight-${index}`,
+    cat: readingCategoryMeta(highlight.type).label,
+    color: readingCategoryMeta(highlight.type).color,
+    text: readingExcerpt(highlight.quote || highlight.text, "Highlight pending", 170),
+    memo: "Parse 단계에서 추출된 하이라이트입니다.",
+    pg: highlight.page || readingSectionPage(index + 1),
+  }));
 }
 
 function buildPreviewReadingPaper(project) {
@@ -1116,7 +1149,7 @@ function readingPaperFromSession(session) {
     relevance: Number(session.relevance) || 0,
     sourceName: session.sourceName || "Reading",
     sourceProvider: session.sourceProvider || "reading",
-    summary: session.summary || session.abstract || "",
+    summary: session.summary || session.summaryCards?.tldr || session.abstract || "",
     title: session.title || "Untitled paper",
     updatedAt: session.updatedAt || session.startedAt || session.createdAt || "",
     venue: session.venue || "Unknown venue",
@@ -1125,21 +1158,22 @@ function readingPaperFromSession(session) {
 }
 
 function readingHomeStatusMeta(paper, session) {
-  const sessionStatus = String(session?.status || "").toLowerCase();
-  if (sessionStatus === "done") {
+  const parseStatus = String(session?.parseStatus || "").toLowerCase();
+  const summaryStatus = String(session?.summaryStatus || "").toLowerCase();
+  if (summaryStatus === "done") {
     return { bucket: "done", label: "Completed", color: TOKENS.search };
   }
 
-  if (sessionStatus === "running") {
+  if (parseStatus === "running" || summaryStatus === "running") {
     return { bucket: "running", label: "In progress", color: TOKENS.result };
   }
 
-  if (sessionStatus === "queue") {
-    return { bucket: "running", label: "Queued", color: TOKENS.result };
+  if (parseStatus === "done") {
+    return { bucket: "ready", label: "Parsed", color: TOKENS.read };
   }
 
-  if (sessionStatus === "todo") {
-    return { bucket: "ready", label: "Ready", color: TOKENS.read };
+  if (parseStatus === "error" || summaryStatus === "error") {
+    return { bucket: "saved", label: "Needs retry", color: TOKENS.result };
   }
 
   if (paper?.pdfUrl || session?.pdfUrl) {
@@ -1150,7 +1184,7 @@ function readingHomeStatusMeta(paper, session) {
 }
 
 function readingHomeActionMeta(item) {
-  if (item?.session?.status === "running") {
+  if (item?.session?.summaryStatus === "running" || item?.session?.parseStatus === "running") {
     return {
       primaryLabel: "Resume Reading",
       primaryIcon: "book",
@@ -1159,7 +1193,7 @@ function readingHomeActionMeta(item) {
     };
   }
 
-  if (item?.session?.status === "done") {
+  if (item?.session?.summaryStatus === "done" || item?.session?.parseStatus === "done") {
     return {
       primaryLabel: "Open Reading",
       primaryIcon: "note",
@@ -1324,6 +1358,20 @@ function syncResponsiveReadingHomeLayout() {
   return true;
 }
 
+function syncResponsiveReadingRail(layout = state.searchLayout) {
+  if (state.readingView !== "detail") {
+    return false;
+  }
+
+  const nextRail = defaultReadingRailOpen(layout);
+  if (state.readingRailOpen === nextRail) {
+    return false;
+  }
+
+  state.readingRailOpen = nextRail;
+  return true;
+}
+
 function selectedReadingSession() {
   const sessions = effectiveReadingSessions();
   return sessions.find((session) => session.id === state.activeReadingSessionId) || sessions[0] || null;
@@ -1479,10 +1527,15 @@ async function runSearch({ preserveSelection = false } = {}) {
     return;
   }
 
+  const wasHome = !state.hasSearched;
   state.hasSearched = true;
   state.loading = true;
   state.error = "";
-  render();
+  if (wasHome) {
+    renderWithViewTransition();
+  } else {
+    render();
+  }
 
   try {
     const query = state.searchInput.trim();
@@ -1573,26 +1626,25 @@ async function startReadingSession(paper) {
       return;
     }
 
-    const payload = await api("api/agent-runs", {
+    const payload = await api(`api/projects/${encodeURIComponent(project.id)}/reading-sessions`, {
       method: "POST",
       body: JSON.stringify({
-        projectId: project.id,
-        stage: "reading",
-        taskKind: "create-reading-session",
-        assetRefs: [{ type: "paper", id: paper.paperId, label: paper.title }],
-        input: {
-          paper,
-          paperId: paper.paperId,
-        },
+        paper,
+        paperId: paper.paperId,
       }),
     });
     state.results = state.results.map((entry) => (entry.paperId === paper.paperId ? { ...entry, queued: true } : entry));
     state.activeStage = "reading";
     state.readingView = "detail";
+    state.readingRailOpen = defaultReadingRailOpen(state.searchLayout);
     saveStorage(STORAGE_KEYS.stage, state.activeStage);
     await loadProjects();
+    await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: false });
-    await pollAgentRun(payload.run?.id || "");
+    if (payload.readingSession?.id) {
+      state.activeReadingSessionId = payload.readingSession.id;
+      syncReadingSession(payload.readingSession);
+    }
   } catch (error) {
     state.error = error.message;
   } finally {
@@ -1614,8 +1666,9 @@ async function openReadingDetailForPaper(paperId, { createIfMissing = true } = {
     state.activeReadingSessionId = session.id;
     state.readingHomeSelectedPaperId = paperId;
     state.readingHomePreviewOpen = false;
+    state.readingRailOpen = defaultReadingRailOpen(state.searchLayout);
     saveStorage(STORAGE_KEYS.stage, state.activeStage);
-    render();
+    renderWithViewTransition();
     return;
   }
 
@@ -1807,6 +1860,19 @@ function renderSidebar() {
 
 function renderTopbar() {
   const stage = stageById(state.activeStage);
+  const readingSession = stage.id === "reading" && state.readingView === "detail" ? selectedReadingSession() : null;
+  const readingBreadcrumb = readingSession
+    ? `
+        <span class="topbar-separator topbar-breadcrumb-bridge">/</span>
+        <nav class="topbar-breadcrumb" aria-label="Reading breadcrumb">
+          <button type="button" class="topbar-crumb-link" data-action="back-reading-home">Library</button>
+          <span class="topbar-crumb-separator" aria-hidden="true">/</span>
+          <span class="topbar-crumb-current" title="${escapeHtml(readingSession.title || "Untitled paper")}">
+            ${escapeHtml(readingSession.title || "Untitled paper")}
+          </span>
+        </nav>
+      `
+    : "";
   return `
     <header class="main-topbar" data-ares-surface="topbar" data-ares-stage="${escapeHtml(stage.id)}">
       <div class="topbar-stage">
@@ -1814,8 +1880,7 @@ function renderTopbar() {
           ${icon(stage.icon, { size: 13, color: "#ffffff" })}
         </span>
         <span class="topbar-stage-label">${escapeHtml(stage.label)}</span>
-        <span class="topbar-separator">·</span>
-        <span class="topbar-stage-sub">${escapeHtml(stage.sub)}</span>
+        ${readingBreadcrumb}
       </div>
       <div class="topbar-actions">
         <button type="button" class="btn-s">${icon("share", { size: 12 })} Share</button>
@@ -1985,6 +2050,7 @@ function renderBottomNav() {
 }
 
 function renderShell(message) {
+  resetReadingPdfSurface();
   app.innerHTML = `
     <div class="app-shell">
       <main class="workspace">
@@ -2040,6 +2106,7 @@ function render() {
       ${renderBottomNav()}
     </div>
   `;
+  scheduleReadingHydration();
 }
 
 function focusSearchInput({ forceSearchStage = false, select = false } = {}) {
@@ -2144,6 +2211,7 @@ function patchReadingStageUI({ preserveRailFocus = false } = {}) {
   if (currentView !== "detail" || nextView !== "detail") {
     currentStage.replaceWith(nextStage);
     syncAppActivePaperMetadata(currentReadingPaper(project));
+    scheduleReadingHydration();
     return true;
   }
 
@@ -2219,6 +2287,8 @@ function patchReadingStageUI({ preserveRailFocus = false } = {}) {
     });
   }
 
+  syncAppActivePaperMetadata(currentReadingPaper(project));
+  scheduleReadingHydration();
   return true;
 }
 
@@ -2228,8 +2298,57 @@ function refreshReadingStageUI(options = {}) {
   }
 }
 
+function prefersReducedMotion() {
+  return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+}
+
+function renderWithViewTransition() {
+  const applyMorphFlag = () => {
+    const shell = document.querySelector('[data-ares-app="true"]');
+    if (shell) {
+      shell.setAttribute("data-ares-morph", "true");
+    }
+  };
+  const clearMorphFlag = () => {
+    const shell = document.querySelector('[data-ares-app="true"]');
+    if (shell) {
+      shell.removeAttribute("data-ares-morph");
+    }
+  };
+
+  if (prefersReducedMotion()) {
+    render();
+    return;
+  }
+
+  // Chrome/Edge — native View Transitions API: cross-fade + element morph.
+  if (typeof document.startViewTransition === "function") {
+    try {
+      const transition = document.startViewTransition(() => {
+        render();
+        applyMorphFlag();
+      });
+      window.setTimeout(clearMorphFlag, 1500);
+      if (transition && typeof transition.finished?.catch === "function") {
+        transition.finished.catch(() => {});
+      }
+      return;
+    } catch (_err) {
+      // fall through to CSS-only path
+    }
+  }
+
+  // Safari / Firefox — no VT API, but still fire staggered entrance animations
+  // by setting the `data-ares-morph` flag so gated CSS rules apply.
+  render();
+  applyMorphFlag();
+  window.setTimeout(clearMorphFlag, 1500);
+}
+
 function previewSearchModeSwitch(nextMode) {
-  const hero = document.querySelector(".hero-input");
+  const dashboardHero = document.querySelector(".dashboard-hero");
+  const resultsHero = document.querySelector(".hero-input");
+  const hero = dashboardHero || resultsHero;
   if (!hero) {
     return Promise.resolve();
   }
@@ -2239,23 +2358,32 @@ function previewSearchModeSwitch(nextMode) {
     return Promise.resolve();
   }
 
-  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+  if (prefersReducedMotion()) {
     return Promise.resolve();
   }
+
+  const btnSelector = dashboardHero ? ".dashboard-sbtn" : ".hero-submit-btn";
+  const placeholderInput = hero.querySelector("#search-input");
 
   return new Promise((resolve) => {
     window.requestAnimationFrame(() => {
       hero.classList.remove("scout", "keyword");
       hero.classList.add(nextMode);
 
-      const activeButton = hero.querySelector(".hero-submit-btn.active");
-      const nextButton = hero.querySelector(`.hero-submit-btn[data-mode="${nextMode}"]`);
-      activeButton?.classList.remove("active");
-      nextButton?.classList.add("active");
+      const activeButton = hero.querySelector(`${btnSelector}.active`);
+      const nextButton = hero.querySelector(`${btnSelector}[data-mode="${nextMode}"]`);
+      activeButton?.classList.remove("active", "is-just-activated");
+      if (nextButton) {
+        nextButton.classList.add("active", "is-just-activated");
+        nextButton.addEventListener(
+          "animationend",
+          () => nextButton.classList.remove("is-just-activated"),
+          { once: true },
+        );
+      }
 
-      const input = hero.querySelector("#search-input");
-      if (input) {
-        input.placeholder = searchPlaceholder(nextMode);
+      if (placeholderInput) {
+        placeholderInput.placeholder = searchPlaceholder(nextMode);
       }
 
       window.setTimeout(resolve, SEARCH_MODE_TRANSITION_MS);
@@ -2463,7 +2591,7 @@ document.addEventListener("click", async (event) => {
       await loadReadingSessions({ preserveSelection: true });
       syncReadingHomeSelection();
     }
-    render();
+    renderWithViewTransition();
     return;
   }
 
@@ -2576,7 +2704,7 @@ document.addEventListener("click", async (event) => {
     state.readingView = "detail";
     state.activeReadingSessionId = trigger.dataset.readingSessionId || "";
     state.readingHomeSelectedPaperId = selectedReadingSession()?.paperId || state.readingHomeSelectedPaperId;
-    refreshReadingStageUI();
+    renderWithViewTransition();
     return;
   }
 
@@ -2585,7 +2713,7 @@ document.addEventListener("click", async (event) => {
     state.readingHomeSelectedPaperId = selectedReadingSession()?.paperId || state.readingHomeSelectedPaperId;
     state.readingHomePreviewOpen = false;
     syncReadingHomeSelection();
-    refreshReadingStageUI();
+    renderWithViewTransition();
     return;
   }
 
@@ -2644,8 +2772,18 @@ document.addEventListener("click", async (event) => {
   if (action === "reading-parse-session") {
     const currentSession = selectedReadingSession();
     if (currentSession?.id) {
-      state.readingParsedSessionIds.add(currentSession.id);
-      refreshReadingStageUI();
+      state.readingDocumentTab = "pdf";
+      try {
+        await runReadingRequest("parse", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, "parse"), {
+            method: "POST",
+            body: JSON.stringify({}),
+          }),
+        );
+        await loadProjects();
+      } catch (error) {
+        state.error = error.message;
+      }
     }
     return;
   }
@@ -2653,10 +2791,120 @@ document.addEventListener("click", async (event) => {
   if (action === "reading-summarize-session") {
     const currentSession = selectedReadingSession();
     if (currentSession?.id) {
-      state.readingSummarizedSessionIds.add(currentSession.id);
-      state.readingParsedSessionIds.add(currentSession.id);
       state.readingDocumentTab = "summary";
-      refreshReadingStageUI();
+      try {
+        await runReadingRequest("summarize", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, "summarize"), {
+            method: "POST",
+            body: JSON.stringify({}),
+          }),
+        );
+        await loadProjects();
+      } catch (error) {
+        state.error = error.message;
+      }
+    }
+    return;
+  }
+
+  if (action === "reading-extract-assets") {
+    const currentSession = selectedReadingSession();
+    if (currentSession?.id) {
+      state.readingDocumentTab = "assets";
+      try {
+        await runReadingRequest("extract", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, "extract-assets"), {
+            method: "POST",
+            body: JSON.stringify({}),
+          }),
+        );
+      } catch (error) {
+        state.error = error.message;
+      }
+    }
+    return;
+  }
+
+  if (action === "create-reading-note") {
+    const currentSession = selectedReadingSession();
+    if (currentSession?.id) {
+      try {
+        await runReadingRequest("note", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, "notes"), {
+            method: "POST",
+            body: JSON.stringify({
+              body: "",
+              kind: "note",
+              origin: "user",
+            }),
+          }),
+        );
+        state.readingWorkbenchTab = "notes";
+      } catch (error) {
+        state.error = error.message;
+      }
+    }
+    return;
+  }
+
+  if (action === "save-reading-note") {
+    const currentSession = selectedReadingSession();
+    const noteId = trigger.dataset.noteId || "";
+    const noteCard = trigger.closest("[data-reading-note-id]");
+    const body = noteCard?.querySelector('[name="readingNoteBody"]')?.value || "";
+    if (currentSession?.id && noteId) {
+      try {
+        await runReadingRequest("note", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, `notes/${encodeURIComponent(noteId)}`), {
+            method: "PATCH",
+            body: JSON.stringify({ body }),
+          }),
+        );
+      } catch (error) {
+        state.error = error.message;
+      }
+    }
+    return;
+  }
+
+  if (action === "delete-reading-note") {
+    const currentSession = selectedReadingSession();
+    const noteId = trigger.dataset.noteId || "";
+    if (currentSession?.id && noteId) {
+      try {
+        await runReadingRequest("note", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, `notes/${encodeURIComponent(noteId)}`), {
+            method: "DELETE",
+          }),
+        );
+      } catch (error) {
+        state.error = error.message;
+      }
+    }
+    return;
+  }
+
+  if (action === "ask-ai-from-note") {
+    const currentSession = selectedReadingSession();
+    const noteId = trigger.dataset.noteId || "";
+    const note = Array.isArray(currentSession?.notes) ? currentSession.notes.find((entry) => entry.id === noteId) : null;
+    if (currentSession?.id && noteId && note) {
+      state.readingWorkbenchTab = "chat";
+      try {
+        await runReadingRequest("chat", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, "chat"), {
+            method: "POST",
+            body: JSON.stringify({
+              message: note.quote
+                ? `이 인용이 의미하는 핵심 포인트와 후속 검증 포인트를 설명해줘.\n\n"${note.quote}"`
+                : "이 노트를 바탕으로 핵심 포인트를 설명해줘.",
+              noteId,
+            }),
+          }),
+        );
+      } catch (error) {
+        state.error = error.message;
+      }
     }
     return;
   }
@@ -2667,10 +2915,34 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "clear-search") {
+    event.preventDefault();
+    if (!state.hasSearched) {
+      return;
+    }
+    state.hasSearched = false;
+    state.loading = false;
+    state.error = "";
+    state.scopePicker = null;
+    renderWithViewTransition();
+    return;
+  }
+
   if (action === "set-search-mode") {
     event.preventDefault();
     const nextMode = trigger.dataset.searchMode === "keyword" ? "keyword" : "scout";
     if (nextMode === state.searchMode) {
+      return;
+    }
+
+    const supportsViewTransition =
+      typeof document.startViewTransition === "function" && !prefersReducedMotion();
+
+    if (supportsViewTransition) {
+      state.searchMode = nextMode;
+      syncSelectedPaper();
+      renderWithViewTransition();
+      focusSearchInput();
       return;
     }
 
@@ -2849,6 +3121,33 @@ document.addEventListener("mouseup", () => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const readingChatForm = event.target.closest('[data-action="submit-reading-chat-form"]');
+  if (readingChatForm) {
+    event.preventDefault();
+    const currentSession = selectedReadingSession();
+    const formData = new FormData(readingChatForm);
+    const message = String(formData.get("readingChatMessage") || "").trim();
+    if (!currentSession?.id || !message) {
+      return;
+    }
+
+    try {
+      await runReadingRequest("chat", currentSession.id, () =>
+        api(readingSessionApiPath(currentSession.id, "chat"), {
+          method: "POST",
+          body: JSON.stringify({ message }),
+        }),
+      );
+      const textarea = readingChatForm.querySelector('[name="readingChatMessage"]');
+      if (textarea) {
+        textarea.value = "";
+      }
+    } catch (error) {
+      state.error = error.message;
+    }
+    return;
+  }
+
   const form = event.target.closest('[data-action="submit-search"]');
   if (!form) {
     return;
@@ -3002,7 +3301,8 @@ window.addEventListener("resize", () => {
     resizeTicking = false;
     const searchLayoutChanged = syncResponsiveSearchLayout();
     const readingHomeLayoutChanged = syncResponsiveReadingHomeLayout();
-    if (searchLayoutChanged || readingHomeLayoutChanged) {
+    const readingRailChanged = searchLayoutChanged ? syncResponsiveReadingRail(state.searchLayout) : false;
+    if (searchLayoutChanged || readingHomeLayoutChanged || readingRailChanged) {
       render();
     }
   });
@@ -3025,9 +3325,9 @@ async function boot() {
     state.error = error.message;
   } finally {
     state.booting = false;
-    render();
+    renderWithViewTransition();
   }
 }
 
-render();
+renderWithViewTransition();
 boot();

@@ -734,6 +734,18 @@ export function createSearchFeature({
   function renderSearchHero(visible, totalResults) {
     return `
       <div class="hero-wrap">
+        <div class="results-back-row">
+          <button
+            type="button"
+            class="results-back-btn"
+            data-action="clear-search"
+            aria-label="검색 홈으로 돌아가기"
+            title="검색 홈으로"
+          >
+            ${icon("chevL", { size: 12, color: "currentColor" })}
+            <span>검색 홈</span>
+          </button>
+        </div>
         <form class="hero-input ${escapeHtml(state.searchMode)}" data-action="submit-search">
           <span class="hero-lead-icon" aria-hidden="true">${icon("heroSearch", { size: 16, color: TOKENS.t3 })}</span>
           <input

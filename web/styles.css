@@ -624,9 +624,55 @@ a {
   font-size: 11.5px;
 }
 
-.topbar-stage-sub {
-  color: var(--t3);
+.topbar-breadcrumb {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.topbar-breadcrumb-bridge,
+.topbar-crumb-separator {
+  color: var(--t4);
+  flex: 0 0 auto;
+  font-size: 11px;
+}
+
+.topbar-crumb-link {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--t2);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
   font-size: 12px;
+  margin: 0;
+  padding: 2px 6px;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.topbar-crumb-link:hover {
+  background: var(--s2);
+  color: var(--tx);
+}
+
+.topbar-crumb-link:focus-visible {
+  outline: 2px solid var(--read);
+  outline-offset: 2px;
+}
+
+.topbar-crumb-current {
+  color: var(--t2);
+  flex: 1 1 auto;
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-actions {
@@ -1921,10 +1967,6 @@ body.reading-home-resize-active {
   pointer-events: auto;
 }
 
-.reading-back-home-btn {
-  flex: 0 0 auto;
-}
-
 @media (max-width: 1279px) {
   .reading-home-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1967,18 +2009,6 @@ body.reading-home-resize-active {
   padding: 0 20px;
 }
 
-.reading-crumb-group {
-  align-items: center;
-  border-right: 1px solid var(--b1);
-  color: var(--t3);
-  display: flex;
-  flex: 0 0 auto;
-  font-size: 12px;
-  gap: 6px;
-  margin-right: 6px;
-  padding-right: 14px;
-}
-
 .reading-metabar-copy {
   display: flex;
   flex: 1;
@@ -2011,28 +2041,8 @@ body.reading-home-resize-active {
   align-items: center;
   display: flex;
   flex: 0 0 auto;
-  gap: 6px;
   margin-left: auto;
   min-width: 0;
-}
-
-.reading-metabar-divider {
-  background: var(--b1);
-  display: flex;
-  height: 20px;
-  width: 1px;
-}
-
-.reading-narrow-tip {
-  align-items: center;
-  background: rgba(137, 87, 201, 0.08);
-  border: 1px solid rgba(137, 87, 201, 0.24);
-  border-radius: 5px;
-  color: var(--research);
-  display: none;
-  font-size: 11px;
-  gap: 6px;
-  padding: 3px 8px;
 }
 
 .reading-shell-main {
@@ -2747,6 +2757,85 @@ body.reading-home-resize-active {
   letter-spacing: 0.06em;
 }
 
+.reading-pdf-viewer {
+  background: #f4f3ef;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.reading-pdf-viewer-head {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.78);
+  border-bottom: 1px solid var(--b1);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.reading-pdf-viewer-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reading-pdf-viewer-copy {
+  color: var(--t3);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.reading-pdf-viewer-warning {
+  color: var(--result);
+}
+
+.reading-pdf-canvas-root {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 100%;
+  padding: 22px 18px 32px;
+}
+
+.reading-pdf-loading {
+  color: var(--t3);
+  font-size: 12px;
+  padding: 48px 16px;
+  text-align: center;
+}
+
+.reading-pdf-loading.is-error {
+  color: var(--result);
+}
+
+.reading-pdf-canvas-page {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.reading-pdf-canvas {
+  background: #fff;
+  border: 1px solid var(--b1);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(15, 15, 15, 0.06), 0 2px 8px rgba(15, 15, 15, 0.05);
+  max-width: min(100%, 880px);
+  width: auto;
+}
+
+.reading-pdf-canvas-meta {
+  color: var(--t3);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+
 .reading-summary-wrap {
   margin: 0 auto;
   max-width: 760px;
@@ -3053,10 +3142,23 @@ body.reading-home-resize-active {
   padding: 6px 10px;
 }
 
-.reading-note-memo {
+.reading-note-editor {
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: 6px;
   color: var(--tx);
+  font-family: inherit;
   font-size: 12.5px;
   line-height: 1.55;
+  min-height: 88px;
+  outline: none;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+.reading-note-editor:focus {
+  border-color: rgba(94, 106, 210, 0.4);
+  box-shadow: 0 0 0 3px rgba(94, 106, 210, 0.08);
 }
 
 .reading-note-actions {
@@ -3243,21 +3345,15 @@ body.reading-home-resize-active {
 }
 
 @media (max-width: 1180px) {
-  .reading-narrow-tip {
-    display: flex;
-  }
-
   .reading-metabar {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    align-items: center;
     min-height: auto;
     padding: 12px 16px;
   }
 
   .reading-metabar-actions {
-    flex-wrap: wrap;
-    margin-left: 0;
-    width: 100%;
+    margin-left: auto;
+    width: auto;
   }
 
   .reading-metabar-title {
@@ -5897,5 +5993,558 @@ body.reading-home-resize-active {
     left: 12px !important;
     right: 12px;
     width: auto;
+  }
+}
+
+/* ============================================================
+   Search Tab Animations
+   - Component entrance (stagger fade-up)
+   - Home ↔ Results search-bar morph (View Transitions API)
+   - Agent ↔ Keyword mode transition polish
+   - Chart entrance (reveal + grow)
+   ============================================================ */
+
+@keyframes aresFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes aresFadeInSoft {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes aresChartReveal {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes aresGrowY {
+  from { transform: scaleY(0.001); }
+  to   { transform: scaleY(1); }
+}
+
+@keyframes aresGrowX {
+  from { transform: scaleX(0.001); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes aresModePop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.035); }
+  100% { transform: scale(1); }
+}
+
+/* ----- Search home (dashboard) entrance -----
+   Delays use `calc(var(--sb, 0ms) + Nms)` so a morphing re-entry can shift
+   the entire cascade via a single `data-ares-morph="true"` data attribute.
+*/
+.search-dashboard {
+  --sb: 0ms;
+}
+[data-ares-morph="true"] .search-dashboard {
+  --sb: 180ms;
+}
+
+.search-dashboard .search-home-hero {
+  animation: aresFadeUp 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 80ms);
+}
+.search-dashboard .dashboard-hero-wrap .dashboard-hero {
+  animation: aresFadeUp 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 140ms);
+}
+.search-dashboard .dashboard-hero-wrap .dashboard-scope-row {
+  animation: aresFadeUp 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 220ms);
+}
+.search-dashboard .dashboard-sec-head {
+  animation: aresFadeUp 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 300ms);
+}
+
+.search-dashboard .dashboard-kpi-grid .dashboard-kpi {
+  animation: aresFadeUp 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.search-dashboard .dashboard-kpi-grid .dashboard-kpi:nth-child(1) { animation-delay: calc(var(--sb, 0ms) + 340ms); }
+.search-dashboard .dashboard-kpi-grid .dashboard-kpi:nth-child(2) { animation-delay: calc(var(--sb, 0ms) + 400ms); }
+.search-dashboard .dashboard-kpi-grid .dashboard-kpi:nth-child(3) { animation-delay: calc(var(--sb, 0ms) + 460ms); }
+.search-dashboard .dashboard-kpi-grid .dashboard-kpi:nth-child(4) { animation-delay: calc(var(--sb, 0ms) + 520ms); }
+.search-dashboard .dashboard-kpi-grid .dashboard-kpi:nth-child(5) { animation-delay: calc(var(--sb, 0ms) + 580ms); }
+
+.search-dashboard .dashboard-chart-row .dashboard-card {
+  animation: aresFadeUp 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.search-dashboard .dashboard-chart-row .dashboard-card:nth-child(1) { animation-delay: calc(var(--sb, 0ms) + 500ms); }
+.search-dashboard .dashboard-chart-row .dashboard-card:nth-child(2) { animation-delay: calc(var(--sb, 0ms) + 580ms); }
+
+.search-dashboard .dashboard-tbl-head {
+  animation: aresFadeUp 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 620ms);
+}
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.header {
+  animation: aresFadeInSoft 340ms ease both;
+  animation-delay: calc(var(--sb, 0ms) + 660ms);
+}
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data {
+  animation: aresFadeUp 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data:nth-of-type(1) { animation-delay: calc(var(--sb, 0ms) + 700ms); }
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data:nth-of-type(2) { animation-delay: calc(var(--sb, 0ms) + 740ms); }
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data:nth-of-type(3) { animation-delay: calc(var(--sb, 0ms) + 780ms); }
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data:nth-of-type(4) { animation-delay: calc(var(--sb, 0ms) + 820ms); }
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data:nth-of-type(5) { animation-delay: calc(var(--sb, 0ms) + 860ms); }
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data:nth-of-type(6) { animation-delay: calc(var(--sb, 0ms) + 900ms); }
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data:nth-of-type(7) { animation-delay: calc(var(--sb, 0ms) + 940ms); }
+.search-dashboard .dashboard-tbl .dashboard-tbl-row.data:nth-of-type(n+8) { animation-delay: calc(var(--sb, 0ms) + 980ms); }
+.search-dashboard .dashboard-tbl-foot {
+  animation: aresFadeInSoft 360ms ease both;
+  animation-delay: calc(var(--sb, 0ms) + 1020ms);
+}
+
+/* ----- Results pane entrance (top→bottom stagger, shifted by --sb on morph) ----- */
+.results-pane {
+  --sb: 0ms;
+}
+[data-ares-morph="true"] .results-pane {
+  --sb: 200ms;
+}
+
+.results-pane .results-back-row {
+  animation: aresFadeUp 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 120ms);
+}
+.results-pane .hero-meta {
+  animation: aresFadeUp 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 220ms);
+}
+.results-pane .results-summary-row {
+  animation: aresFadeUp 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 300ms);
+}
+.results-pane .results-list-inner .paper-row {
+  animation: aresFadeUp 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.results-pane .results-list-inner .paper-row:nth-of-type(1)  { animation-delay: calc(var(--sb, 0ms) + 380ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(2)  { animation-delay: calc(var(--sb, 0ms) + 440ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(3)  { animation-delay: calc(var(--sb, 0ms) + 500ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(4)  { animation-delay: calc(var(--sb, 0ms) + 560ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(5)  { animation-delay: calc(var(--sb, 0ms) + 620ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(6)  { animation-delay: calc(var(--sb, 0ms) + 680ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(7)  { animation-delay: calc(var(--sb, 0ms) + 740ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(8)  { animation-delay: calc(var(--sb, 0ms) + 800ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(9)  { animation-delay: calc(var(--sb, 0ms) + 860ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(10) { animation-delay: calc(var(--sb, 0ms) + 920ms); }
+.results-pane .results-list-inner .paper-row:nth-of-type(n+11) { animation-delay: calc(var(--sb, 0ms) + 960ms); }
+
+.results-pane .search-results-empty,
+.results-pane .loading-state {
+  animation: aresFadeUp 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 380ms);
+}
+
+/* Back-to-home button */
+.results-back-row {
+  align-items: center;
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 10px;
+}
+.results-back-btn {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--b1);
+  border-radius: 999px;
+  color: var(--t2);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  gap: 6px;
+  letter-spacing: -0.006em;
+  padding: 5px 12px 5px 10px;
+  transition:
+    background 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms ease;
+}
+.results-back-btn:hover {
+  background: #fff;
+  border-color: var(--b2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 14px rgba(0, 0, 0, 0.04);
+  color: var(--tx);
+  transform: translateX(-2px);
+}
+.results-back-btn:focus-visible {
+  outline: 2px solid var(--read);
+  outline-offset: 2px;
+}
+.results-back-btn .icon {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.results-back-btn:hover .icon {
+  transform: translateX(-2px);
+}
+
+/* Preview aside subtle fade-in when it is populated */
+.search-preview-focal:not(.is-empty) {
+  animation: aresFadeUp 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ----- View Transitions API (home ↔ results morph) ----- */
+.dashboard-hero {
+  view-transition-name: ares-search-bar;
+}
+.results-pane .hero-input {
+  view-transition-name: ares-search-bar;
+}
+.search-dashboard .search-home-hero {
+  view-transition-name: ares-search-title;
+}
+.dashboard-hero-wrap .dashboard-scope-row,
+.results-pane .hero-meta-scope {
+  view-transition-name: ares-search-scope;
+}
+
+/* Root crossfade — softens the surrounding content transition */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Search bar morph — expressive, slow-ended easing for the position/size tween */
+::view-transition-group(ares-search-bar) {
+  animation-duration: 680ms;
+  animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+}
+::view-transition-image-pair(ares-search-bar) {
+  animation-duration: 680ms;
+  animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+  isolation: auto;
+}
+::view-transition-old(ares-search-bar),
+::view-transition-new(ares-search-bar) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Title + scope row — slightly quicker fade than the bar */
+::view-transition-group(ares-search-title),
+::view-transition-group(ares-search-scope) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+}
+::view-transition-old(ares-search-title),
+::view-transition-new(ares-search-title),
+::view-transition-old(ares-search-scope),
+::view-transition-new(ares-search-scope) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ----- Mode transition polish ----- */
+.dashboard-hero,
+.hero-input {
+  transition:
+    border-color 360ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 360ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.dashboard-submit,
+.hero-submit {
+  transition: background 340ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.dashboard-sbtn,
+.hero-submit-btn {
+  transition:
+    background 320ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 320ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 260ms ease,
+    min-width 340ms cubic-bezier(0.4, 0, 0.2, 1),
+    padding 340ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 240ms ease;
+}
+.dashboard-sbtn .dashboard-sbtn-copy,
+.hero-submit-btn .expand {
+  transition:
+    max-width 340ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 260ms ease,
+    padding-left 340ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.dashboard-sbtn.is-just-activated,
+.hero-submit-btn.is-just-activated {
+  animation: aresModePop 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ----- Chart entrance ----- */
+.search-dashboard .dashboard-kpi-chart {
+  animation: aresFadeInSoft 520ms ease both;
+  animation-delay: calc(var(--sb, 0ms) + 420ms);
+}
+.search-dashboard .dashboard-kpi-chart .dashboard-kc-area {
+  animation: aresChartReveal 900ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 500ms);
+}
+.search-dashboard .dashboard-chart-row .dashboard-card .dashboard-chart-area {
+  animation: aresChartReveal 1000ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 600ms);
+}
+.search-dashboard .dashboard-kc-bars {
+  animation: aresFadeInSoft 420ms ease both;
+  animation-delay: calc(var(--sb, 0ms) + 440ms);
+}
+.search-dashboard .dashboard-kc-bars .b {
+  transform-origin: bottom;
+  animation: aresGrowY 640ms cubic-bezier(0.34, 1.12, 0.64, 1) both;
+}
+.search-dashboard .dashboard-kc-bars .b:nth-child(1) { animation-delay: calc(var(--sb, 0ms) + 500ms); }
+.search-dashboard .dashboard-kc-bars .b:nth-child(2) { animation-delay: calc(var(--sb, 0ms) + 540ms); }
+.search-dashboard .dashboard-kc-bars .b:nth-child(3) { animation-delay: calc(var(--sb, 0ms) + 580ms); }
+.search-dashboard .dashboard-kc-bars .b:nth-child(4) { animation-delay: calc(var(--sb, 0ms) + 620ms); }
+.search-dashboard .dashboard-kc-bars .b:nth-child(5) { animation-delay: calc(var(--sb, 0ms) + 660ms); }
+.search-dashboard .dashboard-kc-bars .b:nth-child(6) { animation-delay: calc(var(--sb, 0ms) + 700ms); }
+.search-dashboard .dashboard-kc-bars .b:nth-child(7) { animation-delay: calc(var(--sb, 0ms) + 740ms); }
+.search-dashboard .dashboard-kc-seg {
+  transform-origin: left;
+  animation: aresGrowX 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--sb, 0ms) + 480ms);
+}
+.search-dashboard .dashboard-funnel .dashboard-funnel-row {
+  animation: aresFadeUp 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(1) { animation-delay: calc(var(--sb, 0ms) + 620ms); }
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(2) { animation-delay: calc(var(--sb, 0ms) + 680ms); }
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(3) { animation-delay: calc(var(--sb, 0ms) + 740ms); }
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(4) { animation-delay: calc(var(--sb, 0ms) + 800ms); }
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(5) { animation-delay: calc(var(--sb, 0ms) + 860ms); }
+.search-dashboard .dashboard-funnel-bar span {
+  transform-origin: left;
+  animation: aresGrowX 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(1) .dashboard-funnel-bar span { animation-delay: calc(var(--sb, 0ms) + 660ms); }
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(2) .dashboard-funnel-bar span { animation-delay: calc(var(--sb, 0ms) + 720ms); }
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(3) .dashboard-funnel-bar span { animation-delay: calc(var(--sb, 0ms) + 780ms); }
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(4) .dashboard-funnel-bar span { animation-delay: calc(var(--sb, 0ms) + 840ms); }
+.search-dashboard .dashboard-funnel .dashboard-funnel-row:nth-child(5) .dashboard-funnel-bar span { animation-delay: calc(var(--sb, 0ms) + 900ms); }
+
+/* ============================================================
+   Reading Tab Animations
+   Gated by `[data-ares-morph="true"]` so they fire only on
+   View-Transition-driven entries (tab switch, home↔detail).
+   Intra-view clicks (filter/row select/rail toggle) re-render
+   without the flag → no replay.
+   ============================================================ */
+
+/* ----- Reading Home ----- */
+[data-ares-morph="true"] .reading-stage-home .reading-home-hero {
+  animation: aresFadeUp 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 80ms;
+}
+[data-ares-morph="true"] .reading-stage-home .reading-home-metrics .reading-home-metric {
+  animation: aresFadeUp 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+[data-ares-morph="true"] .reading-stage-home .reading-home-metrics .reading-home-metric:nth-child(1) { animation-delay: 160ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-metrics .reading-home-metric:nth-child(2) { animation-delay: 220ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-metrics .reading-home-metric:nth-child(3) { animation-delay: 280ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-metrics .reading-home-metric:nth-child(4) { animation-delay: 340ms; }
+
+/* Micro-chart reveal inside metric cards */
+[data-ares-morph="true"] .reading-stage-home .reading-home-metric-svg {
+  animation: aresChartReveal 900ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: 360ms;
+}
+[data-ares-morph="true"] .reading-stage-home .reading-home-band i,
+[data-ares-morph="true"] .reading-stage-home .reading-home-bars i {
+  animation: aresGrowX 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: left;
+  animation-delay: 400ms;
+}
+
+/* Panel + preview */
+[data-ares-morph="true"] .reading-stage-home .reading-home-panel {
+  animation: aresFadeUp 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 380ms;
+}
+[data-ares-morph="true"] .reading-stage-home .reading-home-preview-panel,
+[data-ares-morph="true"] .reading-stage-home .reading-home-preview-overlay.is-open {
+  animation: aresFadeUp 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 460ms;
+}
+[data-ares-morph="true"] .reading-stage-home .reading-home-resizer-wrap {
+  animation: aresFadeInSoft 420ms ease both;
+  animation-delay: 500ms;
+}
+
+/* Worklist table rows — staggered top→bottom */
+[data-ares-morph="true"] .reading-stage-home .reading-home-table-head {
+  animation: aresFadeInSoft 320ms ease both;
+  animation-delay: 440ms;
+}
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row {
+  animation: aresFadeUp 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(1)  { animation-delay: 500ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(2)  { animation-delay: 550ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(3)  { animation-delay: 600ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(4)  { animation-delay: 650ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(5)  { animation-delay: 700ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(6)  { animation-delay: 750ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(7)  { animation-delay: 800ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(8)  { animation-delay: 850ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(9)  { animation-delay: 900ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(10) { animation-delay: 950ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row:nth-of-type(n+11) { animation-delay: 1000ms; }
+[data-ares-morph="true"] .reading-stage-home .reading-home-table-foot {
+  animation: aresFadeInSoft 320ms ease both;
+  animation-delay: 1020ms;
+}
+[data-ares-morph="true"] .reading-stage-home .reading-home-table-empty,
+[data-ares-morph="true"] .reading-stage-home .reading-home-empty {
+  animation: aresFadeUp 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 500ms;
+}
+
+/* Loading / empty stage variants */
+[data-ares-morph="true"] .reading-stage-home.reading-home--loading .reading-home-hero,
+[data-ares-morph="true"] .reading-stage .reading-empty {
+  animation: aresFadeUp 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 120ms;
+}
+
+/* ----- Reading Detail (Workbench) ----- */
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-metabar {
+  animation: aresFadeUp 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 80ms;
+}
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-btn {
+  animation: aresFadeUp 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-btn:nth-of-type(1) { animation-delay: 180ms; }
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-btn:nth-of-type(2) { animation-delay: 220ms; }
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-btn:nth-of-type(3) { animation-delay: 260ms; }
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-btn:nth-of-type(4) { animation-delay: 300ms; }
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-btn:nth-of-type(5) { animation-delay: 340ms; }
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-divider {
+  animation: aresFadeInSoft 280ms ease both;
+  animation-delay: 260ms;
+}
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-float-panel {
+  animation: aresFadeUp 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 260ms;
+}
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-split .reading-doc-pane {
+  animation: aresFadeUp 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 260ms;
+}
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-split .reading-workbench-pane {
+  animation: aresFadeUp 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 340ms;
+}
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-split .reading-resize-handle {
+  animation: aresFadeInSoft 420ms ease both;
+  animation-delay: 420ms;
+}
+
+/* Metabar inner stagger — breadcrumb → title → actions */
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-metabar .reading-crumb-group {
+  animation: aresFadeUp 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 120ms;
+}
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-metabar .reading-metabar-copy {
+  animation: aresFadeUp 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 180ms;
+}
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-metabar .reading-metabar-actions {
+  animation: aresFadeUp 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 240ms;
+}
+
+/* Pane headers fade in after panes */
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-doc-pane .pane-hdr,
+[data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-workbench-pane .pane-hdr {
+  animation: aresFadeInSoft 320ms ease both;
+  animation-delay: 380ms;
+}
+
+/* View-transition morph between reading views (home hero ↔ detail metabar) */
+.reading-stage-home .reading-home-hero,
+.reading-stage:not(.reading-stage-home) .reading-metabar {
+  view-transition-name: ares-reading-header;
+}
+::view-transition-group(ares-reading-header) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+}
+::view-transition-old(ares-reading-header),
+::view-transition-new(ares-reading-header) {
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-dashboard .search-home-hero,
+  .search-dashboard .dashboard-hero-wrap .dashboard-hero,
+  .search-dashboard .dashboard-hero-wrap .dashboard-scope-row,
+  .search-dashboard .dashboard-sec-head,
+  .search-dashboard .dashboard-kpi-grid .dashboard-kpi,
+  .search-dashboard .dashboard-chart-row .dashboard-card,
+  .search-dashboard .dashboard-tbl-head,
+  .search-dashboard .dashboard-tbl .dashboard-tbl-row.header,
+  .search-dashboard .dashboard-tbl .dashboard-tbl-row.data,
+  .search-dashboard .dashboard-tbl-foot,
+  .results-pane .hero-wrap,
+  .results-pane .results-back-row,
+  .results-pane .hero-meta,
+  .results-pane .results-summary-row,
+  .results-pane .results-list-inner .paper-row,
+  .results-pane .search-results-empty,
+  .results-pane .loading-state,
+  .search-preview-focal:not(.is-empty),
+  .search-dashboard .dashboard-kpi-chart,
+  .search-dashboard .dashboard-kpi-chart .dashboard-kc-area,
+  .search-dashboard .dashboard-chart-row .dashboard-card .dashboard-chart-area,
+  .search-dashboard .dashboard-kc-bars,
+  .search-dashboard .dashboard-kc-bars .b,
+  .search-dashboard .dashboard-kc-seg,
+  .search-dashboard .dashboard-funnel .dashboard-funnel-row,
+  .search-dashboard .dashboard-funnel-bar span,
+  .dashboard-sbtn.is-just-activated,
+  .hero-submit-btn.is-just-activated,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-hero,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-metrics .reading-home-metric,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-metric-svg,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-band i,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-bars i,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-panel,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-preview-panel,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-preview-overlay.is-open,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-resizer-wrap,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-table-head,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-table .reading-home-row,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-table-foot,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-table-empty,
+  [data-ares-morph="true"] .reading-stage-home .reading-home-empty,
+  [data-ares-morph="true"] .reading-stage .reading-empty,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-metabar,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-btn,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-icon-rail .reading-rail-divider,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-float-panel,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-split .reading-doc-pane,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-split .reading-workbench-pane,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-split .reading-resize-handle,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-metabar .reading-crumb-group,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-metabar .reading-metabar-copy,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-metabar .reading-metabar-actions,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-doc-pane .pane-hdr,
+  [data-ares-morph="true"] .reading-stage:not(.reading-stage-home) .reading-workbench-pane .pane-hdr {
+    animation: none !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
