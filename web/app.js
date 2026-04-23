@@ -2026,6 +2026,11 @@ function renderSearchDashboard(project) {
     <div class="search-stage search-stage-dashboard" data-ares-surface="search-stage" data-ares-stage="search" data-search-layout="${escapeHtml(state.searchLayout)}">
       <section class="search-dashboard" data-ares-surface="search-dashboard" data-ares-stage="search">
         <section class="dashboard-hero-wrap">
+          <div class="search-home-hero">
+            <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Search workspace</span></div>
+            <h1 class="search-home-title">Search</h1>
+          </div>
+
           <form class="dashboard-hero ${escapeHtml(state.searchMode)}" data-action="submit-search">
             <span class="dashboard-lead-icon" aria-hidden="true">${icon("heroSearch", { size: 16, color: TOKENS.t3 })}</span>
             <input

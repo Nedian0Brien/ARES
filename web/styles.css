@@ -1222,9 +1222,9 @@ a {
   gap: 12px;
 }
 
-.reading-home-label {
+.reading-home-label,
+.search-home-label {
   align-items: center;
-  color: var(--read);
   display: inline-flex;
   font-size: 11px;
   font-weight: 650;
@@ -1233,7 +1233,22 @@ a {
   text-transform: uppercase;
 }
 
-.reading-home-title {
+.reading-home-label {
+  color: var(--read);
+}
+
+.search-home-hero {
+  display: grid;
+  gap: 12px;
+  width: min(680px, 100%);
+}
+
+.search-home-label {
+  color: var(--search);
+}
+
+.reading-home-title,
+.search-home-title {
   font-family: "Newsreader", Georgia, serif;
   font-size: clamp(2rem, 3vw, 2.8rem);
   font-weight: 500;
@@ -5407,6 +5422,10 @@ body.reading-home-resize-active {
   }
 
   .reading-home-title {
+    white-space: normal;
+  }
+
+  .search-home-title {
     white-space: normal;
   }
 
