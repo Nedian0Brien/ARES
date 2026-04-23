@@ -1716,7 +1716,9 @@ const readingFeature = createReadingFeature({
   icon,
   escapeHtml,
   renderTag,
+  renderKbd,
   statusColor,
+  statusIcon,
   formatAuthors,
   effectiveReadingSessions,
   selectedReadingSession,
@@ -2872,12 +2874,11 @@ async function boot() {
     if (pendingSession?.runId) {
       void pollAgentRun(pendingSession.runId);
     }
-    render();
   } catch (error) {
     state.error = error.message;
-    render();
   } finally {
     state.booting = false;
+    render();
   }
 }
 
