@@ -30,6 +30,14 @@ function combineWarnings(...groups) {
   return uniqueStrings(groups.flat()).join(' / ');
 }
 
+async function emitProgress(onProgress, event) {
+  if (typeof onProgress !== 'function') {
+    return;
+  }
+
+  await onProgress(event);
+}
+
 function capitalise(value) {
   const text = String(value || '').trim();
   if (!text) {
@@ -236,7 +244,7 @@ export function createScoutRuntimeAdapter({
   return {
     name: runtimeName,
 
-    async search({ candidates = [], project, query, scopes = [], page = 1, perPage = DEFAULT_RESULTS_PER_PAGE }) {
+    async search({ candidates = [], onProgress, project, query, scopes = [], page = 1, perPage = DEFAULT_RESULTS_PER_PAGE }) {
       const prompt = buildScoutRankPrompt({
         candidates,
         page,
@@ -247,6 +255,7 @@ export function createScoutRuntimeAdapter({
       });
 
       const execution = await runtimeAdapter.runJsonTask({
+        onEvent: onProgress,
         outputSchemaPath: rankSchemaPath,
         prompt,
         timeoutMs,
@@ -321,7 +330,7 @@ export function createScoutSearchService({
     });
 
   return {
-    async search({ project, query, mode = 'keyword', scopes = [], page = 1 }) {
+    async search({ onProgress, project, query, mode = 'keyword', scopes = [], page = 1 }) {
       const warnings = [];
       const runtimeLabel = runtimeAdapter?.name || String(agentRuntime || '').trim().toLowerCase();
       const perPage = DEFAULT_RESULTS_PER_PAGE;
@@ -350,6 +359,13 @@ export function createScoutSearchService({
         let toolPayload;
         try {
           ensureOpenAlexConfigured(apiKey);
+          await emitProgress(onProgress, {
+            detail: `Fetching candidate papers for "${query}"`,
+            label: 'OpenAlex tool call',
+            source: 'backend',
+            status: 'running',
+            type: 'tool',
+          });
           toolPayload = sanitiseSearchResultsPayload(
             await searchOpenAlexImpl({
               apiKey,
@@ -361,6 +377,13 @@ export function createScoutSearchService({
               scopes,
             }),
           );
+          await emitProgress(onProgress, {
+            detail: `${toolPayload.results.length} OpenAlex candidate paper(s) returned.`,
+            label: 'OpenAlex tool result',
+            source: 'backend',
+            status: 'done',
+            type: 'tool',
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (searchRun) {
@@ -377,8 +400,16 @@ export function createScoutSearchService({
         }
 
         try {
+          await emitProgress(onProgress, {
+            detail: `Ranking ${toolPayload.results.length} candidate paper(s) with ${runtimeLabel || 'Scout'}.`,
+            label: 'Scout ranking started',
+            source: 'backend',
+            status: 'running',
+            type: 'agent',
+          });
           const rankPayload = await runtimeAdapter.search({
             candidates: toolPayload.results,
+            onProgress,
             project,
             query,
             scopes,
@@ -386,6 +417,13 @@ export function createScoutSearchService({
             perPage,
           });
           const rankedResults = selectRankedCandidates(toolPayload.results, rankPayload, perPage);
+          await emitProgress(onProgress, {
+            detail: `Selected ${rankedResults.length} paper(s) for the live result set.`,
+            label: 'Scout ranking complete',
+            source: 'backend',
+            status: 'done',
+            type: 'agent',
+          });
 
           const payload = withSearchMeta({
             ...toolPayload,

@@ -278,3 +278,57 @@ test('search agent run executes scout search and checkpoints results into readin
   assert.match(finalRun.outputSummary, /2 result/);
   assert.match(finalRun.warning, /seed checkpoint/);
 });
+
+test('search agent run checkpoints Scout progress before final results', async () => {
+  const store = await createDemoStore();
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    searchService: {
+      async search(input) {
+        assert.equal(typeof input.onProgress, 'function');
+        await input.onProgress({
+          detail: 'Fetching OpenAlex candidates for local inference serving.',
+          label: 'OpenAlex tool call',
+          status: 'running',
+          type: 'tool',
+        });
+        await input.onProgress({
+          detail: 'Scout selected quantized serving papers from the candidates.',
+          label: 'Agent response',
+          status: 'done',
+          type: 'agent_message',
+        });
+        return {
+          agentRuntime: 'codex',
+          live: true,
+          provider: 'scout-agent',
+          query: input.query,
+          results: [paperFixture()],
+          searchMode: 'scout',
+          total: 1,
+          warning: '',
+        };
+      },
+    },
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      query: '"local inference" llm quantization serving',
+      scopes: [],
+    },
+    projectId: 'demo',
+    stage: 'search',
+  });
+
+  const finalRun = await waitForRun(store, run.id);
+
+  assert.equal(finalRun.status, 'done');
+  assert.equal(finalRun.progressEvents.length, 2);
+  assert.equal(finalRun.progressEvents[0].type, 'tool');
+  assert.match(finalRun.progressEvents[0].detail, /OpenAlex candidates/);
+  assert.equal(finalRun.progressEvents[1].type, 'agent_message');
+  assert.match(finalRun.progressEvents[1].detail, /Scout selected/);
+});

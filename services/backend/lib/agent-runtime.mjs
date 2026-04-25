@@ -72,6 +72,97 @@ function extractCommandExecution(event) {
   };
 }
 
+function truncateProgressText(value, maxLength = 640) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maxLength - 3).trim()}...`;
+}
+
+export function normaliseAgentRuntimeProgressEvent(event) {
+  if (!event || typeof event !== 'object') {
+    return null;
+  }
+
+  const type = pickValue(event.type, event.event, event.kind);
+  const item = event?.item || event?.data?.item || event;
+  const itemType = pickValue(item?.type, event.item_type, event.itemType);
+
+  if (type === 'thread.started') {
+    const threadId = pickValue(event.thread_id, event.threadId, event.thread?.id, event.data?.thread_id);
+    return {
+      detail: threadId ? `thread ${threadId}` : '',
+      label: 'Codex thread started',
+      source: 'codex',
+      status: 'running',
+      type: 'status',
+    };
+  }
+
+  if (type === 'turn.started') {
+    return {
+      detail: '',
+      label: 'Agent turn started',
+      source: 'codex',
+      status: 'running',
+      type: 'status',
+    };
+  }
+
+  if (type === 'turn.completed') {
+    return {
+      detail: '',
+      label: 'Agent turn completed',
+      source: 'codex',
+      status: 'done',
+      type: 'status',
+    };
+  }
+
+  if (type === 'turn.failed' || type === 'error') {
+    return {
+      detail: truncateProgressText(pickValue(event?.error?.message, event?.message, event?.error)),
+      label: 'Agent runtime error',
+      source: 'codex',
+      status: 'error',
+      type: 'error',
+    };
+  }
+
+  if (itemType === 'agent_message') {
+    const text = extractAgentMessageText(event);
+    if (!text) {
+      return null;
+    }
+
+    return {
+      detail: truncateProgressText(text),
+      label: 'Agent response',
+      source: 'codex',
+      status: 'done',
+      type: 'agent_message',
+    };
+  }
+
+  if (itemType === 'command_execution') {
+    const execution = extractCommandExecution(event);
+    const failed = execution.exitCode !== null && execution.exitCode !== 0;
+    return {
+      command: execution.command,
+      detail: truncateProgressText(execution.command || execution.stdout || execution.stderr || 'Command execution'),
+      exitCode: execution.exitCode,
+      label: failed ? 'Tool execution failed' : 'Tool execution',
+      source: 'codex',
+      status: failed ? 'error' : execution.exitCode === null ? 'running' : 'done',
+      type: 'tool',
+    };
+  }
+
+  return null;
+}
+
 function ingestRuntimeEvent(summary, event) {
   if (!event || typeof event !== 'object') {
     return;
@@ -184,6 +275,7 @@ export function createAgentRuntime({
   }
 
   function startJsonTask({
+    onEvent,
     outputSchemaPath = '',
     prompt,
     sandbox = 'read-only',
@@ -217,6 +309,22 @@ export function createAgentRuntime({
       rawStdout: '',
       threadId: '',
     };
+    let eventChain = Promise.resolve();
+
+    function queueProgressEvent(event) {
+      if (typeof onEvent !== 'function') {
+        return;
+      }
+
+      const progressEvent = normaliseAgentRuntimeProgressEvent(event);
+      if (!progressEvent) {
+        return;
+      }
+
+      eventChain = eventChain
+        .then(() => onEvent(progressEvent, event))
+        .catch(() => undefined);
+    }
 
     function flushBuffer(force = false) {
       const chunks = buffered.split(/\r?\n/);
@@ -224,7 +332,9 @@ export function createAgentRuntime({
 
       for (const line of force ? chunks.concat(buffered).filter(Boolean) : chunks) {
         try {
-          ingestRuntimeEvent(summary, JSON.parse(line));
+          const event = JSON.parse(line);
+          ingestRuntimeEvent(summary, event);
+          queueProgressEvent(event);
         } catch {
           // Ignore non-JSON lines emitted by the CLI wrapper.
         }
@@ -262,23 +372,25 @@ export function createAgentRuntime({
         summary.rawStdout = stdout;
         summary.rawStderr = normaliseAgentRuntimeStderr(stderr);
 
-        if (timedOut) {
-          reject(new Error(`Agent runtime timed out after ${timeoutMs}ms.`));
-          return;
-        }
+        eventChain.then(() => {
+          if (timedOut) {
+            reject(new Error(`Agent runtime timed out after ${timeoutMs}ms.`));
+            return;
+          }
 
-        if (aborted) {
-          reject(new Error('Agent runtime aborted.'));
-          return;
-        }
+          if (aborted) {
+            reject(new Error('Agent runtime aborted.'));
+            return;
+          }
 
-        if (code !== 0) {
-          const reason = summary.rawStderr || signal || `exit code ${code}`;
-          reject(new Error(`Agent runtime failed: ${reason}`));
-          return;
-        }
+          if (code !== 0) {
+            const reason = summary.rawStderr || signal || `exit code ${code}`;
+            reject(new Error(`Agent runtime failed: ${reason}`));
+            return;
+          }
 
-        resolve(summary);
+          resolve(summary);
+        });
       });
     });
 

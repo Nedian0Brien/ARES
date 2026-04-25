@@ -17,6 +17,7 @@ const ASSET_COLLECTIONS = [
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
 const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error']);
+const MAX_AGENT_PROGRESS_EVENTS = 80;
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -97,6 +98,10 @@ function ensureStringArray(values, limit) {
 
 function ensureObjectArray(values) {
   return Array.isArray(values) ? clone(values) : [];
+}
+
+function ensureProgressEvents(values) {
+  return ensureObjectArray(values).slice(-MAX_AGENT_PROGRESS_EVENTS);
 }
 
 function cloneMaybe(value, fallback) {
@@ -480,6 +485,7 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         input: cloneMaybe(input.input, {}),
         outputRef: cloneMaybe(input.outputRef, null),
         outputSummary: input.outputSummary === undefined ? '' : clone(input.outputSummary),
+        progressEvents: ensureProgressEvents(input.progressEvents),
         profileId: ensureText(input.profileId),
         projectId,
         stage: ensureText(input.stage),
@@ -509,6 +515,7 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         input: patch.input !== undefined ? clone(patch.input) : existing.input,
         outputRef: patch.outputRef !== undefined ? clone(patch.outputRef) : existing.outputRef,
         outputSummary: patch.outputSummary !== undefined ? clone(patch.outputSummary) : existing.outputSummary,
+        progressEvents: patch.progressEvents !== undefined ? ensureProgressEvents(patch.progressEvents) : ensureProgressEvents(existing.progressEvents),
         status: patch.status !== undefined ? normaliseStatus(patch.status, existing.status) : existing.status,
         updatedAt: nowIso(),
       };

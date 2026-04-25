@@ -355,6 +355,57 @@ export function createSearchFeature({
     return `${Math.min(1, total)}/${total}`;
   }
 
+  function agenticProgressEvents(run) {
+    return Array.isArray(run?.progressEvents)
+      ? run.progressEvents.filter((event) => event && typeof event === "object").slice(-8)
+      : [];
+  }
+
+  function agenticProgressKindLabel(type) {
+    const value = String(type || "").toLowerCase();
+    if (value === "tool") {
+      return "Tool";
+    }
+    if (value === "agent_message") {
+      return "Agent";
+    }
+    if (value === "agent") {
+      return "Scout";
+    }
+    if (value === "error") {
+      return "Error";
+    }
+    return "Run";
+  }
+
+  function renderAgenticProgressTimeline(run) {
+    const events = agenticProgressEvents(run);
+    if (!events.length) {
+      return "";
+    }
+
+    return `
+      <div class="agent-trace" aria-label="Agentic Search live trace">
+        ${events.map((event) => {
+          const type = String(event.type || "status").toLowerCase();
+          const status = String(event.status || "running").toLowerCase();
+          const label = String(event.label || agenticProgressKindLabel(type)).trim();
+          const detail = String(event.detail || event.command || "").trim();
+          return `
+            <div class="agent-trace-item ${escapeHtml(type)} ${escapeHtml(status)}">
+              <span class="agent-trace-dot"></span>
+              <span class="agent-trace-copy">
+                <span class="agent-trace-k">${escapeHtml(agenticProgressKindLabel(type))}</span>
+                <span class="agent-trace-title">${escapeHtml(label)}</span>
+                ${detail ? `<span class="agent-trace-detail">${escapeHtml(detail)}</span>` : ""}
+              </span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
   function renderAgenticRunBadge(run) {
     const statusLabel = agenticRunFailed(run) ? "Failed" : run?.status === "done" ? "Done" : run?.status === "queue" ? "Queued" : "Live";
     return `
@@ -371,7 +422,13 @@ export function createSearchFeature({
     const scopes = agenticRunScopes(run);
     const scopeLabel = scopes.length ? scopes.map((scope) => scope.label || scope.id).filter(Boolean).join(" · ") : "Project-wide";
     const failed = agenticRunFailed(run);
-    const stageLine = failed ? "Scout failed" : run?.status === "done" ? "Reader phase complete" : run?.status === "queue" ? "Reader phase queued" : "Reader phase running";
+    const progressEvents = agenticProgressEvents(run);
+    const latestProgress = progressEvents.at(-1);
+    const stageLine = failed
+      ? "Scout failed"
+      : run?.status === "done"
+        ? "Reader phase complete"
+        : latestProgress?.label || (run?.status === "queue" ? "Scout queued" : "Scout running");
     const summary = String(run?.outputSummary || "").trim();
     const warning = String(run?.warning || run?.error || "").trim();
 
@@ -394,7 +451,7 @@ export function createSearchFeature({
         </div>
 
         <div class="phase-divider">
-          <div class="pd-inner"><span class="pd-tag">${failed ? "SCOUT" : "READER"}</span> 정의·지표 정렬 · ${escapeHtml(stageLine)}</div>
+          <div class="pd-inner"><span class="pd-tag">${failed || run?.status !== "done" ? "SCOUT" : "READER"}</span> 정의·지표 정렬 · ${escapeHtml(stageLine)}</div>
         </div>
 
         <div class="phase-card">
@@ -409,6 +466,7 @@ export function createSearchFeature({
             <li>${summary ? escapeHtml(summary) : 'OpenAlex와 프로젝트 라이브러리를 기준으로 후보 논문을 수집하고 있습니다.'}<span class="pc-stream-cursor"></span></li>
             ${warning ? `<li><b>Runtime note</b> — ${escapeHtml(warning)}</li>` : ""}
           </ul>
+          ${renderAgenticProgressTimeline(run)}
         </div>
       </div>
     `;
@@ -419,7 +477,8 @@ export function createSearchFeature({
       return "";
     }
 
-    return `<div class="search-agentic-live sr-only" aria-live="polite">${escapeHtml(agenticRunFailed(run) ? `${agenticRunIdLabel(run)} 실패. ${run.error || run.outputSummary || "Agentic Search 오류"}` : `${agenticRunIdLabel(run)} 시작. Reader 단계 진행 중`)}</div>`;
+    const latest = agenticProgressEvents(run).at(-1);
+    return `<div class="search-agentic-live sr-only" aria-live="polite">${escapeHtml(agenticRunFailed(run) ? `${agenticRunIdLabel(run)} 실패. ${run.error || run.outputSummary || "Agentic Search 오류"}` : latest ? `${agenticRunIdLabel(run)} ${latest.label || "진행 중"}. ${latest.detail || ""}` : `${agenticRunIdLabel(run)} 시작. Scout 단계 진행 중`)}</div>`;
   }
   
   function renderSearchDashboard(project) {

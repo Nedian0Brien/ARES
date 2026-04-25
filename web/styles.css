@@ -5915,6 +5915,72 @@ body.is-run .run-badge {
   width: 7px;
 }
 
+.agent-trace {
+  border-top: 1px solid var(--b1);
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.agent-trace-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.agent-trace-dot {
+  background: var(--t4);
+  border-radius: 50%;
+  height: 6px;
+  margin-top: 7px;
+  width: 6px;
+}
+
+.agent-trace-item.running .agent-trace-dot {
+  animation: pulse 1.3s ease-in-out infinite;
+  background: var(--result);
+}
+
+.agent-trace-item.done .agent-trace-dot,
+.agent-trace-item.tool.done .agent-trace-dot,
+.agent-trace-item.agent.done .agent-trace-dot,
+.agent-trace-item.agent_message.done .agent-trace-dot {
+  background: var(--search);
+}
+
+.agent-trace-item.error .agent-trace-dot {
+  background: var(--insight);
+}
+
+.agent-trace-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-trace-k {
+  color: var(--t3);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.agent-trace-title {
+  color: var(--tx);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.agent-trace-detail {
+  color: var(--t2);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .run-inline-badge {
   display: flex;
   justify-content: flex-end;

@@ -84,6 +84,7 @@ test('buildScoutRuntimeEnv strips backend retrieval secrets from the Codex proce
 test('Scout search uses OpenAlex as a backend tool call before agent ranking', async () => {
   const directCalls = [];
   const runtimeCalls = [];
+  const progressEvents = [];
   const service = createScoutSearchService({
     agentRuntime: 'codex',
     rootDir: '/workspace',
@@ -107,6 +108,9 @@ test('Scout search uses OpenAlex as a backend tool call before agent ranking', a
   });
 
   const payload = await service.search({
+    onProgress: (event) => {
+      progressEvents.push(event);
+    },
     project: demoProject(),
     query: 'adaptive reranker',
     mode: 'scout',
@@ -116,7 +120,10 @@ test('Scout search uses OpenAlex as a backend tool call before agent ranking', a
 
   assert.equal(directCalls.length, 1);
   assert.equal(runtimeCalls.length, 1);
+  assert.equal(typeof runtimeCalls[0].onProgress, 'function');
   assert.equal(runtimeCalls[0].candidates.length, 2);
+  assert.ok(progressEvents.some((event) => event.type === 'tool' && /OpenAlex/.test(event.label)));
+  assert.ok(progressEvents.some((event) => event.type === 'agent' && /ranking/i.test(event.label)));
   assert.equal(payload.provider, 'scout-agent');
   assert.equal(payload.agentRuntime, 'codex');
   assert.equal(payload.searchMode, 'scout');

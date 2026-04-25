@@ -125,8 +125,44 @@ test('search dashboard renders stacked agentic home and run stages', () => {
   assert.match(html, /class="q-block"/);
   assert.match(html, /tabindex="-1"/);
   assert.match(html, /Diffusion LoRA forgetting trade-offs/);
-  assert.match(html, /READER/);
+  assert.match(html, /SCOUT/);
   assert.match(html, /aria-live="polite"/);
+});
+
+test('search dashboard renders live Scout progress events before final results', () => {
+  const feature = createFeature({
+    searchAgentRun: {
+      id: 'run-progress',
+      input: {
+        query: '"local inference" llm quantization serving',
+      },
+      progressEvents: [
+        {
+          detail: 'Fetching OpenAlex candidates for local inference serving.',
+          label: 'OpenAlex tool call',
+          status: 'running',
+          type: 'tool',
+        },
+        {
+          detail: 'Scout selected quantized serving papers from the candidates.',
+          label: 'Agent response',
+          status: 'done',
+          type: 'agent_message',
+        },
+      ],
+      startedAt: '2026-04-25T12:00:00.000Z',
+      status: 'running',
+    },
+  });
+
+  const html = feature.renderSearchStage({ id: 'demo', libraryCount: 0, queueCount: 0 });
+
+  assert.match(html, /agent-trace/);
+  assert.match(html, /OpenAlex tool call/);
+  assert.match(html, /Fetching OpenAlex candidates/);
+  assert.match(html, /Agent response/);
+  assert.match(html, /Scout selected quantized serving papers/);
+  assert.doesNotMatch(html, /Agentic search failed/);
 });
 
 test('search dashboard renders failed agentic run as an explicit error', () => {

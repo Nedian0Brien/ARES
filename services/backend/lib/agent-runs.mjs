@@ -9,6 +9,7 @@ const DEFAULT_TIMEOUTS = {
   search: 30000,
   writing: 25000,
 };
+const MAX_PROGRESS_EVENTS = 80;
 
 const SECTION_ORDER = [
   ['abstract', 'Abstract'],
@@ -409,6 +410,7 @@ async function executeSearchRun({ context, run, searchService, store }) {
   const payload = sanitiseSearchResultsPayload(
     await searchService.search({
       mode: 'scout',
+      onProgress: (event) => appendRunProgressEvent(store, run.id, event),
       page: toSearchPage(run.input?.page),
       project: context.project,
       query,
@@ -552,6 +554,43 @@ function uniqueSourceRefs(refs) {
   }
 
   return next;
+}
+
+function truncateProgressDetail(value, maxLength = 720) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maxLength - 3).trim()}...`;
+}
+
+function normaliseProgressEvent(event = {}) {
+  const type = String(event.type || 'status').trim().toLowerCase() || 'status';
+  const status = String(event.status || 'running').trim().toLowerCase() || 'running';
+
+  return {
+    at: event.at || nowIso(),
+    detail: truncateProgressDetail(event.detail),
+    label: String(event.label || 'Agent update').trim(),
+    source: String(event.source || '').trim(),
+    status,
+    type,
+    ...(event.command ? { command: truncateProgressDetail(event.command, 360) } : {}),
+    ...(event.exitCode === null || event.exitCode === undefined ? {} : { exitCode: Number(event.exitCode) }),
+  };
+}
+
+async function appendRunProgressEvent(store, runId, event) {
+  const existing = store.getAgentRun(runId);
+  if (!existing) {
+    return;
+  }
+
+  const progressEvents = Array.isArray(existing.progressEvents) ? existing.progressEvents : [];
+  await store.updateAgentRun(runId, {
+    progressEvents: [...progressEvents, normaliseProgressEvent(event)].slice(-MAX_PROGRESS_EVENTS),
+  });
 }
 
 function buildSearchPrompt({ context }) {
