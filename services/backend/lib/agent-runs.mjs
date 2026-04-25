@@ -1,4 +1,5 @@
 import { createAgentRuntime } from './agent-runtime.mjs';
+import { sanitiseSearchResultsPayload } from './search-contract.mjs';
 
 const DEFAULT_TIMEOUTS = {
   insight: 25000,
@@ -385,6 +386,67 @@ function buildSearchFallback({ context, error }) {
   return {
     outputSummary: `Agentic search prepared for "${truncate(query, 120)}" across ${scopeLabel}.${suffix}`,
   };
+}
+
+function toSearchPage(value) {
+  const page = Number(value);
+  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+}
+
+function searchOutputSummary(payload, query) {
+  const count = payload.results.length;
+  const provider = payload.provider || 'search provider';
+  const suffix = count === 1 ? 'result' : 'results';
+  return `Scout returned ${count} ${suffix} for "${truncate(query, 120)}" via ${provider}.`;
+}
+
+async function executeSearchRun({ context, run, searchService, store }) {
+  if (!searchService || typeof searchService.search !== 'function') {
+    throw new Error('Search service is not configured.');
+  }
+
+  const query = context.searchQuery || context.project?.defaultQuery || '';
+  const payload = sanitiseSearchResultsPayload(
+    await searchService.search({
+      mode: 'scout',
+      page: toSearchPage(run.input?.page),
+      project: context.project,
+      query,
+      scopes: context.searchScopes,
+    }),
+  );
+  const queuedIds = new Set();
+
+  for (const paper of payload.results) {
+    const queued = await store.queuePaper(run.projectId, paper, {
+      runId: run.id,
+      status: 'queue',
+    });
+    queuedIds.add(queued.paperId);
+  }
+
+  const outputPayload = {
+    ...payload,
+    availableVenues: Array.from(new Set(payload.results.map((paper) => paper.venue))).slice(0, 8),
+    results: payload.results.map((paper) => ({
+      ...paper,
+      queued: queuedIds.has(paper.paperId),
+    })),
+    totalQueued: queuedIds.size,
+  };
+
+  await store.updateAgentRun(run.id, {
+    assetRefs: uniqueSourceRefs([
+      ...(run.assetRefs || []),
+      ...payload.results.map((paper) => assetRef('paper', paper.paperId, { label: paper.title })),
+    ]),
+    finishedAt: nowIso(),
+    outputPayload,
+    outputRef: [],
+    outputSummary: searchOutputSummary(payload, query),
+    status: 'done',
+    warning: combineWarnings(payload.warning),
+  });
 }
 
 function buildResultFallback({ context, error }) {
@@ -944,6 +1006,7 @@ function hydrateOutputRef(store, outputRef) {
 export function createAgentRunService({
   rootDir,
   runtimeName = 'codex',
+  searchService,
   spawnImpl,
   store,
 } = {}) {
@@ -985,6 +1048,11 @@ export function createAgentRunService({
 
       if (definition.bootstrap) {
         await definition.bootstrap({ context, run, store });
+      }
+
+      if (definition.stage === 'search' && searchService) {
+        await executeSearchRun({ context, run, searchService, store });
+        return;
       }
 
       const prompt = definition.buildPrompt({ context, run });

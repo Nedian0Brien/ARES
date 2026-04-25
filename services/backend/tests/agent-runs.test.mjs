@@ -34,6 +34,29 @@ function createFailingSpawn() {
   };
 }
 
+function paperFixture(overrides = {}) {
+  return {
+    abstract: 'A paper about local inference serving.',
+    authors: ['A. Researcher'],
+    citedByCount: 7,
+    keyPoints: ['Quantized local serving can reduce deployment cost.'],
+    keywords: ['local inference', 'quantization'],
+    matchedKeywords: ['local inference'],
+    openAccess: true,
+    paperId: 'paper-local-serving',
+    paperUrl: 'https://example.org/paper-local-serving',
+    pdfUrl: null,
+    relevance: 91,
+    sourceName: 'OpenAlex',
+    sourceProvider: 'openalex',
+    summary: 'Local inference serving benefits from quantization.',
+    title: 'Local Inference Serving with Quantized LLMs',
+    venue: 'DemoConf',
+    year: 2026,
+    ...overrides,
+  };
+}
+
 async function createDemoStore() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ares-agent-runs-'));
   const seedFile = path.join(tempDir, 'seed.json');
@@ -159,4 +182,60 @@ test('search agent run falls back locally without requiring a paper reference', 
   assert.equal(finalRun.status, 'done');
   assert.match(finalRun.outputSummary, /LoRA forgetting diffusion personalization/);
   assert.equal(store.getReadingSessions('demo').length, 0);
+});
+
+test('search agent run executes scout search and checkpoints results into reading queue', async () => {
+  const store = await createDemoStore();
+  const calls = [];
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    searchService: {
+      async search(input) {
+        calls.push(input);
+        return {
+          agentRuntime: 'codex',
+          live: true,
+          provider: 'scout-agent',
+          query: input.query,
+          results: [
+            paperFixture(),
+            paperFixture({
+              paperId: 'paper-quant-cache',
+              relevance: 88,
+              summary: 'Quantized cache serving improves throughput.',
+              title: 'Quantized Cache Serving for LLM Inference',
+            }),
+          ],
+          searchMode: 'scout',
+          total: 2,
+          warning: 'seed checkpoint',
+        };
+      },
+    },
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      query: '"local inference" llm quantization serving',
+      scopes: [{ id: 'project', label: 'Project-wide', type: 'institution' }],
+    },
+    projectId: 'demo',
+    stage: 'search',
+  });
+
+  const finalRun = await waitForRun(store, run.id);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].mode, 'scout');
+  assert.equal(calls[0].query, '"local inference" llm quantization serving');
+  assert.equal(finalRun.stage, 'search');
+  assert.equal(finalRun.status, 'done');
+  assert.equal(finalRun.outputPayload.results.length, 2);
+  assert.equal(finalRun.outputPayload.results[0].queued, true);
+  assert.equal(finalRun.outputPayload.totalQueued, 2);
+  assert.equal(store.getProject('demo').queueCount, 2);
+  assert.match(finalRun.outputSummary, /2 result/);
+  assert.match(finalRun.warning, /seed checkpoint/);
 });

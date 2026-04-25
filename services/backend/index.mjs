@@ -88,14 +88,22 @@ const store = await createStore({
   seedFile: SEED_FILE,
   runtimeFile: RUNTIME_FILE,
 });
-const agentRunService = createAgentRunService({
-  rootDir: ROOT_DIR,
-  runtimeName: ARES_AGENT_RUNTIME,
-  store,
-});
 const readingService = createReadingService({
   rootDir: DATA_ROOT_DIR,
   runtimeName: ARES_AGENT_RUNTIME,
+  store,
+});
+const agenticSearchService = createScoutSearchService({
+  agentRuntime: SCOUT_AGENT_RUNTIME,
+  agentTimeoutMs: SCOUT_AGENT_TIMEOUT_MS,
+  apiKey: OPENALEX_API_KEY,
+  mailto: OPENALEX_MAILTO,
+  rootDir: ROOT_DIR,
+});
+const agentRunService = createAgentRunService({
+  rootDir: ROOT_DIR,
+  runtimeName: ARES_AGENT_RUNTIME,
+  searchService: agenticSearchService,
   store,
 });
 const searchService = createScoutSearchService({

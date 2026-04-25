@@ -1020,6 +1020,21 @@ function uniqueValues(values = []) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function searchRunProgressLabel(run) {
+  const output = run?.outputPayload && typeof run.outputPayload === "object" ? run.outputPayload : {};
+  const total = Math.max(1, Number(output.total) || (Array.isArray(output.results) ? output.results.length : 0) || 32);
+
+  if (run?.status === "done") {
+    return `${total}/${total}`;
+  }
+
+  if (run?.status === "queue") {
+    return `0/${total}`;
+  }
+
+  return `${Math.min(1, total)}/${total}`;
+}
+
 function readingProgress(session) {
   const sections = Array.isArray(session?.sections) ? session.sections : [];
   if (!sections.length) {
@@ -1821,6 +1836,7 @@ async function pollAgentRun(runId) {
 
     if (run.stage === "search") {
       state.searchAgentRun = normaliseSearchAgentRun(run, state.searchAgentRun || {});
+      applyAgenticSearchOutput(run.outputPayload, { preserveSelection: true });
       state.loading = run.status !== "done";
     }
 
@@ -1943,6 +1959,36 @@ function normaliseSearchAgentRun(run, fallback = {}) {
       ...(run.input || {}),
     },
   };
+}
+
+function applyAgenticSearchOutput(outputPayload, { preserveSelection = false } = {}) {
+  const results = Array.isArray(outputPayload?.results) ? outputPayload.results : [];
+  if (!outputPayload || typeof outputPayload !== "object") {
+    return false;
+  }
+
+  state.hasSearched = true;
+  state.results = results;
+  state.availableVenues = Array.isArray(outputPayload.availableVenues) && outputPayload.availableVenues.length
+    ? outputPayload.availableVenues
+    : uniqueValues(results.map((paper) => paper.venue)).slice(0, 8);
+  state.searchMeta = {
+    agentRuntime: outputPayload.agentRuntime || "",
+    live: outputPayload.live !== false,
+    provider: outputPayload.provider || "",
+    query: outputPayload.query || state.searchInput.trim(),
+    searchMode: outputPayload.searchMode || "scout",
+    total: Number(outputPayload.total) || results.length,
+    warning: outputPayload.warning || "",
+  };
+  state.filters.venues = new Set(state.availableVenues);
+
+  if (!preserveSelection || !state.selectedPaperId || !results.some((paper) => paper.paperId === state.selectedPaperId)) {
+    state.selectedPaperId = results[0]?.paperId || "";
+  }
+
+  syncSelectedPaper();
+  return true;
 }
 
 async function runSearch({ preserveSelection = false } = {}) {
@@ -2402,7 +2448,7 @@ function renderTopbar() {
     ? `
         <div class="run-badge" aria-live="off">
           <span class="dot"></span>
-          ${escapeHtml(searchRun.status === "done" ? "Done" : searchRun.status === "queue" ? "Queued" : "Live")} · ${escapeHtml(searchRun.status === "done" ? "32/32" : searchRun.status === "queue" ? "0/32" : "1/32")}
+          ${escapeHtml(searchRun.status === "done" ? "Done" : searchRun.status === "queue" ? "Queued" : "Live")} · ${escapeHtml(searchRunProgressLabel(searchRun))}
         </div>
       `
     : "";

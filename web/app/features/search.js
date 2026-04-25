@@ -333,15 +333,18 @@ export function createSearchFeature({
   }
 
   function agenticRunStatusLabel(run) {
+    const output = run?.outputPayload && typeof run.outputPayload === "object" ? run.outputPayload : {};
+    const total = Math.max(1, Number(output.total) || (Array.isArray(output.results) ? output.results.length : 0) || 32);
+
     if (run?.status === "done") {
-      return "32/32";
+      return `${total}/${total}`;
     }
 
     if (run?.status === "queue") {
-      return "0/32";
+      return `0/${total}`;
     }
 
-    return "1/32";
+    return `${Math.min(1, total)}/${total}`;
   }
 
   function renderAgenticRunBadge(run) {
