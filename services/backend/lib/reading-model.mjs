@@ -219,6 +219,8 @@ function normaliseChatMessage(entry, index = 0) {
   return {
     citations: ensureObjectArray(entry.citations || entry.cites).map(normaliseCitation).filter(Boolean),
     createdAt: ensureIso(entry.createdAt, nowIso()),
+    fallbackReason: ensureTrimmedString(entry.fallbackReason, ''),
+    generatedBy: ensureTrimmedString(entry.generatedBy, ''),
     id: ensureTrimmedString(entry.id, `chat-${index + 1}`),
     role: ensureTrimmedString(entry.role, 'assistant').toLowerCase() === 'user' ? 'user' : 'assistant',
     text,
@@ -353,10 +355,13 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
     .map(normaliseHighlight)
     .filter(Boolean);
   const notes = ensureObjectArray(input.notes !== undefined ? input.notes : previous.notes).map(normaliseNote).filter(Boolean);
-  const summaryCards = normaliseSummaryCards(
-    input.summaryCards || {},
-    normaliseSummaryCards(previous.summaryCards || {}, DEFAULT_SUMMARY_CARDS),
-  );
+  const summaryCards =
+    input.summaryCards === null
+      ? normaliseSummaryCards({}, DEFAULT_SUMMARY_CARDS)
+      : normaliseSummaryCards(
+          input.summaryCards || {},
+          normaliseSummaryCards(previous.summaryCards || {}, DEFAULT_SUMMARY_CARDS),
+        );
 
   const next = {
     abstract: ensureTrimmedString(input.abstract, previous.abstract || ''),
@@ -412,13 +417,31 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
     sourceRefs: ensureObjectArray(input.sourceRefs !== undefined ? input.sourceRefs : previous.sourceRefs),
     startedAt: ensureIso(input.startedAt, ensureIso(previous.startedAt, null)),
     status: normaliseSessionStatus(input.status, normaliseSessionStatus(previous.status, 'todo')),
-    summary: ensureTrimmedString(
-      input.summary,
-      previous.summary || summaryCards.tldr || firstSentence(input.abstract || previous.abstract || ''),
-    ),
+    summary:
+      input.summary === null
+        ? ''
+        : ensureTrimmedString(
+            input.summary,
+            previous.summary || summaryCards.tldr || firstSentence(input.abstract || previous.abstract || ''),
+          ),
     summaryCards,
-    summaryError: ensureTrimmedString(input.summaryError, previous.summaryError || ''),
+    summaryFallbackReason:
+      input.summaryFallbackReason === '' || input.summaryFallbackReason === null
+        ? ''
+        : ensureTrimmedString(input.summaryFallbackReason, previous.summaryFallbackReason || ''),
+    summaryError:
+      input.summaryError === '' || input.summaryError === null
+        ? ''
+        : ensureTrimmedString(input.summaryError, previous.summaryError || ''),
     summaryFinishedAt: ensureIso(input.summaryFinishedAt, ensureIso(previous.summaryFinishedAt, null)),
+    summaryGeneratedBy:
+      input.summaryGeneratedBy === '' || input.summaryGeneratedBy === null
+        ? ''
+        : ensureTrimmedString(input.summaryGeneratedBy, previous.summaryGeneratedBy || ''),
+    summaryRuntimeUsed:
+      input.summaryRuntimeUsed === undefined
+        ? ensureBoolean(previous.summaryRuntimeUsed, false)
+        : ensureBoolean(input.summaryRuntimeUsed),
     summaryStartedAt: ensureIso(input.summaryStartedAt, ensureIso(previous.summaryStartedAt, null)),
     summaryStatus,
     title: ensureTrimmedString(input.title, previous.title || 'Untitled paper'),

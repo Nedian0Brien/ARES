@@ -1,6 +1,6 @@
 import { createSearchFeature } from "./app/features/search.js";
 import { createReadingFeature } from "./app/features/reading.js";
-import { hydrateReadingPdfSurface, resetReadingPdfSurface } from "./app/lib/pdf-viewer.js";
+import { hydrateReadingPdfSurface, resetReadingPdfSurface, scrollReadingPdfToPage } from "./app/lib/pdf-viewer.js";
 
 const TOKENS = {
   bg: "#fbfbfa",
@@ -106,9 +106,12 @@ const STAGE_ALIASES = {
 const STORAGE_KEYS = {
   stage: "ares.stage",
   project: "ares.project",
+  sidebarCollapsed: "ares.sidebar.collapsed",
 };
 
 const SEARCH_MODE_TRANSITION_MS = 280;
+const AGENTIC_SEARCH_PRESS_MS = 780;
+const AGENTIC_SEARCH_FOCUS_DELAY_MS = 460;
 const SEARCH_LAYOUT_BREAKPOINTS = {
   mobileMax: 900,
   tabletMax: 1279,
@@ -162,6 +165,7 @@ function resolveAppBaseUrl(locationLike = window.location) {
 }
 
 const APP_BASE_URL = resolveAppBaseUrl();
+const INITIAL_ROUTE_STATE = parseAresRoute();
 const INITIAL_SEARCH_LAYOUT = detectSearchLayout();
 const INITIAL_FILTER_PANEL_OPEN = INITIAL_SEARCH_LAYOUT === "desktop";
 const INITIAL_PREVIEW_PANEL_OPEN = false;
@@ -179,27 +183,35 @@ const state = {
   savingPaperId: "",
   readingStartingPaperId: "",
   error: "",
-  activeStage: normalizeStage(loadStorage(STORAGE_KEYS.stage, "search")),
-  activeProjectId: loadStorage(STORAGE_KEYS.project, ""),
+  activeStage: normalizeStage(INITIAL_ROUTE_STATE.activeStage || loadStorage(STORAGE_KEYS.stage, "search")),
+  activeProjectId: INITIAL_ROUTE_STATE.projectId || loadStorage(STORAGE_KEYS.project, ""),
   searchInput: "",
   projects: [],
   projectLibrary: [],
   results: [],
   availableVenues: [],
   readingSessions: [],
-  activeReadingSessionId: "",
+  activeReadingSessionId: INITIAL_ROUTE_STATE.activeReadingSessionId || "",
   activeReadingRunId: "",
-  readingView: "home",
-  readingDocumentTab: "pdf",
-  readingWorkbenchTab: "chat",
+  readingView: INITIAL_ROUTE_STATE.readingView || "home",
+  readingDocumentTab: normalizeReadingDocumentTab(INITIAL_ROUTE_STATE.readingDocumentTab || "pdf"),
+  readingPdfTargetPage: null,
+  readingPdfDockPanel: "",
+  readingPdfDockSelectionActive: false,
+  readingPdfSelection: null,
+  readingPdfZoom: 100,
+  readingContextMenuOpen: false,
+  readingWorkbenchTab: normalizeReadingWorkbenchTab(INITIAL_ROUTE_STATE.readingWorkbenchTab || "chat"),
   readingRailOpen: defaultReadingRailOpen(INITIAL_SEARCH_LAYOUT),
   readingWorkbenchCollapsed: false,
   readingOrientation: defaultReadingOrientation(),
   readingSplitHorizontal: 62,
   readingSplitVertical: 62,
   readingRailQuery: "",
-  readingAssetsFilter: "all",
+  readingAssetsFilter: INITIAL_ROUTE_STATE.readingAssetsFilter || "all",
+  readingAssetDetailId: INITIAL_ROUTE_STATE.readingAssetDetailId || "",
   readingRequest: null,
+  readingOptimisticChatMessages: [],
   readingHomeFilter: "all",
   readingHomeSelectedPaperId: "",
   readingHomePreviewOpen: false,
@@ -207,8 +219,10 @@ const state = {
   readingHomeLayout: INITIAL_READING_HOME_LAYOUT,
   selectedPaperId: "",
   sort: "relevance",
-  searchMode: "keyword",
+  searchMode: "scout",
   searchLayout: INITIAL_SEARCH_LAYOUT,
+  searchAgentRun: null,
+  searchAgentTransitioning: false,
   filterPanelOpen: INITIAL_FILTER_PANEL_OPEN,
   previewPanelOpen: INITIAL_PREVIEW_PANEL_OPEN,
   scopePicker: null,
@@ -221,6 +235,7 @@ const state = {
     rel: false,
   },
   workflowOpen: true,
+  sidebarCollapsed: loadStorage(STORAGE_KEYS.sidebarCollapsed, "false") === "true",
   openWorkflowMenu: "",
   searchMeta: {
     provider: "seed",
@@ -228,7 +243,7 @@ const state = {
     total: 0,
     query: "",
     warning: "",
-    searchMode: "keyword",
+    searchMode: "scout",
     agentRuntime: "",
   },
   filters: {
@@ -246,6 +261,10 @@ let activeRunPollTimer = 0;
 let readingResizeDrag = null;
 let readingResizeFrame = 0;
 let readingHomeResizeDrag = null;
+let applyingBrowserRoute = false;
+let browserRouteSyncReady = false;
+let lastBrowserRouteHash = "";
+let browserRouteApplyTimer = 0;
 
 function loadStorage(key, fallback) {
   try {
@@ -266,6 +285,78 @@ function saveStorage(key, value) {
 function normalizeStage(stageId) {
   const resolved = STAGE_ALIASES[stageId] || stageId;
   return WORKFLOW_STAGES.some((stage) => stage.id === resolved) ? resolved : "search";
+}
+
+function normalizeReadingDocumentTab(tabId) {
+  return ["summary", "pdf", "assets"].includes(tabId) ? tabId : "pdf";
+}
+
+function normalizeReadingWorkbenchTab(tabId) {
+  return ["chat", "notes"].includes(tabId) ? tabId : "chat";
+}
+
+function encodeRouteSegment(value) {
+  return encodeURIComponent(String(value || ""));
+}
+
+function decodeRouteSegment(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch {
+    return String(value || "");
+  }
+}
+
+function parseAresRoute(locationLike = window.location) {
+  const rawHash = String(locationLike.hash || "").replace(/^#\/?/, "");
+  if (!rawHash) {
+    return {};
+  }
+
+  const [pathPart, queryPart = ""] = rawHash.split("?");
+  const segments = pathPart.split("/").map(decodeRouteSegment).filter(Boolean);
+  const params = new URLSearchParams(queryPart);
+  let index = 0;
+  let projectId = "";
+
+  if (segments[index] === "projects") {
+    projectId = segments[index + 1] || "";
+    index += 2;
+  }
+
+  const activeStage = normalizeStage(segments[index] || params.get("stage") || "search");
+  index += 1;
+
+  const route = {
+    activeStage,
+    projectId,
+  };
+
+  if (activeStage === "search") {
+    if (segments[index] === "agent" && segments[index + 1]) {
+      route.searchAgentRunId = segments[index + 1];
+    }
+    return route;
+  }
+
+  if (activeStage !== "reading") {
+    return route;
+  }
+
+  if (segments[index] === "sessions" && segments[index + 1]) {
+    route.readingView = "detail";
+    route.activeReadingSessionId = segments[index + 1];
+    route.readingDocumentTab = normalizeReadingDocumentTab(segments[index + 2] || params.get("doc") || "pdf");
+  } else {
+    route.readingView = segments[index] === "detail" || params.get("view") === "detail" ? "detail" : "home";
+    route.activeReadingSessionId = params.get("session") || "";
+    route.readingDocumentTab = normalizeReadingDocumentTab(params.get("doc") || "pdf");
+  }
+
+  route.readingWorkbenchTab = normalizeReadingWorkbenchTab(params.get("workbench") || "chat");
+  route.readingAssetsFilter = params.get("assets") || "all";
+  route.readingAssetDetailId = params.get("asset") || "";
+  return route;
 }
 
 function stageById(stageId) {
@@ -532,6 +623,8 @@ async function hydrateReadingPdfIfNeeded() {
     baseUrl: APP_BASE_URL,
     host,
     pdfUrl: appUrl(readingSessionApiPath(session.id, "pdf")).href,
+    targetPage: state.readingPdfTargetPage,
+    zoom: state.readingPdfZoom,
   });
 }
 
@@ -539,6 +632,121 @@ function scheduleReadingHydration() {
   window.requestAnimationFrame(() => {
     void hydrateReadingPdfIfNeeded();
   });
+}
+
+async function handoffReadingToResearch({ noteId = "" } = {}) {
+  const project = activeProject();
+  const session = selectedReadingSession();
+  if (!project || !session?.id) {
+    return;
+  }
+
+  const noteIds = noteId
+    ? [noteId]
+    : (Array.isArray(session.notes) ? session.notes : []).map((note) => note.id).filter(Boolean);
+  const assetIds = (Array.isArray(session.assets) ? session.assets : []).map((asset) => asset.id).filter(Boolean);
+  const sectionIds = (Array.isArray(session.sections) ? session.sections : []).map((section) => section.id).filter(Boolean);
+  const paper = readingPaperFromSession(session) || {
+    abstract: session.abstract || session.summary || "",
+    authors: session.authors || [],
+    keyPoints: session.keyPoints || [],
+    paperId: session.paperId,
+    paperUrl: session.paperUrl || null,
+    pdfUrl: session.pdfUrl || null,
+    summary: session.summary || session.abstract || "",
+    title: session.title || "Untitled paper",
+    venue: session.venue || "Unknown",
+    year: session.year ?? null,
+  };
+
+  const payload = await api("api/agent-runs", {
+    method: "POST",
+    body: JSON.stringify({
+      assetRefs: [
+        { type: "paper", id: session.paperId, label: session.title || "Paper" },
+        { type: "readingSession", id: session.id, label: session.title || "Reading session" },
+      ],
+      input: {
+        assetIds,
+        handoffSource: "reading",
+        noteIds,
+        paper,
+        paperId: session.paperId,
+        readingSessionId: session.id,
+        sectionIds,
+      },
+      projectId: project.id,
+      stage: "research",
+    }),
+  });
+
+  state.activeStage = "research";
+  state.scopePicker = null;
+  saveStorage(STORAGE_KEYS.stage, state.activeStage);
+  if (payload?.run?.id) {
+    state.activeReadingRunId = payload.run.id;
+    void pollAgentRun(payload.run.id);
+  }
+  renderWithViewTransition();
+}
+
+function readingCitationText(session) {
+  const authors = Array.isArray(session?.authors) && session.authors.length ? session.authors.join(", ") : "Unknown authors";
+  const title = session?.title || "Untitled paper";
+  const venue = session?.venue || "Unknown venue";
+  const year = session?.year ? ` (${session.year})` : "";
+  const url = session?.paperUrl || session?.pdfUrl || "";
+  return `${authors}. ${title}. ${venue}${year}.${url ? ` ${url}` : ""}`;
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function exportReadingNotes(session) {
+  const notes = Array.isArray(session?.notes) ? session.notes : [];
+  const lines = [
+    `# ${session?.title || "Reading notes"}`,
+    "",
+    `- Venue: ${session?.venue || "Unknown"}`,
+    `- Source: ${session?.paperUrl || session?.pdfUrl || "n/a"}`,
+    "",
+    "## Notes",
+    "",
+    ...(notes.length
+      ? notes.flatMap((note, index) => [
+          `### ${index + 1}. ${note.kind || "note"}${note.page ? ` · p.${note.page}` : ""}`,
+          "",
+          note.quote ? `> ${note.quote}` : "> No quote",
+          "",
+          note.body || "_No memo yet._",
+          "",
+        ])
+      : ["_No notes yet._", ""]),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const safeTitle = String(session?.title || "reading-notes").toLowerCase().replace(/[^a-z0-9가-힣]+/g, "-").replace(/(^-|-$)/g, "");
+  link.href = url;
+  link.download = `${safeTitle || "reading-notes"}.md`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function runReadingRequest(kind, sessionId, task, { preserveRailFocus = false } = {}) {
@@ -561,6 +769,135 @@ async function runReadingRequest(kind, sessionId, task, { preserveRailFocus = fa
 
 function activeProject() {
   return state.projects.find((project) => project.id === state.activeProjectId) || state.projects[0] || null;
+}
+
+function buildBrowserRouteHash({ stageId = state.activeStage } = {}) {
+  const projectId = state.activeProjectId || activeProject()?.id || "";
+  const stage = normalizeStage(stageId);
+  const parts = ["projects", encodeRouteSegment(projectId), encodeRouteSegment(stage)];
+  const params = new URLSearchParams();
+
+  if (stage === "reading") {
+    if (state.readingView === "detail") {
+      const sessionId = state.activeReadingSessionId || selectedReadingSession()?.id || "";
+      parts.push("sessions", encodeRouteSegment(sessionId), encodeRouteSegment(normalizeReadingDocumentTab(state.readingDocumentTab)));
+      const workbench = normalizeReadingWorkbenchTab(state.readingWorkbenchTab);
+      if (workbench !== "chat") {
+        params.set("workbench", workbench);
+      }
+      if (state.readingDocumentTab === "assets" && state.readingAssetsFilter && state.readingAssetsFilter !== "all") {
+        params.set("assets", state.readingAssetsFilter);
+      }
+      if (state.readingAssetDetailId) {
+        params.set("asset", state.readingAssetDetailId);
+      }
+    } else {
+      parts.push("home");
+    }
+  } else if (stage === "search" && state.searchAgentRun?.id) {
+    parts.push("agent", encodeRouteSegment(state.searchAgentRun.id));
+  }
+
+  const query = params.toString();
+  return `#/${parts.join("/")}${query ? `?${query}` : ""}`;
+}
+
+function browserUrlForRouteHash(hash) {
+  const url = new URL(window.location.href);
+  url.hash = hash;
+  return url.href;
+}
+
+function syncBrowserUrlFromState({ replace = false } = {}) {
+  if (applyingBrowserRoute || !activeProject()) {
+    return;
+  }
+
+  const nextHash = buildBrowserRouteHash();
+  if (nextHash === lastBrowserRouteHash && window.location.hash === nextHash) {
+    return;
+  }
+
+  const method = replace || !browserRouteSyncReady ? "replaceState" : "pushState";
+  window.history[method]({ aresRoute: true }, "", browserUrlForRouteHash(nextHash));
+  lastBrowserRouteHash = nextHash;
+  browserRouteSyncReady = true;
+}
+
+async function applyBrowserRouteFromUrl() {
+  const route = parseAresRoute();
+  if (!route.activeStage && !route.projectId) {
+    return;
+  }
+
+  applyingBrowserRoute = true;
+  try {
+    const previousProjectId = state.activeProjectId;
+    if (route.projectId) {
+      state.activeProjectId = route.projectId;
+    }
+
+    state.activeStage = normalizeStage(route.activeStage || state.activeStage);
+    if (state.activeStage === "search") {
+      if (route.searchAgentRunId) {
+        state.searchAgentRun = normaliseSearchAgentRun(
+          {
+            id: route.searchAgentRunId,
+            input: {
+              query: state.searchInput,
+              scopes: state.searchScopes,
+            },
+            stage: "search",
+            status: "running",
+          },
+          state.searchAgentRun || {},
+        );
+        void pollAgentRun(route.searchAgentRunId);
+      } else {
+        state.searchAgentRun = null;
+        state.searchAgentTransitioning = false;
+      }
+    }
+
+    if (state.activeStage === "reading") {
+      state.readingView = route.readingView || "home";
+      state.activeReadingSessionId = route.activeReadingSessionId || state.activeReadingSessionId;
+      state.readingDocumentTab = normalizeReadingDocumentTab(route.readingDocumentTab || state.readingDocumentTab);
+      state.readingWorkbenchTab = normalizeReadingWorkbenchTab(route.readingWorkbenchTab || state.readingWorkbenchTab);
+      state.readingAssetsFilter = route.readingAssetsFilter || "all";
+      state.readingAssetDetailId = route.readingAssetDetailId || "";
+      state.readingHomePreviewOpen = false;
+      if (state.readingView === "home") {
+        syncReadingHomeSelection();
+      }
+    }
+
+    saveStorage(STORAGE_KEYS.project, state.activeProjectId);
+    saveStorage(STORAGE_KEYS.stage, state.activeStage);
+
+    if (previousProjectId && previousProjectId !== state.activeProjectId) {
+      resetSearchState();
+      await loadProjectLibrary();
+      await loadReadingSessions({ preserveSelection: Boolean(state.activeReadingSessionId) });
+    }
+
+    render();
+    lastBrowserRouteHash = window.location.hash;
+    browserRouteSyncReady = true;
+  } finally {
+    applyingBrowserRoute = false;
+  }
+}
+
+function scheduleApplyBrowserRouteFromUrl() {
+  if (browserRouteApplyTimer) {
+    window.clearTimeout(browserRouteApplyTimer);
+  }
+
+  browserRouteApplyTimer = window.setTimeout(() => {
+    browserRouteApplyTimer = 0;
+    void applyBrowserRouteFromUrl();
+  }, 0);
 }
 
 function yearBucket(year) {
@@ -1482,6 +1819,15 @@ async function pollAgentRun(runId) {
       }
     }
 
+    if (run.stage === "search") {
+      state.searchAgentRun = normaliseSearchAgentRun(run, state.searchAgentRun || {});
+      state.loading = run.status !== "done";
+    }
+
+    if (run.stage !== "reading" && run.status === "done") {
+      await loadProjects();
+    }
+
     if (run.status !== "done") {
       activeRunPollTimer = window.setTimeout(() => {
         void pollAgentRun(runId);
@@ -1504,6 +1850,8 @@ function resetSearchState() {
   state.hasSearched = false;
   state.loading = false;
   state.error = "";
+  state.searchAgentRun = null;
+  state.searchAgentTransitioning = false;
   state.results = [];
   state.availableVenues = [];
   state.selectedPaperId = "";
@@ -1519,6 +1867,82 @@ function resetSearchState() {
   state.filters.venues = new Set();
   state.filterPanelOpen = defaultFilterPanelOpen();
   state.previewPanelOpen = defaultPreviewPanelOpen();
+}
+
+function clearAgenticSearchBodyState() {
+  document.body.classList.remove("is-pressed", "is-run");
+}
+
+function focusAgenticSearchQuestion() {
+  window.requestAnimationFrame(() => {
+    const question = document.querySelector(".stage-run .q-text");
+    if (question instanceof HTMLElement) {
+      question.focus({ preventScroll: true });
+    }
+  });
+}
+
+function syncAgenticSearchStageDom() {
+  const active = state.activeStage === "search" && Boolean(state.searchAgentRun);
+  const animate = active && state.searchAgentTransitioning;
+  state.searchAgentTransitioning = false;
+
+  const home = document.querySelector(".search-agentic-entry .stage-home");
+  if (home) {
+    home.inert = active;
+  }
+
+  if (!active) {
+    clearAgenticSearchBodyState();
+    return;
+  }
+
+  if (!animate) {
+    document.body.classList.add("is-run");
+    return;
+  }
+
+  clearAgenticSearchBodyState();
+  document.body.classList.add("is-pressed");
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.body.classList.add("is-run");
+      window.setTimeout(focusAgenticSearchQuestion, AGENTIC_SEARCH_FOCUS_DELAY_MS);
+    });
+  });
+  window.setTimeout(() => {
+    document.body.classList.remove("is-pressed");
+  }, AGENTIC_SEARCH_PRESS_MS);
+}
+
+function pulseInvalidAgenticSearch() {
+  clearAgenticSearchBodyState();
+  document.body.classList.add("is-pressed");
+  const hero = document.querySelector(".dashboard-hero");
+  const input = document.querySelector("#search-input");
+  hero?.classList.remove("is-invalid");
+  void hero?.offsetWidth;
+  hero?.classList.add("is-invalid");
+  input?.focus();
+  window.setTimeout(() => {
+    document.body.classList.remove("is-pressed");
+    hero?.classList.remove("is-invalid");
+  }, AGENTIC_SEARCH_PRESS_MS);
+}
+
+function normaliseSearchAgentRun(run, fallback = {}) {
+  if (!run || typeof run !== "object") {
+    return fallback;
+  }
+
+  return {
+    ...fallback,
+    ...run,
+    input: {
+      ...(fallback.input || {}),
+      ...(run.input || {}),
+    },
+  };
 }
 
 async function runSearch({ preserveSelection = false } = {}) {
@@ -1574,6 +1998,77 @@ async function runSearch({ preserveSelection = false } = {}) {
     state.results = [];
     state.selectedPaperId = "";
   } finally {
+    state.loading = false;
+    render();
+  }
+}
+
+async function startAgenticSearchRun({ query } = {}) {
+  const project = activeProject();
+  if (!project) {
+    return;
+  }
+
+  const trimmedQuery = String(query ?? state.searchInput ?? "").trim();
+  state.searchMode = "scout";
+  state.searchInput = trimmedQuery;
+  state.scopePicker = null;
+  state.scopePickerQuery = "";
+
+  if (!trimmedQuery) {
+    render();
+    pulseInvalidAgenticSearch();
+    return;
+  }
+
+  const optimisticRun = {
+    createdAt: new Date().toISOString(),
+    id: "",
+    input: {
+      query: trimmedQuery,
+      scopes: state.searchScopes,
+    },
+    outputSummary: "",
+    stage: "search",
+    status: "queue",
+  };
+
+  state.hasSearched = false;
+  state.error = "";
+  state.loading = true;
+  state.searchAgentRun = optimisticRun;
+  state.searchAgentTransitioning = true;
+  render();
+
+  try {
+    const payload = await api("api/agent-runs", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          query: trimmedQuery,
+          scopes: state.searchScopes,
+        },
+        projectId: project.id,
+        stage: "search",
+        taskKind: "run-agentic-search",
+      }),
+    });
+
+    state.searchAgentRun = normaliseSearchAgentRun(payload.run, optimisticRun);
+    state.loading = false;
+    render();
+    if (payload.run?.id) {
+      void pollAgentRun(payload.run.id);
+    }
+  } catch (error) {
+    state.searchAgentRun = {
+      ...optimisticRun,
+      error: error.message,
+      outputSummary: `Agentic search could not start: ${error.message}`,
+      status: "done",
+      warning: error.message,
+    };
+    state.error = error.message;
     state.loading = false;
     render();
   }
@@ -1740,7 +2235,9 @@ function placeholderMeta(project, stage) {
 }
 
 function renderSidebar() {
-  const workflowRows = state.workflowOpen
+  const collapsed = state.sidebarCollapsed;
+  const workflowExpanded = collapsed || state.workflowOpen;
+  const workflowRows = workflowExpanded
     ? WORKFLOW_STAGES.map((stage) => {
         const active = stage.id === state.activeStage;
         const menuOpen = state.openWorkflowMenu === stage.id;
@@ -1749,7 +2246,7 @@ function renderSidebar() {
 
         return `
           <div class="workflow-item ${active ? "is-active" : ""} ${menuOpen ? "menu-open" : ""}" data-ares-role="workflow-row" data-ares-stage="${escapeHtml(stage.id)}">
-            <button type="button" class="workflow-stage-btn hov" data-action="select-stage" data-stage-id="${escapeHtml(stage.id)}" data-ares-role="workflow-stage" data-ares-stage="${escapeHtml(stage.id)}">
+            <button type="button" class="workflow-stage-btn hov" data-action="select-stage" data-stage-id="${escapeHtml(stage.id)}" data-ares-role="workflow-stage" data-ares-stage="${escapeHtml(stage.id)}" title="${escapeHtml(stage.label)}">
               <span class="workflow-stage-icon" style="background:${iconBackground};color:${iconColor}">
                 ${icon(stage.icon, { size: 13 })}
               </span>
@@ -1785,10 +2282,11 @@ function renderSidebar() {
       }).join("")
     : "";
 
+  const toggleLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
   return `
-    <aside class="desktop-sidebar" data-ares-surface="sidebar" data-ares-role="navigation">
+    <aside class="desktop-sidebar" data-ares-surface="sidebar" data-ares-role="navigation" data-collapsed="${collapsed ? "true" : "false"}">
       <section class="sidebar-section">
-        <button type="button" class="workspace-switch hov">
+        <button type="button" class="workspace-switch hov" title="ARES · Research workspace">
           <span class="brand-mark">A</span>
           <span class="brand-copy">
             <span class="brand-title">ARES</span>
@@ -1799,12 +2297,12 @@ function renderSidebar() {
       </section>
 
       <section class="sidebar-section">
-        <button type="button" class="sidebar-action hov-soft" data-action="focus-search">
+        <button type="button" class="sidebar-action hov-soft" data-action="focus-search" title="Search (⌘K)">
           ${icon("search", { size: 13.5, color: TOKENS.t3 })}
           <span class="sidebar-action-label">Search</span>
           ${renderKbd("⌘K")}
         </button>
-        <button type="button" class="sidebar-action hov-soft" data-action="focus-search">
+        <button type="button" class="sidebar-action hov-soft" data-action="focus-search" title="New paper (C)">
           ${icon("plus", { size: 13.5, color: TOKENS.t3 })}
           <span class="sidebar-action-label">New paper</span>
           ${renderKbd("C")}
@@ -1826,6 +2324,7 @@ function renderSidebar() {
                   data-ares-role="project-item"
                   data-ares-project-id="${escapeHtml(project.id)}"
                   data-ares-project-name="${escapeHtml(project.name)}"
+                  title="${escapeHtml(project.name)}"
                 >
                   <span class="project-swatch" style="background:${escapeHtml(project.color)}"></span>
                   <span class="project-item-label">${escapeHtml(project.name)}</span>
@@ -1844,8 +2343,23 @@ function renderSidebar() {
         <div class="workflow-list">${workflowRows}</div>
       </section>
 
+      <section class="sidebar-section sidebar-section--collapse">
+        <button
+          type="button"
+          class="sidebar-action sidebar-collapse-btn hov-soft"
+          data-action="toggle-sidebar"
+          aria-label="${toggleLabel}"
+          title="${toggleLabel}"
+        >
+          <span class="sidebar-collapse-icon" aria-hidden="true">
+            ${icon(collapsed ? "sidebar" : "sidebar", { size: 13.5, color: TOKENS.t3 })}
+          </span>
+          <span class="sidebar-action-label">${collapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
+        </button>
+      </section>
+
       <section class="sidebar-section">
-        <button type="button" class="sidebar-account hov">
+        <button type="button" class="sidebar-account hov" title="Dokyung · Pro plan">
           <span class="account-mark">DK</span>
           <span class="brand-copy">
             <span class="account-name">Dokyung</span>
@@ -1861,6 +2375,7 @@ function renderSidebar() {
 function renderTopbar() {
   const stage = stageById(state.activeStage);
   const readingSession = stage.id === "reading" && state.readingView === "detail" ? selectedReadingSession() : null;
+  const searchRun = stage.id === "search" ? state.searchAgentRun : null;
   const readingBreadcrumb = readingSession
     ? `
         <span class="topbar-separator topbar-breadcrumb-bridge">/</span>
@@ -1873,6 +2388,24 @@ function renderTopbar() {
         </nav>
       `
     : "";
+  const searchBreadcrumb = searchRun
+    ? `
+        <span class="topbar-separator topbar-breadcrumb-bridge">/</span>
+        <nav class="topbar-breadcrumb" aria-label="Search breadcrumb">
+          <span class="topbar-crumb-link">Agentic</span>
+          <span class="topbar-crumb-separator" aria-hidden="true">/</span>
+          <span class="topbar-crumb-current">${escapeHtml(searchRun.id ? `Run #${String(searchRun.id).replace(/^run[-_]?/i, "").slice(-4).toUpperCase()}` : "Run 준비 중")}</span>
+        </nav>
+      `
+    : "";
+  const searchRunBadge = searchRun
+    ? `
+        <div class="run-badge" aria-live="off">
+          <span class="dot"></span>
+          ${escapeHtml(searchRun.status === "done" ? "Done" : searchRun.status === "queue" ? "Queued" : "Live")} · ${escapeHtml(searchRun.status === "done" ? "32/32" : searchRun.status === "queue" ? "0/32" : "1/32")}
+        </div>
+      `
+    : "";
   return `
     <header class="main-topbar" data-ares-surface="topbar" data-ares-stage="${escapeHtml(stage.id)}">
       <div class="topbar-stage">
@@ -1881,8 +2414,10 @@ function renderTopbar() {
         </span>
         <span class="topbar-stage-label">${escapeHtml(stage.label)}</span>
         ${readingBreadcrumb}
+        ${searchBreadcrumb}
       </div>
       <div class="topbar-actions">
+        ${searchRunBadge}
         <button type="button" class="btn-s">${icon("share", { size: 12 })} Share</button>
         <button type="button" class="btn-s">${icon("filter", { size: 12 })} Filter</button>
       </div>
@@ -2051,6 +2586,7 @@ function renderBottomNav() {
 
 function renderShell(message) {
   resetReadingPdfSurface();
+  clearAgenticSearchBodyState();
   app.innerHTML = `
     <div class="app-shell">
       <main class="workspace">
@@ -2069,6 +2605,7 @@ function render() {
   syncResponsiveSearchLayout();
   syncResponsiveReadingHomeLayout();
   const project = activeProject();
+  const preservedPdfHost = captureStableReadingPdfHost();
 
   if (!project) {
     renderShell(state.error || (state.booting ? "프로젝트 정보를 불러오는 중입니다." : "프로젝트 정보를 불러오지 못했습니다."));
@@ -2106,6 +2643,9 @@ function render() {
       ${renderBottomNav()}
     </div>
   `;
+  syncAgenticSearchStageDom();
+  restoreStableReadingPdfHost(preservedPdfHost);
+  syncBrowserUrlFromState();
   scheduleReadingHydration();
 }
 
@@ -2188,6 +2728,412 @@ function patchSearchSelectionUI() {
   return true;
 }
 
+function directReadingChildByClass(root, className) {
+  return Array.from(root?.children || []).find((child) => child.classList?.contains(className)) || null;
+}
+
+function syncReadingElementShell(currentElement, nextElement) {
+  currentElement.className = nextElement.className;
+
+  for (const attribute of Array.from(currentElement.attributes)) {
+    if (attribute.name !== "class" && !nextElement.hasAttribute(attribute.name)) {
+      currentElement.removeAttribute(attribute.name);
+    }
+  }
+
+  for (const attribute of Array.from(nextElement.attributes)) {
+    if (attribute.name !== "class") {
+      currentElement.setAttribute(attribute.name, attribute.value);
+    }
+  }
+}
+
+function replaceReadingNodeIfChanged(currentNode, nextNode) {
+  if (!currentNode || !nextNode) {
+    return false;
+  }
+
+  if (currentNode.isEqualNode(nextNode)) {
+    return false;
+  }
+
+  currentNode.replaceWith(nextNode);
+  return true;
+}
+
+function activeReadingPaneTab(pane, attributeName) {
+  return pane?.querySelector(`.pane-tab.active[${attributeName}]`)?.getAttribute(attributeName) || "";
+}
+
+function readingPdfHostSignature(host) {
+  if (!host) {
+    return null;
+  }
+
+  const sessionId = host.dataset.readingSessionId || "";
+  const sourcePdfUrl = host.dataset.readingPdfUrl || "";
+  if (!sessionId || !sourcePdfUrl) {
+    return null;
+  }
+
+  return { sessionId, sourcePdfUrl };
+}
+
+function captureStableReadingPdfHost() {
+  const host = document.querySelector('[data-reading-pdf-host="true"]');
+  const signature = readingPdfHostSignature(host);
+  if (!host || !signature) {
+    return null;
+  }
+
+  return { host, signature };
+}
+
+function restoreStableReadingPdfHost(preserved) {
+  if (!preserved?.host || !preserved.signature) {
+    return false;
+  }
+
+  const nextHost = document.querySelector('[data-reading-pdf-host="true"]');
+  const nextSignature = readingPdfHostSignature(nextHost);
+  if (
+    !nextHost ||
+    !nextSignature ||
+    nextSignature.sessionId !== preserved.signature.sessionId ||
+    nextSignature.sourcePdfUrl !== preserved.signature.sourcePdfUrl
+  ) {
+    return false;
+  }
+
+  nextHost.replaceWith(preserved.host);
+  return true;
+}
+
+function matchingStableReadingPdfHosts(currentDocPane, nextDocPane) {
+  if (!currentDocPane || !nextDocPane) {
+    return null;
+  }
+
+  const currentDocumentTab = activeReadingPaneTab(currentDocPane, "data-reading-document-tab");
+  const nextDocumentTab = activeReadingPaneTab(nextDocPane, "data-reading-document-tab");
+  if (currentDocumentTab !== "pdf" || nextDocumentTab !== "pdf") {
+    return null;
+  }
+
+  const currentPdfHost = currentDocPane.querySelector('[data-reading-pdf-host="true"]');
+  const nextPdfHost = nextDocPane.querySelector('[data-reading-pdf-host="true"]');
+  const currentSignature = readingPdfHostSignature(currentPdfHost);
+  const nextSignature = readingPdfHostSignature(nextPdfHost);
+  if (
+    !currentPdfHost ||
+    !nextPdfHost ||
+    !currentSignature ||
+    !nextSignature ||
+    currentSignature.sessionId !== nextSignature.sessionId ||
+    currentSignature.sourcePdfUrl !== nextSignature.sourcePdfUrl
+  ) {
+    return null;
+  }
+
+  return { currentPdfHost, nextPdfHost };
+}
+
+function transplantStableReadingPdfHost(currentDocPane, nextDocPane) {
+  const match = matchingStableReadingPdfHosts(currentDocPane, nextDocPane);
+  if (!match) {
+    return false;
+  }
+
+  match.nextPdfHost.replaceWith(match.currentPdfHost);
+  return true;
+}
+
+function patchStableReadingPdfDocPane(currentDocPane, nextDocPane) {
+  const match = matchingStableReadingPdfHosts(currentDocPane, nextDocPane);
+  if (!match) {
+    return false;
+  }
+
+  syncReadingElementShell(currentDocPane, nextDocPane);
+
+  const currentHeader = directReadingChildByClass(currentDocPane, "pane-hdr");
+  const nextHeader = directReadingChildByClass(nextDocPane, "pane-hdr");
+  if (currentHeader && nextHeader) {
+    replaceReadingNodeIfChanged(currentHeader, nextHeader);
+  } else if (currentHeader) {
+    currentHeader.remove();
+  } else if (nextHeader) {
+    currentDocPane.insertBefore(nextHeader, currentDocPane.firstChild);
+  }
+
+  const currentBody = directReadingChildByClass(currentDocPane, "pane-body");
+  const nextBody = directReadingChildByClass(nextDocPane, "pane-body");
+  if (!currentBody || !nextBody) {
+    return false;
+  }
+
+  syncReadingElementShell(currentBody, nextBody);
+
+  const currentViewer = currentBody.querySelector(".reading-pdf-viewer");
+  const nextViewer = nextBody.querySelector(".reading-pdf-viewer");
+  if (!currentViewer || !nextViewer) {
+    return false;
+  }
+
+  syncReadingElementShell(currentViewer, nextViewer);
+
+  const currentUnsupportedCard = currentViewer.querySelector(".reading-pdf-unsupported-card");
+  const nextUnsupportedCard = nextViewer.querySelector(".reading-pdf-unsupported-card");
+  if (currentUnsupportedCard && nextUnsupportedCard) {
+    replaceReadingNodeIfChanged(currentUnsupportedCard, nextUnsupportedCard);
+  } else if (currentUnsupportedCard) {
+    currentUnsupportedCard.remove();
+  } else if (nextUnsupportedCard) {
+    currentViewer.insertBefore(nextUnsupportedCard, match.currentPdfHost);
+  }
+
+  const currentDock = directReadingChildByClass(currentDocPane, "reading-pdf-dock-layer");
+  const nextDock = directReadingChildByClass(nextDocPane, "reading-pdf-dock-layer");
+  if (currentDock && nextDock) {
+    syncReadingPdfDockState(currentDock, nextDock);
+  } else if (currentDock) {
+    currentDock.remove();
+  } else if (nextDock) {
+    currentDocPane.appendChild(nextDock);
+  }
+
+  return true;
+}
+
+function patchReadingSplitPreservingPdf(currentSplit, nextSplit) {
+  const currentDocPane = directReadingChildByClass(currentSplit, "reading-doc-pane");
+  const nextDocPane = directReadingChildByClass(nextSplit, "reading-doc-pane");
+  if (!patchStableReadingPdfDocPane(currentDocPane, nextDocPane)) {
+    return false;
+  }
+
+  const currentHandle = directReadingChildByClass(currentSplit, "reading-resize-handle");
+  const nextHandle = directReadingChildByClass(nextSplit, "reading-resize-handle");
+  const currentWorkbenchPane = directReadingChildByClass(currentSplit, "reading-workbench-pane");
+  const nextWorkbenchPane = directReadingChildByClass(nextSplit, "reading-workbench-pane");
+
+  syncReadingElementShell(currentSplit, nextSplit);
+
+  if (currentHandle && nextHandle) {
+    currentHandle.replaceWith(nextHandle);
+  } else if (currentHandle) {
+    currentHandle.remove();
+  } else if (nextHandle) {
+    nextDocPane.insertAdjacentElement("afterend", nextHandle);
+  }
+
+  if (currentWorkbenchPane && nextWorkbenchPane) {
+    currentWorkbenchPane.replaceWith(nextWorkbenchPane);
+  } else if (currentWorkbenchPane) {
+    currentWorkbenchPane.remove();
+  } else if (nextWorkbenchPane) {
+    currentSplit.appendChild(nextWorkbenchPane);
+  }
+
+  return true;
+}
+
+function patchReadingWorkbenchPaneOnly() {
+  if (state.activeStage !== "reading" || state.readingView !== "detail") {
+    return false;
+  }
+
+  const project = activeProject();
+  const currentStage = document.querySelector('[data-ares-surface="reading-stage"]');
+  const currentWorkbenchPane = currentStage?.querySelector(".reading-workbench-pane");
+  if (!project || !currentStage || !currentWorkbenchPane) {
+    return false;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = renderReadingStage(project).trim();
+  const nextWorkbenchPane = template.content.querySelector(".reading-workbench-pane");
+  if (!nextWorkbenchPane) {
+    return false;
+  }
+
+  currentWorkbenchPane.replaceWith(nextWorkbenchPane);
+  applyReadingSplitUI();
+  syncAppActivePaperMetadata(currentReadingPaper(project));
+  syncBrowserUrlFromState();
+  return true;
+}
+
+function patchReadingDocumentPaneOnly() {
+  if (state.activeStage !== "reading" || state.readingView !== "detail") {
+    return false;
+  }
+
+  const project = activeProject();
+  const currentStage = document.querySelector('[data-ares-surface="reading-stage"]');
+  const currentDocPane = currentStage?.querySelector(".reading-doc-pane");
+  if (!project || !currentStage || !currentDocPane) {
+    return false;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = renderReadingStage(project).trim();
+  const nextDocPane = template.content.querySelector(".reading-doc-pane");
+  if (!nextDocPane) {
+    return false;
+  }
+
+  const preservedPdfPane = state.readingDocumentTab === "pdf" && patchStableReadingPdfDocPane(currentDocPane, nextDocPane);
+  if (!preservedPdfPane) {
+    transplantStableReadingPdfHost(currentDocPane, nextDocPane);
+    currentDocPane.replaceWith(nextDocPane);
+  }
+  applyReadingSplitUI();
+  syncAppActivePaperMetadata(currentReadingPaper(project));
+
+  if (state.readingDocumentTab === "pdf") {
+    if (!preservedPdfPane) {
+      scheduleReadingHydration();
+    }
+  } else {
+    resetReadingPdfSurface();
+  }
+
+  syncBrowserUrlFromState();
+  return true;
+}
+
+function patchReadingPdfSelectionBarOnly() {
+  if (state.activeStage !== "reading" || state.readingView !== "detail" || state.readingDocumentTab !== "pdf") {
+    return false;
+  }
+
+  const project = activeProject();
+  const currentStage = document.querySelector('[data-ares-surface="reading-stage"]');
+  const currentDock = currentStage?.querySelector(".reading-pdf-dock-layer");
+  const currentTocPanel = currentStage?.querySelector(".toc-panel");
+  const currentPageGridPanel = currentStage?.querySelector(".page-grid-panel");
+  const currentDocPane = currentStage?.querySelector(".reading-doc-pane");
+  const pdfHost = currentStage?.querySelector('[data-reading-pdf-host="true"]');
+  if (!project || !currentStage || !currentDocPane || !pdfHost) {
+    return false;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = renderReadingStage(project).trim();
+  const nextDock = template.content.querySelector(".reading-pdf-dock-layer");
+  const nextTocPanel = template.content.querySelector(".toc-panel");
+  const nextPageGridPanel = template.content.querySelector(".page-grid-panel");
+
+  if (currentDock && nextDock) {
+    syncReadingPdfDockState(currentDock, nextDock);
+  } else if (currentDock) {
+    currentDock.remove();
+  } else if (nextDock) {
+    appendReadingPdfDockWithAnimation(currentDocPane, nextDock);
+  }
+
+  if (currentTocPanel && nextTocPanel) {
+    syncReadingPopupPanelState(currentTocPanel, nextTocPanel);
+  } else if (currentTocPanel) {
+    currentTocPanel.remove();
+  } else if (nextTocPanel) {
+    currentDocPane.appendChild(nextTocPanel);
+  }
+
+  if (currentPageGridPanel && nextPageGridPanel) {
+    syncReadingPopupPanelState(currentPageGridPanel, nextPageGridPanel);
+  } else if (currentPageGridPanel) {
+    currentPageGridPanel.remove();
+  } else if (nextPageGridPanel) {
+    currentDocPane.appendChild(nextPageGridPanel);
+  }
+
+  syncAppActivePaperMetadata(currentReadingPaper(project));
+  return true;
+}
+
+function patchReadingPdfSelectionSurfaces() {
+  const patchedDock = patchReadingPdfSelectionBarOnly();
+  const patchedWorkbench = patchReadingWorkbenchPaneOnly();
+  if (!patchedDock || !patchedWorkbench) {
+    refreshReadingStageUI();
+  }
+}
+
+function scrollReadingChatToBottom() {
+  const chatBody = document.querySelector(".reading-chat-body");
+  if (chatBody) {
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+}
+
+function syncReadingPopupPanelState(currentPanel, nextPanel) {
+  if (currentPanel.innerHTML !== nextPanel.innerHTML) {
+    currentPanel.innerHTML = nextPanel.innerHTML;
+  }
+  currentPanel.className = nextPanel.className;
+}
+
+function appendReadingPdfDockWithAnimation(parent, dock) {
+  const nextHasSelection = dock.classList.contains("has-selection");
+  const chip = dock.querySelector(".sel-chip");
+  if (nextHasSelection) {
+    dock.classList.remove("has-selection");
+    chip?.classList.remove("visible");
+  }
+
+  parent.appendChild(dock);
+
+  if (nextHasSelection) {
+    window.requestAnimationFrame(() => {
+      dock.classList.add("has-selection");
+      chip?.classList.add("visible");
+    });
+  }
+}
+
+function syncReadingPdfDockState(currentDock, nextDock) {
+  const currentHadSelection = currentDock.classList.contains("has-selection");
+  const nextHasSelection = nextDock.classList.contains("has-selection");
+  const currentChip = currentDock.querySelector(".sel-chip");
+  const nextChip = nextDock.querySelector(".sel-chip");
+  const currentChipText = currentDock.querySelector(".sel-chip-text");
+  const nextChipText = nextDock.querySelector(".sel-chip-text");
+  const currentZoom = currentDock.querySelector(".zoom-val");
+  const nextZoom = nextDock.querySelector(".zoom-val");
+
+  if (currentChipText && nextChipText) {
+    currentChipText.textContent = nextChipText.textContent;
+  }
+
+  if (currentZoom && nextZoom) {
+    currentZoom.textContent = nextZoom.textContent;
+  }
+
+  currentDock.querySelectorAll(".dock-btn").forEach((button, index) => {
+    const nextButton = nextDock.querySelectorAll(".dock-btn")[index];
+    if (!nextButton) {
+      return;
+    }
+
+    button.className = nextButton.className;
+    if (nextButton.hasAttribute("disabled")) {
+      button.setAttribute("disabled", "");
+    } else {
+      button.removeAttribute("disabled");
+    }
+  });
+
+  if (nextHasSelection && !currentHadSelection) {
+    currentDock.classList.add("has-selection");
+    currentChip?.classList.add("visible");
+  } else {
+    currentDock.classList.toggle("has-selection", nextHasSelection);
+    currentChip?.classList.toggle("visible", nextChip?.classList.contains("visible") || nextHasSelection);
+  }
+}
+
 function patchReadingStageUI({ preserveRailFocus = false } = {}) {
   if (state.activeStage !== "reading") {
     return false;
@@ -2247,15 +3193,17 @@ function patchReadingStageUI({ preserveRailFocus = false } = {}) {
   const nextWorkbenchStrip = nextShell.querySelector(".reading-wb-strip");
 
   currentStage.dataset.readingOrientation = nextStage.dataset.readingOrientation || "";
-  currentMetabar.replaceWith(nextMetabar);
-  currentIconRail.replaceWith(nextIconRail);
+  replaceReadingNodeIfChanged(currentMetabar, nextMetabar);
+  replaceReadingNodeIfChanged(currentIconRail, nextIconRail);
 
   if (currentPanel && nextPanel) {
-    currentPanel.className = nextPanel.className;
-    currentPanel.replaceChildren(...Array.from(nextPanel.childNodes));
-    const nextPanelBody = currentPanel.querySelector(".reading-float-panel-body");
-    if (nextPanelBody) {
-      nextPanelBody.scrollTop = previousPanelScrollTop;
+    if (!currentPanel.isEqualNode(nextPanel)) {
+      currentPanel.className = nextPanel.className;
+      currentPanel.replaceChildren(...Array.from(nextPanel.childNodes));
+      const nextPanelBody = currentPanel.querySelector(".reading-float-panel-body");
+      if (nextPanelBody) {
+        nextPanelBody.scrollTop = previousPanelScrollTop;
+      }
     }
   } else if (currentPanel) {
     currentPanel.remove();
@@ -2263,10 +3211,13 @@ function patchReadingStageUI({ preserveRailFocus = false } = {}) {
     currentShell.insertBefore(nextPanel, currentSplit);
   }
 
-  currentSplit.replaceWith(nextSplit);
+  const shouldHydrateReadingPdf = !patchReadingSplitPreservingPdf(currentSplit, nextSplit);
+  if (shouldHydrateReadingPdf) {
+    currentSplit.replaceWith(nextSplit);
+  }
 
   if (currentWorkbenchStrip && nextWorkbenchStrip) {
-    currentWorkbenchStrip.replaceWith(nextWorkbenchStrip);
+    replaceReadingNodeIfChanged(currentWorkbenchStrip, nextWorkbenchStrip);
   } else if (currentWorkbenchStrip) {
     currentWorkbenchStrip.remove();
   } else if (nextWorkbenchStrip) {
@@ -2288,7 +3239,10 @@ function patchReadingStageUI({ preserveRailFocus = false } = {}) {
   }
 
   syncAppActivePaperMetadata(currentReadingPaper(project));
-  scheduleReadingHydration();
+  if (shouldHydrateReadingPdf) {
+    scheduleReadingHydration();
+  }
+  syncBrowserUrlFromState();
   return true;
 }
 
@@ -2731,15 +3685,207 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "set-reading-document-tab") {
-    state.readingDocumentTab = trigger.dataset.readingDocumentTab || "pdf";
+    const nextDocumentTab = trigger.dataset.readingDocumentTab || "pdf";
+    if (state.readingDocumentTab === nextDocumentTab) {
+      return;
+    }
+
+    state.readingDocumentTab = nextDocumentTab;
+    state.readingContextMenuOpen = false;
+    if (state.readingDocumentTab !== "pdf") {
+      state.readingPdfTargetPage = null;
+    }
+    if (!patchReadingDocumentPaneOnly()) {
+      refreshReadingStageUI();
+    }
+    return;
+  }
+
+  if (action === "toggle-reading-context-menu") {
+    state.readingContextMenuOpen = !state.readingContextMenuOpen;
     refreshReadingStageUI();
     return;
   }
 
-  if (action === "set-reading-workbench-tab") {
-    state.readingWorkbenchTab = trigger.dataset.readingWorkbenchTab || "chat";
-    state.readingWorkbenchCollapsed = false;
+  if (action === "open-reading-source") {
+    const session = selectedReadingSession();
+    const sourceUrl = session?.paperUrl || session?.pdfUrl || "";
+    state.readingContextMenuOpen = false;
+    if (sourceUrl) {
+      window.open(sourceUrl, "_blank", "noopener,noreferrer");
+      refreshReadingStageUI();
+    } else {
+      state.error = "Source URL is not available for this reading session.";
+      render();
+    }
+    return;
+  }
+
+  if (action === "copy-reading-citation") {
+    const session = selectedReadingSession();
+    state.readingContextMenuOpen = false;
+    if (session?.id) {
+      try {
+        await copyTextToClipboard(readingCitationText(session));
+      } catch (error) {
+        state.error = error.message;
+      }
+    }
     refreshReadingStageUI();
+    return;
+  }
+
+  if (action === "export-reading-notes") {
+    const session = selectedReadingSession();
+    state.readingContextMenuOpen = false;
+    if (session?.id) {
+      exportReadingNotes(session);
+    }
+    refreshReadingStageUI();
+    return;
+  }
+
+  if (action === "jump-reading-page") {
+    const page = Number(trigger.dataset.readingPage || trigger.dataset.page || "");
+    if (Number.isFinite(page) && page > 0) {
+      state.readingDocumentTab = "pdf";
+      state.readingPdfTargetPage = page;
+      state.readingPdfDockPanel = "";
+      refreshReadingStageUI();
+      window.requestAnimationFrame(() => {
+        const host = document.querySelector('[data-reading-pdf-host="true"]');
+        if (!scrollReadingPdfToPage(host, page)) {
+          scheduleReadingHydration();
+        }
+      });
+    }
+    return;
+  }
+
+  if (action === "toggle-reading-pdf-dock-panel") {
+    const panel = String(trigger.dataset.readingPdfDockPanel || "");
+    state.readingPdfDockPanel = state.readingPdfDockPanel === panel ? "" : panel;
+    if (!patchReadingPdfSelectionBarOnly()) {
+      refreshReadingStageUI();
+    }
+    return;
+  }
+
+  if (action === "set-reading-pdf-zoom") {
+    const delta = Number(trigger.dataset.readingPdfZoomDelta || "");
+    if (Number.isFinite(delta)) {
+      const currentZoom = Number(state.readingPdfZoom) || 100;
+      state.readingPdfZoom = Math.min(200, Math.max(50, currentZoom + delta));
+      state.readingPdfDockPanel = "";
+      if (!patchReadingPdfSelectionBarOnly()) {
+        refreshReadingStageUI();
+      }
+      scheduleReadingHydration();
+    }
+    return;
+  }
+
+  if (action === "fit-reading-pdf-zoom") {
+    state.readingPdfZoom = 100;
+    state.readingPdfDockPanel = "";
+    if (!patchReadingPdfSelectionBarOnly()) {
+      refreshReadingStageUI();
+    }
+    scheduleReadingHydration();
+    return;
+  }
+
+  if (action === "clear-reading-pdf-selection") {
+    state.readingPdfDockSelectionActive = false;
+    state.readingPdfSelection = null;
+    patchReadingPdfSelectionSurfaces();
+    return;
+  }
+
+  if (action === "create-reading-highlight-from-selection") {
+    const currentSession = selectedReadingSession();
+    const selection = state.readingPdfSelection;
+    if (currentSession?.id && selection?.quote) {
+      try {
+        await runReadingRequest("note", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, "notes"), {
+            method: "POST",
+            body: JSON.stringify({
+              body: "Highlighted from PDF selection.",
+              kind: "note",
+              origin: "selection-highlight",
+              page: selection.page || null,
+              quote: selection.quote,
+            }),
+          }),
+        );
+        state.readingPdfDockSelectionActive = false;
+        state.readingPdfSelection = null;
+      } catch (error) {
+        state.error = error.message;
+      }
+      if (!patchReadingPdfSelectionBarOnly()) {
+        refreshReadingStageUI();
+      }
+    }
+    return;
+  }
+
+  if (action === "create-reading-note-from-selection") {
+    const currentSession = selectedReadingSession();
+    const selection = state.readingPdfSelection;
+    if (currentSession?.id && selection?.quote) {
+      try {
+        await runReadingRequest("note", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, "notes"), {
+            method: "POST",
+            body: JSON.stringify({
+              body: "",
+              kind: "note",
+              origin: "selection",
+              page: selection.page || null,
+              quote: selection.quote,
+            }),
+          }),
+        );
+        state.readingPdfDockSelectionActive = false;
+        state.readingPdfSelection = null;
+        state.readingWorkbenchTab = "notes";
+        state.readingWorkbenchCollapsed = false;
+      } catch (error) {
+        state.error = error.message;
+      }
+      const patchedSelection = patchReadingPdfSelectionBarOnly();
+      const patchedWorkbench = patchReadingWorkbenchPaneOnly();
+      if (!patchedSelection || !patchedWorkbench) {
+        refreshReadingStageUI();
+      }
+    }
+    return;
+  }
+
+  if (action === "open-reading-note-linker") {
+    state.readingWorkbenchTab = "notes";
+    state.readingWorkbenchCollapsed = false;
+    const patchedDock = patchReadingPdfSelectionBarOnly();
+    const patchedWorkbench = patchReadingWorkbenchPaneOnly();
+    if (!patchedDock || !patchedWorkbench) {
+      refreshReadingStageUI();
+    }
+    return;
+  }
+
+  if (action === "set-reading-workbench-tab") {
+    const nextWorkbenchTab = trigger.dataset.readingWorkbenchTab || "chat";
+    if (state.readingWorkbenchTab === nextWorkbenchTab && !state.readingWorkbenchCollapsed) {
+      return;
+    }
+
+    state.readingWorkbenchTab = nextWorkbenchTab;
+    state.readingWorkbenchCollapsed = false;
+    if (!patchReadingWorkbenchPaneOnly()) {
+      refreshReadingStageUI();
+    }
     return;
   }
 
@@ -2758,7 +3904,26 @@ document.addEventListener("click", async (event) => {
 
   if (action === "set-reading-assets-filter") {
     state.readingAssetsFilter = trigger.dataset.readingAssetsFilter || "all";
-    refreshReadingStageUI();
+    state.readingAssetDetailId = "";
+    if (!patchReadingDocumentPaneOnly()) {
+      refreshReadingStageUI();
+    }
+    return;
+  }
+
+  if (action === "open-reading-asset-detail") {
+    state.readingAssetDetailId = trigger.dataset.readingAssetId || "";
+    if (!patchReadingDocumentPaneOnly()) {
+      refreshReadingStageUI();
+    }
+    return;
+  }
+
+  if (action === "close-reading-asset-detail") {
+    state.readingAssetDetailId = "";
+    if (!patchReadingDocumentPaneOnly()) {
+      refreshReadingStageUI();
+    }
     return;
   }
 
@@ -2772,6 +3937,7 @@ document.addEventListener("click", async (event) => {
   if (action === "reading-parse-session") {
     const currentSession = selectedReadingSession();
     if (currentSession?.id) {
+      state.readingContextMenuOpen = false;
       state.readingDocumentTab = "pdf";
       try {
         await runReadingRequest("parse", currentSession.id, () =>
@@ -2884,6 +4050,19 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "handoff-reading-to-research") {
+    const noteCard = trigger.closest("[data-reading-note-id]");
+    try {
+      await handoffReadingToResearch({
+        noteId: noteCard?.dataset.readingNoteId || "",
+      });
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
   if (action === "ask-ai-from-note") {
     const currentSession = selectedReadingSession();
     const noteId = trigger.dataset.noteId || "";
@@ -2917,13 +4096,16 @@ document.addEventListener("click", async (event) => {
 
   if (action === "clear-search") {
     event.preventDefault();
-    if (!state.hasSearched) {
+    if (!state.hasSearched && !state.searchAgentRun) {
       return;
     }
     state.hasSearched = false;
     state.loading = false;
     state.error = "";
+    state.searchAgentRun = null;
+    state.searchAgentTransitioning = false;
     state.scopePicker = null;
+    clearAgenticSearchBodyState();
     renderWithViewTransition();
     return;
   }
@@ -2933,6 +4115,11 @@ document.addEventListener("click", async (event) => {
     const nextMode = trigger.dataset.searchMode === "keyword" ? "keyword" : "scout";
     if (nextMode === state.searchMode) {
       return;
+    }
+    if (nextMode === "keyword" && state.searchAgentRun) {
+      state.searchAgentRun = null;
+      state.searchAgentTransitioning = false;
+      clearAgenticSearchBodyState();
     }
 
     const supportsViewTransition =
@@ -3047,6 +4234,13 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "toggle-sidebar") {
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+    saveStorage(STORAGE_KEYS.sidebarCollapsed, state.sidebarCollapsed ? "true" : "false");
+    render();
+    return;
+  }
+
   if (action === "toggle-workflow-menu") {
     state.openWorkflowMenu = state.openWorkflowMenu === trigger.dataset.stageId ? "" : trigger.dataset.stageId;
     render();
@@ -3061,7 +4255,7 @@ document.addEventListener("click", async (event) => {
 
   if (action === "copy-stage-link") {
     const stageId = normalizeStage(trigger.dataset.stageId);
-    const url = `${window.location.origin}${window.location.pathname}#${stageId}`;
+    const url = browserUrlForRouteHash(buildBrowserRouteHash({ stageId }));
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -3120,6 +4314,163 @@ document.addEventListener("mouseup", () => {
   }
 });
 
+function countReadingSelectionLines(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return 0;
+  }
+
+  const explicitLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean).length;
+  if (explicitLines > 1) {
+    return explicitLines;
+  }
+
+  return Math.max(1, Math.ceil(text.replace(/\s+/g, " ").trim().length / 84));
+}
+
+function captureReadingPdfSelection() {
+  if (state.activeStage !== "reading" || state.readingView !== "detail" || state.readingDocumentTab !== "pdf") {
+    return;
+  }
+
+  const selection = window.getSelection?.();
+  const quote = String(selection?.toString() || "").replace(/\s+/g, " ").trim();
+  if (!selection || !quote || quote.length < 2) {
+    return;
+  }
+
+  const anchor =
+    selection.anchorNode?.nodeType === Node.TEXT_NODE ? selection.anchorNode.parentElement : selection.anchorNode;
+  const focus =
+    selection.focusNode?.nodeType === Node.TEXT_NODE ? selection.focusNode.parentElement : selection.focusNode;
+  const pageNode =
+    anchor?.closest?.("[data-reading-pdf-page]") ||
+    focus?.closest?.("[data-reading-pdf-page]") ||
+    null;
+  const host = pageNode?.closest?.('[data-reading-pdf-host="true"]');
+  const session = selectedReadingSession();
+  if (!host || !session?.id) {
+    return;
+  }
+
+  const page = Number(pageNode.dataset.readingPdfPage || "");
+  state.readingPdfSelection = {
+    lineCount: countReadingSelectionLines(quote),
+    page: Number.isFinite(page) && page > 0 ? page : null,
+    quote: quote.slice(0, 900),
+    sessionId: session.id,
+  };
+  state.readingPdfDockSelectionActive = true;
+  patchReadingPdfSelectionSurfaces();
+}
+
+document.addEventListener("mouseup", () => {
+  if (state.activeStage !== "reading" || state.readingView !== "detail" || state.readingDocumentTab !== "pdf") {
+    return;
+  }
+
+  window.setTimeout(captureReadingPdfSelection, 0);
+});
+
+let readingPdfSelectionClearTimer = null;
+let readingPdfSelectionPreserveUntil = 0;
+
+function clearReadingPdfSelectionFromInteraction({ clearNativeSelection = false } = {}) {
+  if (!state.readingPdfSelection) {
+    return false;
+  }
+
+  state.readingPdfDockSelectionActive = false;
+  state.readingPdfSelection = null;
+  if (clearNativeSelection) {
+    window.getSelection?.()?.removeAllRanges();
+  }
+
+  patchReadingPdfSelectionSurfaces();
+  return true;
+}
+
+function collapseReadingPdfDockSelectionFromNativeClear() {
+  if (!state.readingPdfDockSelectionActive) {
+    return false;
+  }
+
+  state.readingPdfDockSelectionActive = false;
+  if (!patchReadingPdfSelectionBarOnly()) {
+    refreshReadingStageUI();
+  }
+  return true;
+}
+
+function isReadingPdfSelectionPreservingTarget(target) {
+  return Boolean(
+    target?.closest?.('[data-reading-pdf-host="true"]') ||
+      target?.closest?.(".reading-pdf-dock-layer") ||
+      target?.closest?.(".popup-panel") ||
+      target?.closest?.(".reading-chat-input") ||
+      target?.closest?.(".reading-chat-wrap"),
+  );
+}
+
+function shouldPreserveReadingPdfSelectionAfterNativeClear() {
+  if (Date.now() < readingPdfSelectionPreserveUntil) {
+    return true;
+  }
+
+  const activeElement = document.activeElement;
+  return Boolean(activeElement?.closest?.(".reading-chat-input") || activeElement?.closest?.(".reading-chat-wrap"));
+}
+
+document.addEventListener("selectionchange", () => {
+  if (!state.readingPdfSelection) {
+    return;
+  }
+
+  window.clearTimeout(readingPdfSelectionClearTimer);
+  readingPdfSelectionClearTimer = window.setTimeout(() => {
+    const quote = window.getSelection?.()?.toString().trim() || "";
+    if (!quote) {
+      collapseReadingPdfDockSelectionFromNativeClear();
+    }
+  }, 140);
+});
+
+document.addEventListener("mousedown", (event) => {
+  if (!state.readingPdfSelection) {
+    return;
+  }
+
+  const target = event.target;
+  if (isReadingPdfSelectionPreservingTarget(target)) {
+    readingPdfSelectionPreserveUntil = Date.now() + 700;
+    return;
+  }
+
+  clearReadingPdfSelectionFromInteraction({ clearNativeSelection: true });
+});
+
+document.addEventListener("keydown", async (event) => {
+  if (event.key === "Escape") {
+    clearReadingPdfSelectionFromInteraction({ clearNativeSelection: true });
+  }
+
+  if (
+    event.key === "Enter" &&
+    !event.shiftKey &&
+    !event.isComposing &&
+    event.target?.matches?.('textarea[name="readingChatMessage"]')
+  ) {
+    const form = event.target.closest('[data-action="submit-reading-chat-form"]');
+    if (form) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  }
+});
+
 document.addEventListener("submit", async (event) => {
   const readingChatForm = event.target.closest('[data-action="submit-reading-chat-form"]');
   if (readingChatForm) {
@@ -3131,19 +4482,68 @@ document.addEventListener("submit", async (event) => {
       return;
     }
 
+    const selectedTextContext =
+      state.readingPdfSelection?.sessionId === currentSession.id && state.readingPdfSelection.quote
+        ? {
+            lineCount: state.readingPdfSelection.lineCount || countReadingSelectionLines(state.readingPdfSelection.quote),
+            page: state.readingPdfSelection.page || null,
+            quote: state.readingPdfSelection.quote,
+          }
+        : null;
+    const optimisticStamp = Date.now();
+    const optimisticUserMessage = {
+      createdAt: new Date(optimisticStamp).toISOString(),
+      id: `chat-user-pending-${optimisticStamp}`,
+      pending: true,
+      role: "user",
+      selection: selectedTextContext,
+      sessionId: currentSession.id,
+      text: message,
+    };
+    const optimisticTypingMessage = {
+      createdAt: new Date(optimisticStamp + 1).toISOString(),
+      id: `chat-assistant-typing-${optimisticStamp}`,
+      pending: true,
+      role: "assistant",
+      sessionId: currentSession.id,
+      text: "...",
+      typing: true,
+    };
+    state.readingOptimisticChatMessages = [
+      ...state.readingOptimisticChatMessages.filter((entry) => entry.sessionId !== currentSession.id),
+      optimisticUserMessage,
+      optimisticTypingMessage,
+    ];
+
+    const textarea = readingChatForm.querySelector('[name="readingChatMessage"]');
+    if (textarea) {
+      textarea.value = "";
+    }
+    if (!patchReadingWorkbenchPaneOnly()) {
+      refreshReadingStageUI();
+    }
+    window.requestAnimationFrame(scrollReadingChatToBottom);
+
     try {
       await runReadingRequest("chat", currentSession.id, () =>
         api(readingSessionApiPath(currentSession.id, "chat"), {
           method: "POST",
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({
+            message,
+            selection: selectedTextContext,
+          }),
         }),
       );
-      const textarea = readingChatForm.querySelector('[name="readingChatMessage"]');
-      if (textarea) {
-        textarea.value = "";
-      }
     } catch (error) {
       state.error = error.message;
+    } finally {
+      state.readingOptimisticChatMessages = state.readingOptimisticChatMessages.filter(
+        (entry) => entry.sessionId !== currentSession.id,
+      );
+      if (!patchReadingWorkbenchPaneOnly()) {
+        refreshReadingStageUI();
+      }
+      window.requestAnimationFrame(scrollReadingChatToBottom);
     }
     return;
   }
@@ -3156,6 +4556,14 @@ document.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(form);
   state.searchInput = String(formData.get("query") || "").trim();
+  if (state.searchMode === "scout") {
+    await startAgenticSearchRun({ query: state.searchInput });
+    return;
+  }
+
+  state.searchAgentRun = null;
+  state.searchAgentTransitioning = false;
+  clearAgenticSearchBodyState();
   await runSearch();
 });
 
@@ -3229,7 +4637,7 @@ document.addEventListener("change", (event) => {
   }
 });
 
-document.addEventListener("keydown", (event) => {
+document.addEventListener("keydown", async (event) => {
   if ((event.metaKey || event.ctrlKey) && /^[1-6]$/.test(event.key)) {
     event.preventDefault();
     const stage = WORKFLOW_STAGES[Number(event.key) - 1];
@@ -3249,6 +4657,19 @@ document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
     focusSearchInput({ forceSearchStage: true, select: true });
+    return;
+  }
+
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    event.preventDefault();
+    if (state.activeStage !== "search") {
+      state.activeStage = "search";
+      saveStorage(STORAGE_KEYS.stage, state.activeStage);
+      render();
+    }
+    state.searchMode = "scout";
+    const input = document.querySelector("#search-input");
+    await startAgenticSearchRun({ query: input?.value ?? state.searchInput });
     return;
   }
 
@@ -3289,6 +4710,9 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+window.addEventListener("popstate", scheduleApplyBrowserRouteFromUrl);
+window.addEventListener("hashchange", scheduleApplyBrowserRouteFromUrl);
+
 let resizeTicking = false;
 
 window.addEventListener("resize", () => {
@@ -3315,7 +4739,7 @@ async function boot() {
     state.searchInput = project?.defaultQuery || "";
     resetSearchState();
     await loadProjectLibrary();
-    await loadReadingSessions({ preserveSelection: false });
+    await loadReadingSessions({ preserveSelection: Boolean(state.activeReadingSessionId) });
     syncReadingHomeSelection();
     const pendingSession = state.readingSessions.find((session) => session.runId && session.status !== "done");
     if (pendingSession?.runId) {

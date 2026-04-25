@@ -133,3 +133,30 @@ test('reading agent run falls back locally and creates a reading session', async
   assert.equal(sessions[0].status, 'done');
   assert.ok(sessions[0].sections.length > 0);
 });
+
+test('search agent run falls back locally without requiring a paper reference', async () => {
+  const store = await createDemoStore();
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      query: 'LoRA forgetting diffusion personalization',
+      scopes: [
+        { id: 'iclr24', label: 'ICLR 2024', type: 'conference' },
+      ],
+    },
+    projectId: 'demo',
+    stage: 'search',
+  });
+
+  const finalRun = await waitForRun(store, run.id);
+
+  assert.equal(finalRun.stage, 'search');
+  assert.equal(finalRun.status, 'done');
+  assert.match(finalRun.outputSummary, /LoRA forgetting diffusion personalization/);
+  assert.equal(store.getReadingSessions('demo').length, 0);
+});

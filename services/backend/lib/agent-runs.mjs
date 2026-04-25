@@ -5,6 +5,7 @@ const DEFAULT_TIMEOUTS = {
   reading: 30000,
   research: 45000,
   result: 25000,
+  search: 30000,
   writing: 25000,
 };
 
@@ -56,6 +57,15 @@ export const CAPABILITY_PROFILES = {
 };
 
 const STAGE_TASKS = {
+  search: {
+    agent: 'Scout agent',
+    buildFallback: buildSearchFallback,
+    buildPrompt: buildSearchPrompt,
+    defaultTaskKind: 'run-agentic-search',
+    outputCollections: [],
+    profileId: 'scout',
+    stage: 'search',
+  },
   insight: {
     agent: 'Analyst agent',
     buildFallback: buildInsightFallback,
@@ -356,6 +366,27 @@ function buildResearchFallback({ context, error }) {
   };
 }
 
+function searchContextSummary(context) {
+  const query = String(context.searchQuery || '').trim() || context.project?.defaultQuery || 'untitled search';
+  const scopes = ensureArray(context.searchScopes)
+    .map((scope) => String(scope?.label || '').trim())
+    .filter(Boolean);
+
+  return {
+    query,
+    scopeLabel: scopes.length ? scopes.join(', ') : 'project-wide',
+  };
+}
+
+function buildSearchFallback({ context, error }) {
+  const { query, scopeLabel } = searchContextSummary(context);
+  const suffix = error?.message ? ` Runtime fallback: ${error.message}` : '';
+
+  return {
+    outputSummary: `Agentic search prepared for "${truncate(query, 120)}" across ${scopeLabel}.${suffix}`,
+  };
+}
+
 function buildResultFallback({ context, error }) {
   const paper = context.paper;
   const experimentRuns = ensureArray(context.experimentRuns);
@@ -461,6 +492,44 @@ function uniqueSourceRefs(refs) {
   return next;
 }
 
+function buildSearchPrompt({ context }) {
+  const { query, scopeLabel } = searchContextSummary(context);
+  const keywords = (context.project?.keywords || []).length
+    ? context.project.keywords.map((keyword) => `- ${keyword}`).join('\n')
+    : '- none';
+  const scopes = ensureArray(context.searchScopes).length
+    ? context.searchScopes.map((scope) => `- ${scope.type || 'scope'}: ${scope.label || scope.id}`).join('\n')
+    : '- none';
+
+  return `
+You are the Scout agentic search planner for ARES.
+
+Return only JSON:
+{
+  "outputSummary": "one concise sentence describing the live search plan"
+}
+
+Project:
+- id: ${context.project?.id || 'unknown'}
+- focus: ${context.project?.focus || 'n/a'}
+
+Project keywords:
+${keywords}
+
+User query:
+- ${query}
+
+Active scopes:
+${scopes}
+
+Plan requirements:
+- Treat this as an agentic literature-search run, not a keyword-only lookup.
+- Mention the first live phase: Reader.
+- Scope summary: ${scopeLabel}
+- Keep the sentence short enough for a status badge or run header.
+`.trim();
+}
+
 function buildReadingPrompt({ context }) {
   const { paper, project } = context;
 
@@ -500,7 +569,7 @@ Return shape:
 }
 
 function buildResearchPrompt({ context }) {
-  const { paper, project, readingSession } = context;
+  const { handoff, paper, project, readingSession } = context;
 
   return `
 You are the Reproduction agent for ARES.
@@ -522,6 +591,9 @@ ${serialiseJson(paper)}
 
 Reading session:
 ${serialiseJson(readingSession || {})}
+
+Reading handoff:
+${serialiseJson(handoff || {})}
 
 Return shape:
 {
@@ -718,23 +790,37 @@ function resolveSupportCollections(store, run) {
 function buildRunContext(store, run) {
   const input = run.input || {};
   const project = resolveProjectContext(store, run);
+  const definition = STAGE_TASKS[String(run.stage || '').trim().toLowerCase()];
   const paper = resolvePaper(store, run, input);
-  if (!paper) {
+  if (!paper && definition?.stage !== 'search') {
     throw new Error(`Run ${run.id} is missing a paper reference.`);
   }
 
   const readingSession = resolveReadingSession(store, run, input);
   const collections = resolveSupportCollections(store, run);
+  const handoff = {
+    assetIds: ensureArray(input?.assetIds).map((entry) => String(entry || '').trim()).filter(Boolean),
+    noteIds: ensureArray(input?.noteIds).map((entry) => String(entry || '').trim()).filter(Boolean),
+    sectionIds: ensureArray(input?.sectionIds).map((entry) => String(entry || '').trim()).filter(Boolean),
+    source: String(input?.handoffSource || '').trim(),
+  };
 
   return {
     collections,
     experimentRuns: collections.experimentRuns,
+    handoff,
     insightNotes: collections.insightNotes,
     paper,
     project,
     readingSession,
     reproChecklistItems: collections.reproChecklistItems,
     resultComparisons: collections.resultComparisons,
+    searchQuery: String(input?.query || input?.q || project?.defaultQuery || '').trim(),
+    searchScopes: ensureArray(input?.scopes).map((scope) => ({
+      id: String(scope?.id || '').trim(),
+      label: String(scope?.label || scope?.id || '').trim(),
+      type: String(scope?.type || 'scope').trim(),
+    })),
     writingDrafts: collections.writingDrafts,
   };
 }

@@ -20,8 +20,9 @@ const RUNTIME_FILE = path.join(DATA_ROOT_DIR, 'data', 'runtime', 'store.json');
 
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'application/javascript; charset=utf-8',
+    '.mjs': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.mjs': 'application/javascript; charset=utf-8',
   '.png': 'image/png',
@@ -371,6 +372,18 @@ function parseReadingSessionNoteRoute(requestPath) {
   };
 }
 
+function parseReadingSessionAssetFileRoute(requestPath) {
+  const match = requestPath.match(/^\/api\/reading-sessions\/([^/]+)\/assets\/([^/]+)\/file$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    assetId: decodeURIComponent(match[2]),
+    sessionId: decodeURIComponent(match[1]),
+  };
+}
+
 function resolveVendorAsset(requestPath) {
   if (requestPath === '/__vendor/pdfjs/pdf.mjs') {
     return path.join(ROOT_DIR, 'node_modules', 'pdfjs-dist', 'build', 'pdf.mjs');
@@ -480,6 +493,21 @@ const server = http.createServer(async (request, response) => {
   const requestPath = normalizeRequestPath(url.pathname);
 
   try {
+    if ((request.method === 'GET' || request.method === 'HEAD') && resolveVendorAsset(requestPath)) {
+      const vendorPath = resolveVendorAsset(requestPath);
+      try {
+        const content = request.method === 'HEAD' ? null : await fs.readFile(vendorPath);
+        response.writeHead(200, {
+          'cache-control': 'public, max-age=300',
+          'content-type': CONTENT_TYPES[path.extname(vendorPath)] || 'application/octet-stream',
+        });
+        response.end(content);
+      } catch {
+        notFound(response);
+      }
+      return;
+    }
+
     if (request.method === 'GET' && LIVE_RELOAD_ENABLED && requestPath === '/__dev/reload') {
       registerLiveReloadClient(request, response);
       return;
@@ -627,6 +655,29 @@ const server = http.createServer(async (request, response) => {
         response.end(buffer);
       } catch (error) {
         sendError(response, error, 409);
+      }
+      return;
+    }
+
+    if (request.method === 'GET' && /^\/api\/reading-sessions\/[^/]+\/assets\/[^/]+\/file$/.test(requestPath)) {
+      const route = parseReadingSessionAssetFileRoute(requestPath);
+      if (!route) {
+        notFound(response);
+        return;
+      }
+
+      try {
+        const payload = await readingService.getSessionAssetFile(route.sessionId, {
+          assetId: route.assetId,
+          kind: String(url.searchParams.get('kind') || 'thumb').trim(),
+        });
+        response.writeHead(200, {
+          'cache-control': 'no-store',
+          'content-type': payload.contentType,
+        });
+        response.end(payload.buffer);
+      } catch (error) {
+        sendError(response, error, 404);
       }
       return;
     }

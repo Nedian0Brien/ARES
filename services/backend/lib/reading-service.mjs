@@ -370,6 +370,14 @@ function pickSectionByName(sections, pattern) {
 }
 
 function buildHighlights(sections, chunks, session) {
+  const scoredChunks = chunks
+    .map((chunk) => ({
+      ...chunk,
+      quality:
+        tokenize(chunk.text).length +
+        (/figure|table|result|method|approach|evaluation|limitation/i.test(chunk.text || '') ? 6 : 0),
+    }))
+    .sort((left, right) => right.quality - left.quality);
   const candidates = [
     { type: 'claim', section: sections[0] || null },
     { type: 'method', section: pickSectionByName(sections, /method|approach|setup|model/i) || sections[1] || sections[0] || null },
@@ -379,7 +387,12 @@ function buildHighlights(sections, chunks, session) {
 
   return candidates
     .map((entry, index) => {
-      const chunk = chunks.find((item) => item.sectionId === entry.section?.id) || chunks[index] || null;
+      const chunk =
+        scoredChunks.find((item) => item.sectionId === entry.section?.id && item.quality >= 12) ||
+        scoredChunks.find((item) => item.sectionId === entry.section?.id) ||
+        scoredChunks[index] ||
+        chunks[index] ||
+        null;
       const text = clipText(chunk?.text || entry.section?.summary || session.summary || session.abstract, 320);
       if (!text) {
         return null;
@@ -522,7 +535,7 @@ function summariseFromSections(sections, session) {
   };
 }
 
-function scoreChunk(queryTerms, chunk) {
+function scoreChunk(queryTerms, chunk, { message = '', note = null } = {}) {
   if (!queryTerms.length) {
     return 0;
   }
@@ -532,7 +545,14 @@ function scoreChunk(queryTerms, chunk) {
     bag.set(token, (bag.get(token) || 0) + 1);
   }
 
-  return queryTerms.reduce((score, token) => score + (bag.get(token) || 0), 0);
+  const lexical = queryTerms.reduce((score, token) => score + (bag.get(token) || 0), 0);
+  const text = ensureTrimmedString(chunk.text, '').toLowerCase();
+  const phrase = ensureTrimmedString(message, '').toLowerCase();
+  const phraseBoost = phrase.length >= 12 && text.includes(phrase.slice(0, 80)) ? 8 : 0;
+  const noteSectionBoost = note?.sectionId && note.sectionId === chunk.sectionId ? 6 : 0;
+  const notePageBoost = note?.page && Number(note.page) === Number(chunk.page) ? 4 : 0;
+  const titleBoost = /method|result|limit|claim|contribution|experiment|evaluation/i.test(chunk.sectionLabel || '') ? 2 : 0;
+  return lexical + phraseBoost + noteSectionBoost + notePageBoost + titleBoost;
 }
 
 async function fileExists(filePath) {
@@ -808,6 +828,14 @@ export function createReadingService({
 
   function buildChatFallback({ chunks, message, summaryCards }) {
     const supporting = chunks.map((chunk) => chunk.text).join(' ');
+    if (!supporting) {
+      return {
+        answer: '관련 본문 근거를 충분히 찾지 못했습니다. 질문을 더 구체화하거나 PDF의 해당 섹션을 먼저 확인해 주세요.',
+        citations: [],
+        question: message,
+      };
+    }
+
     const answerBase = supporting || summaryCards?.tldr || '관련 본문이 충분하지 않아 세션 요약을 기준으로 답변합니다.';
     return {
       answer: clipText(answerBase, 420),
@@ -821,9 +849,27 @@ export function createReadingService({
     };
   }
 
-  async function runRuntimeJsonTask(prompt, fallbackBuilder) {
+  async function runRuntimeJsonTask(prompt, fallbackBuilder, { fallbackOnFailure = true } = {}) {
     if (!(await isRuntimeAvailable())) {
-      return fallbackBuilder();
+      if (!fallbackOnFailure) {
+        return {
+          payload: null,
+          provenance: {
+            fallbackReason: 'agent runtime unavailable',
+            generatedBy: '',
+            runtimeUsed: false,
+          },
+        };
+      }
+
+      return {
+        payload: fallbackBuilder(),
+        provenance: {
+          fallbackReason: 'agent runtime unavailable',
+          generatedBy: 'fallback',
+          runtimeUsed: false,
+        },
+      };
     }
 
     try {
@@ -832,9 +878,35 @@ export function createReadingService({
         sandbox: 'read-only',
         timeoutMs: agentTimeoutMs,
       });
-      return runtime.parseJsonFromMessages(summary);
-    } catch {
-      return fallbackBuilder();
+      return {
+        payload: runtime.parseJsonFromMessages(summary),
+        provenance: {
+          fallbackReason: '',
+          generatedBy: 'agent-runtime',
+          runtimeUsed: true,
+        },
+      };
+    } catch (error) {
+      const fallbackReason = error instanceof Error ? error.message : String(error);
+      if (!fallbackOnFailure) {
+        return {
+          payload: null,
+          provenance: {
+            fallbackReason,
+            generatedBy: '',
+            runtimeUsed: false,
+          },
+        };
+      }
+
+      return {
+        payload: fallbackBuilder(),
+        provenance: {
+          fallbackReason,
+          generatedBy: 'fallback',
+          runtimeUsed: false,
+        },
+      };
     }
   }
 
@@ -868,12 +940,33 @@ Rules:
 `.trim();
   }
 
-  function buildChatPrompt(session, summaryCards, message, chunks, note) {
+  function normaliseChatSelection(value) {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    const quote = clipText(ensureTrimmedString(value.quote, ''), 900);
+    if (!quote) {
+      return null;
+    }
+
+    const page = value.page === undefined || value.page === null || value.page === '' ? null : Number(value.page) || null;
+    const lineCount =
+      value.lineCount === undefined || value.lineCount === null || value.lineCount === ''
+        ? null
+        : Math.max(1, Math.round(Number(value.lineCount) || 1));
+    return { lineCount, page, quote };
+  }
+
+  function buildChatPrompt(session, summaryCards, message, chunks, note, selection) {
     const context = chunks
       .map((chunk) => `- [${chunk.sectionLabel || chunk.sectionId || `Page ${chunk.page}`}] p.${chunk.page}: ${chunk.text}`)
       .join('\n');
     const noteContext = note
       ? `Focused note:\n- quote: ${note.quote || ''}\n- body: ${note.body || ''}\n- page: ${note.page || ''}\n`
+      : '';
+    const selectionContext = selection
+      ? `Primary selected PDF text (treat this as the active user-selected passage):\n- quote: ${selection.quote}\n- page: ${selection.page || ''}\n- lines: ${selection.lineCount || ''}\n`
       : '';
 
     return `
@@ -883,11 +976,15 @@ Paper title: ${session.title}
 TLDR: ${summaryCards?.tldr || session.summary || session.abstract}
 User question: ${message}
 ${noteContext}
+${selectionContext}
 Relevant chunks:
 ${context}
 
 Rules:
 - answer should directly answer the question using the provided evidence.
+- If selected PDF text is present, prioritize that passage over the retrieved chunks.
+- For requests like "translate this", "이 내용 번역", "selected text", or "선택한 부분", answer about the selected passage itself.
+- When translating, translate the selected quote faithfully and do not substitute nearby chunks.
 - citations must be an array of objects with label, page, quote, sectionId.
 - Do not invent unsupported claims.
 `.trim();
@@ -1042,7 +1139,23 @@ Rules:
       }
 
       const fallback = () => summariseFromSections(artifact.sections || [], running);
-      const raw = await runRuntimeJsonTask(buildSummaryPrompt(running, artifact), fallback);
+      const generated = await runRuntimeJsonTask(buildSummaryPrompt(running, artifact), fallback);
+      if (!generated.payload) {
+        const failed = await updateSession(sessionId, {
+          keyPoints: [],
+          summary: null,
+          summaryCards: null,
+          summaryError: generated.provenance.fallbackReason || 'AI summary generation failed.',
+          summaryFallbackReason: generated.provenance.fallbackReason,
+          summaryFinishedAt: nowIso(),
+          summaryGeneratedBy: '',
+          summaryRuntimeUsed: false,
+          summaryStatus: 'error',
+        });
+        return { session: failed };
+      }
+
+      const raw = generated.payload || {};
       const summaryCards = {
         ...fallback(),
         ...raw,
@@ -1062,7 +1175,10 @@ Rules:
         summary: clipText(summaryCards.tldr, 320),
         summaryCards,
         summaryError: '',
+        summaryFallbackReason: generated.provenance.fallbackReason,
         summaryFinishedAt: nowIso(),
+        summaryGeneratedBy: generated.provenance.generatedBy,
+        summaryRuntimeUsed: generated.provenance.runtimeUsed,
         summaryStatus: 'done',
       });
 
@@ -1088,7 +1204,38 @@ Rules:
       return { assets, session: next };
     },
 
-    async chat(sessionId, { message, noteId = '' } = {}) {
+    async getSessionAssetFile(sessionId, { assetId, kind = 'thumb' } = {}) {
+      const session = await getSessionOrThrow(sessionId);
+      const asset = session.assets.find((entry) => entry.id === assetId);
+      if (!asset) {
+        throw new Error(`Unknown reading asset: ${assetId}`);
+      }
+
+      const relativePath = kind === 'data' ? asset.dataPath : asset.thumbPath || asset.dataPath;
+      if (!relativePath) {
+        throw new Error(`Asset ${assetId} does not have a ${kind} file.`);
+      }
+
+      const ext = path.extname(relativePath).toLowerCase();
+      const contentType =
+        ext === '.svg'
+          ? 'image/svg+xml; charset=utf-8'
+          : ext === '.png'
+            ? 'image/png'
+            : ext === '.jpg' || ext === '.jpeg'
+              ? 'image/jpeg'
+              : ext === '.json'
+                ? 'application/json; charset=utf-8'
+                : 'application/octet-stream';
+
+      return {
+        asset,
+        buffer: await fs.readFile(resolveSafePath(rootDir, relativePath)),
+        contentType,
+      };
+    },
+
+    async chat(sessionId, { message, noteId = '', selection: selectionInput = null } = {}) {
       const session = await getSessionOrThrow(sessionId);
       if (session.parseStatus !== 'done' || !session.parsedArtifactPath) {
         throw new Error('Parse paper must complete before chat is available.');
@@ -1105,30 +1252,54 @@ Rules:
       }
 
       const note = session.notes.find((entry) => entry.id === noteId) || null;
-      const queryTerms = tokenize([prompt, note?.quote, note?.body].filter(Boolean).join(' '));
+      const selection = normaliseChatSelection(selectionInput);
+      const queryTerms = tokenize([prompt, note?.quote, note?.body, selection?.quote].filter(Boolean).join(' '));
       const rankedChunks = (artifact.chunks || [])
         .map((chunk) => ({
           ...chunk,
-          score: scoreChunk(queryTerms, chunk),
+          score: scoreChunk(queryTerms, chunk, { message: prompt, note }),
         }))
         .sort((left, right) => right.score - left.score || left.page - right.page)
         .filter((chunk) => chunk.score > 0)
         .slice(0, MAX_CHAT_CHUNKS);
-      const fallback = () =>
-        buildChatFallback({
+      const fallback = () => {
+        const base = buildChatFallback({
           chunks: rankedChunks,
           message: prompt,
           summaryCards: session.summaryCards,
         });
-      const raw = await runRuntimeJsonTask(
-        buildChatPrompt(session, session.summaryCards, prompt, rankedChunks, note),
+        if (!selection?.quote) {
+          return base;
+        }
+
+        const selectedCitation = {
+          label: 'Selected PDF text',
+          page: selection.page,
+          quote: clipText(selection.quote, 220),
+          sectionId: 'selection',
+        };
+        const asksForTranslation = /번역|translate|translation|한국어|korean/i.test(prompt);
+        const selectedAnswer = asksForTranslation
+          ? `선택한 PDF 텍스트가 컨텍스트로 전달되었습니다. 현재 런타임 응답을 생성하지 못해 원문을 기준으로 표시합니다: "${clipText(selection.quote, 360)}"`
+          : `선택한 PDF 텍스트를 우선 컨텍스트로 사용했습니다. ${base.answer}`;
+
+        return {
+          ...base,
+          answer: clipText(selectedAnswer, 480),
+          citations: [selectedCitation, ...(Array.isArray(base.citations) ? base.citations : [])],
+        };
+      };
+      const generated = await runRuntimeJsonTask(
+        buildChatPrompt(session, session.summaryCards, prompt, rankedChunks, note, selection),
         fallback,
       );
+      const raw = generated.payload || {};
 
       const userMessage = {
         createdAt: nowIso(),
         id: `chat-user-${Date.now()}`,
         role: 'user',
+        selection,
         text: prompt,
       };
       const assistantMessage = {
@@ -1136,6 +1307,8 @@ Rules:
           ? raw.citations
           : fallback().citations,
         createdAt: nowIso(),
+        fallbackReason: generated.provenance.fallbackReason,
+        generatedBy: generated.provenance.generatedBy,
         id: `chat-assistant-${Date.now()}`,
         role: 'assistant',
         text: clipText(raw?.answer || fallback().answer, 480),

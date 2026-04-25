@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node services/backend/index.mjs",
     "dev": "node --watch services/backend/index.mjs",
+    "lint": "node --check web/app.js && node --check web/app/features/search.js && node --check web/app/features/reading.js && node --check web/app/lib/pdf-viewer.js && node --check services/backend/index.mjs && node --check services/backend/lib/agent-runs.mjs && node --check services/backend/lib/reading-model.mjs && node --check services/backend/lib/reading-service.mjs",
+    "build": "npm run lint",
     "test": "node --test services/backend/tests/*.test.mjs"
   },
   "dependencies": {

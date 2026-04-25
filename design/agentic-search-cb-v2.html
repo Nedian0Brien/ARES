@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="ko" data-view="chat" data-annot="false">
+<head>
+<meta charset="UTF-8">
+<title>ARES · Agentic Search · C+B v2</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:  #fbfbfa; --s1: #ffffff; --s2: #f7f7f6; --s3: #f0efed;
+  --b1:  #e8e8e6; --b2: #d4d4d2;
+  --tx:  #0a0a0b; --t2: #4a4a50; --t3: #8a8a92; --t4: #b0b0b8;
+  --sg:  #5e9c6f; --sg-d: #4c825b; --sg-bg: rgba(94,156,111,.10);
+  --n-q:     #18181b;
+  --n-think: #6b5fc7;  --n-think-bg: rgba(107,95,199,.10);
+  --n-srch:  #3b82c4;  --n-srch-bg:  rgba(59,130,196,.10);
+  --n-src:   #4a4a50;  --n-src-bg:   rgba(74,74,80,.06);
+  --n-ans:   #5e9c6f;  --n-ans-bg:   rgba(94,156,111,.10);
+  --n-fu:    #d68a3c;
+}
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
+  font-feature-settings: 'cv11','ss01','ss03';
+  background: var(--bg); color: var(--tx);
+  font-size: 13px; letter-spacing: -.006em; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; cursor: pointer; border: 0; }
+@keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:.38} }
+@keyframes fade-up   { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+@keyframes node-pop  { from{opacity:0;transform:translate(-50%,-50%) scale(.68)} to{opacity:1;transform:translate(-50%,-50%) scale(1)} }
+@keyframes blink     { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+@keyframes spin      { to{ transform: rotate(360deg) } }
+@keyframes ring-out  { 0%{box-shadow:0 0 0 0 rgba(59,130,196,.6)} 100%{box-shadow:0 0 0 12px rgba(59,130,196,0)} }
+::-webkit-scrollbar { width:6px }
+::-webkit-scrollbar-thumb { background:#d8d7d3; border-radius:3px }
+
+/* ── Topbar ─────────────────────────────────────────── */
+.topbar {
+  height: 46px; border-bottom: 1px solid var(--b1);
+  background: rgba(251,251,250,.92); backdrop-filter: blur(10px) saturate(140%);
+  display: flex; align-items: center; gap: 11px;
+  padding: 0 16px; position: sticky; top: 0; z-index: 20;
+}
+.brand { display:flex; align-items:center; gap:7px; font-weight:600; font-size:13px; flex-shrink:0 }
+.brand-mark { width:8px; height:8px; background:var(--tx); border-radius:2px }
+.crumb { font-size:11.5px; color:var(--t3); display:flex; align-items:center; gap:5px }
+.crumb svg { width:10px; height:10px; opacity:.45 }
+.crumb b { color:var(--tx); font-weight:500 }
+.view-toggle {
+  display:flex; align-items:center;
+  background:var(--s2); border:1px solid var(--b1); border-radius:8px; padding:3px; gap:2px;
+  margin-left:14px;
+}
+.vt-btn {
+  height:26px; padding:0 11px; border-radius:5px;
+  font-size:11.5px; font-weight:500; color:var(--t2); background:transparent;
+  display:inline-flex; align-items:center; gap:5px; transition: background 120ms, color 120ms, box-shadow 120ms;
+}
+.vt-btn svg { width:12px; height:12px; opacity:.65 }
+.vt-btn:hover { color:var(--tx) }
+.vt-btn.active { background:var(--s1); color:var(--tx); box-shadow:0 1px 2px rgba(0,0,0,.06) }
+.vt-btn.active svg { opacity:1 }
+.spacer { flex:1 }
+.run-badge {
+  font-size:11.5px; color:var(--t2); padding:4px 11px;
+  background:var(--sg-bg); border-radius:999px;
+  border:1px solid rgba(94,156,111,.2);
+  display:flex; align-items:center; gap:7px;
+}
+.run-badge .dot { width:6px; height:6px; border-radius:50%; background:var(--sg); animation:pulse 1.4s ease-in-out infinite }
+.annot-btn {
+  font-size:11.5px; height:28px; padding:0 10px; border-radius:999px;
+  background:var(--s1); border:1px solid var(--b1); color:var(--t2);
+  display:inline-flex; align-items:center; gap:5px; transition:background 120ms, color 120ms;
+}
+.annot-btn:hover { background:var(--s2); color:var(--tx) }
+[data-annot="true"] .annot-btn { background:#f0f4ff; border-color:#c5cefc; color:#4a55c7 }
+.iconbtn { width:30px; height:30px; border-radius:7px; background:var(--s1); border:1px solid var(--b1); display:inline-flex; align-items:center; justify-content:center; color:var(--t2) }
+.iconbtn:hover { background:var(--s2); border-color:var(--b2); color:var(--tx) }
+
+/* ══════════════════════════════════════════════════════
+   CHAT VIEW
+══════════════════════════════════════════════════════ */
+.view-chat {
+  display: grid; grid-template-columns: 1fr;
+  height: calc(100vh - 46px); position: relative;
+}
+[data-view="graph"] .view-chat { display: none }
+
+.chat-scroll { overflow-y: auto; padding: 32px 0 160px }
+.chat-inner  { max-width: 740px; margin: 0 auto; padding: 0 16px }
+
+/* ── Q header ── */
+.q-block { margin-bottom: 28px; animation: fade-up 300ms ease-out both }
+.q-run-line {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  font-size: 11px; color: var(--t3);
+}
+.q-run-line .badge {
+  font-size:10.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+  padding:2px 8px; border-radius:4px; color:var(--sg); background:var(--sg-bg);
+}
+h1.q-text {
+  font-size: 21px; font-weight: 600; letter-spacing: -.016em; line-height: 1.34;
+  margin-bottom: 12px;
+}
+.q-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 6px }
+.q-pill {
+  font-size:11.5px; padding:3px 10px; border-radius:999px;
+  background:var(--s1); border:1px solid var(--b1); color:var(--t2);
+  display:inline-flex; align-items:center; gap:5px;
+}
+.q-pill svg { width:11px; height:11px; color:var(--t3) }
+.q-graph-hint {
+  font-size:11.5px; color:var(--sg); cursor:pointer;
+  text-decoration:underline; text-decoration-style:dotted; margin-top:8px;
+  display:inline-block;
+}
+
+/* ── Divider ── */
+.phase-divider {
+  display:flex; align-items:center; gap:12px;
+  margin: 22px 0 18px; font-size:11px; color:var(--t3);
+  animation: fade-up 300ms ease-out both;
+}
+.phase-divider::before, .phase-divider::after { content:''; flex:1; height:1px; background:var(--b1) }
+.pd-inner { display:flex; align-items:center; gap:6px; flex-shrink:0 }
+.pd-tag { font-size:10px; font-weight:600; letter-spacing:.07em; padding:2px 7px; border-radius:4px }
+.pd-tag.reader   { background:rgba(59,130,196,.1);  color:var(--n-srch) }
+.pd-tag.repro    { background:rgba(214,138,60,.1);  color:var(--n-fu) }
+.pd-tag.analyst  { background:var(--sg-bg);         color:var(--sg) }
+
+/* ── User message ── */
+.user-msg {
+  display: flex; justify-content: flex-end; margin-bottom: 20px;
+  animation: fade-up 250ms ease-out both;
+}
+.user-bubble {
+  background: var(--tx); color: #fff;
+  border-radius: 18px 18px 4px 18px;
+  padding: 10px 15px; font-size:13.5px; line-height:1.5;
+  max-width: 75%;
+}
+
+/* ── Agent turn ── */
+.agent-turn { margin-bottom: 22px; animation: fade-up 280ms ease-out both }
+.agent-label { display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:11.5px; color:var(--t3) }
+.agent-label .av {
+  width:22px; height:22px; border-radius:6px;
+  background:var(--tx); color:#fff; font-size:10px; font-weight:700;
+  display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.agent-label .name { font-weight:500; color:var(--t2) }
+.agent-label .ts { font-size:10.5px; color:var(--t4) }
+
+.agent-body { /* white bg, no bubble */ }
+.agent-prose { font-size:13.5px; color:var(--t2); line-height:1.68; margin-bottom:14px }
+.agent-prose p + p { margin-top:10px }
+.agent-prose em { color:var(--tx); font-style:normal; font-weight:500 }
+.agent-prose sup {
+  font-size:9.5px; font-weight:600; color:var(--sg); background:var(--sg-bg);
+  border-radius:3px; padding:0 3px; margin:0 1px; cursor:pointer;
+  vertical-align:super; line-height:1;
+}
+.agent-prose sup:hover { background:rgba(94,156,111,.22) }
+
+/* live cursor */
+.agent-prose.live p:last-child::after {
+  content:'▍'; display:inline-block; margin-left:2px;
+  color:var(--n-srch); animation:blink .9s steps(1) infinite; font-weight:600;
+}
+
+/* ── Action line ── */
+.action-line {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin: 6px 0;
+  background: var(--s2); border: 1px solid var(--b1); border-radius: 8px;
+  padding: 6px 11px; font-size: 12px; color: var(--t2);
+  max-width: 100%;
+}
+.action-line .act-ic { width:14px; height:14px; flex-shrink:0; color:var(--t3) }
+.action-line code {
+  font-family: ui-monospace, monospace; font-size:11px;
+  color:var(--n-srch); background:rgba(59,130,196,.08);
+  border-radius:3px; padding:1px 5px;
+}
+.action-line .ok  { margin-left:auto; color:var(--sg); font-size:11px; font-weight:500; flex-shrink:0 }
+.action-line .run { margin-left:auto; color:var(--n-srch); font-size:11px; flex-shrink:0; animation:pulse 1.4s ease-in-out infinite }
+.action-line .cnt { background:var(--s3); border-radius:3px; padding:0 5px; font-size:11px }
+
+.action-group { margin: 10px 0; display:flex; flex-direction:column; gap:4px }
+
+/* ── Paper snippet cards ── */
+.snippet-row { display:flex; gap:8px; margin: 12px 0; overflow-x:auto; padding-bottom:4px }
+.snippet-row::-webkit-scrollbar { height:4px }
+.snippet-card {
+  flex-shrink:0; width:220px;
+  background:var(--s1); border:1px solid var(--b1); border-radius:10px;
+  padding:10px 12px; cursor:pointer; transition:border-color 120ms, background 120ms;
+}
+.snippet-card:hover { border-color:var(--b2); background:var(--s2) }
+.snippet-card.selected { border-color:var(--sg); background:rgba(94,156,111,.04) }
+.snippet-card .s-tag { font-size:9.5px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--t3); margin-bottom:5px }
+.snippet-card .s-ttl { font-size:12px; font-weight:500; line-height:1.38; color:var(--tx) }
+.snippet-card .s-meta { font-size:10.5px; color:var(--t3); margin-top:5px; display:flex; gap:6px; align-items:center }
+.snippet-card .s-meta .vn { background:var(--s3); border-radius:3px; padding:0 4px; font-size:10px }
+.snippet-card .s-sel { margin-left:auto; color:var(--sg); font-size:11px; font-weight:500 }
+
+/* ── Claim card ── */
+.claim-card {
+  background:rgba(94,156,111,.06); border:1px solid rgba(94,156,111,.22);
+  border-radius:10px; padding:12px 14px; margin:12px 0;
+}
+.claim-card .cl-lbl { font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--sg); margin-bottom:5px }
+.claim-card .cl-text { font-size:13px; font-weight:500; color:var(--tx); line-height:1.45 }
+.claim-card .cl-meta { font-size:11px; color:var(--t3); margin-top:6px }
+
+/* ── Conflict card ── */
+.conflict-card {
+  background:rgba(214,138,60,.06); border:1px solid rgba(214,138,60,.22);
+  border-radius:10px; padding:10px 14px; margin:10px 0;
+  display:flex; gap:10px; align-items:flex-start;
+}
+.conflict-card .cf-ic { flex-shrink:0; margin-top:1px; color:var(--n-fu) }
+.conflict-card .cf-text { font-size:12.5px; color:var(--t2); line-height:1.45 }
+.conflict-card .cf-text b { color:var(--tx); font-weight:500 }
+
+/* ── Working status (inline during streaming) ── */
+.working-line {
+  display:flex; align-items:center; gap:9px;
+  padding:8px 12px; font-size:12px; color:var(--t3);
+  animation: fade-up 200ms ease-out both;
+  margin:6px 0;
+}
+.working-line .spin-ic { width:14px; height:14px; border:2px solid var(--b2); border-top-color:var(--n-srch); border-radius:50%; animation:spin 1s linear infinite; flex-shrink:0 }
+.working-line b { color:var(--t2); font-weight:500 }
+
+/* ── Chat context chips bar ── */
+.ctx-bar {
+  display: none; align-items: center; gap: 8px;
+  padding: 8px 16px; background: var(--s1); border-top: 1px solid var(--b1);
+  font-size: 11.5px;
+}
+.ctx-bar.show { display: flex }
+.ctx-bar .lbl { color:var(--sg); font-weight:600; flex-shrink:0; display:flex; align-items:center; gap:5px }
+.ctx-bar .chips { display:flex; gap:5px; flex-wrap:wrap; flex:1 }
+.ctx-chip {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:2px 9px; border-radius:999px;
+  background:var(--s2); border:1px solid rgba(94,156,111,.3);
+  color:var(--t2); font-size:11px;
+}
+.ctx-chip .rm { cursor:pointer; color:var(--t3); font-size:10px; margin-left:2px }
+.ctx-chip .rm:hover { color:#b04545 }
+.ctx-bar .clear-all { color:var(--t3); font-size:11px; cursor:pointer; flex-shrink:0 }
+.ctx-bar .clear-all:hover { color:var(--tx) }
+
+/* ── Input area ── */
+.chat-input-wrap {
+  position:fixed; bottom:0; left:0; right:0;
+  background:rgba(251,251,250,.95);
+  backdrop-filter:blur(8px) saturate(140%);
+  border-top:1px solid var(--b1);
+  padding:12px 16px 16px;
+  z-index:15;
+}
+.chat-input-inner { max-width:740px; margin:0 auto }
+.chat-input-box {
+  display:flex; align-items:flex-end; gap:10px;
+  background:var(--s1); border:1px solid var(--b1); border-radius:14px;
+  padding:10px 10px 10px 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.03), 0 8px 24px rgba(0,0,0,.04);
+  transition: border-color 180ms, box-shadow 180ms;
+}
+.chat-input-box:focus-within { border-color:var(--sg); box-shadow: 0 0 0 3px rgba(94,156,111,.12), 0 8px 24px rgba(0,0,0,.04) }
+.chat-input-box textarea {
+  flex:1; border:0; outline:0; background:transparent;
+  font-family:inherit; font-size:13.5px; color:var(--tx);
+  resize:none; line-height:1.5; max-height:120px;
+  padding:4px 0;
+}
+.chat-input-box textarea::placeholder { color:var(--t4) }
+.input-actions { display:flex; align-items:center; gap:6px }
+.send-btn {
+  width:34px; height:34px; border-radius:50%;
+  background:var(--sg); color:#fff;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.send-btn:hover { background:var(--sg-d) }
+.send-btn.idle { background:var(--s2); border:1px solid var(--b1); color:var(--t2) }
+.stop-btn {
+  height:34px; padding:0 12px; border-radius:999px;
+  background:var(--s2); border:1px solid var(--b1); color:var(--t2);
+  font-size:12px; display:inline-flex; align-items:center; gap:6px;
+}
+.stop-btn:hover { background:var(--s3) }
+.input-hint { font-size:11px; color:var(--t3); margin-top:7px; display:flex; align-items:center; gap:8px }
+.input-hint kbd { font-family:ui-monospace,monospace; font-size:10.5px; background:var(--s2); border:1px solid var(--b1); border-radius:3px; padding:1px 4px; color:var(--t2) }
+
+
+/* ══════════════════════════════════════════════════════
+   GRAPH VIEW
+══════════════════════════════════════════════════════ */
+.view-graph {
+  display: none;
+  grid-template-columns: 210px 1fr 272px;
+  height: calc(100vh - 46px);
+}
+[data-view="graph"] .view-graph { display: grid }
+
+/* ── Graph legend rail ── */
+.graph-rail {
+  border-right:1px solid var(--b1); background:var(--s1);
+  overflow-y:auto; padding:14px 13px;
+  display:flex; flex-direction:column;
+}
+.gr-h { font-size:10px; font-weight:600; letter-spacing:.1em; color:var(--t3); text-transform:uppercase; margin:14px 0 8px }
+.gr-h:first-child { margin-top:0 }
+.ntype-row { display:flex; align-items:flex-start; gap:9px; margin-bottom:10px }
+.nt-swatch { width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0 }
+.nt-info .nm { font-size:12px; font-weight:500; color:var(--tx) }
+.nt-info .ds { font-size:10.5px; color:var(--t3); line-height:1.4; margin-top:1px }
+
+.edge-row { display:flex; align-items:center; gap:9px; padding:4px 0; font-size:11.5px; color:var(--t2) }
+.el { width:20px; height:0; flex-shrink:0 }
+.el.solid  { border-top:1.5px solid var(--t3) }
+.el.dashed { border-top:1.5px dashed var(--n-srch) }
+.el.dotted { border-top:1.5px dotted var(--n-src) }
+.el.ctx    { border-top:2px dashed var(--sg) }
+
+.stat-box { background:var(--s2); border-radius:8px; padding:10px 11px; margin-top:8px }
+.stat-row { display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0 }
+.stat-row b { font-weight:500; color:var(--tx); font-variant-numeric:tabular-nums }
+
+.interact-guide {
+  background:rgba(107,95,199,.07); border:1px solid rgba(107,95,199,.18);
+  border-radius:8px; padding:10px 11px; margin-top:10px;
+  font-size:11px; color:var(--t3); line-height:1.55;
+}
+.interact-guide b { color:var(--n-think); font-weight:500 }
+.kd { font-family:ui-monospace,monospace; font-size:10px; background:var(--s1); border:1px solid var(--b1); border-radius:3px; padding:1px 4px; color:var(--t2) }
+
+/* ── Graph stage ── */
+.graph-stage {
+  position:relative; overflow:hidden;
+  background:
+    radial-gradient(ellipse at 15% 30%, rgba(107,95,199,.05), transparent 40%),
+    radial-gradient(ellipse at 80% 70%, rgba(94,156,111,.05), transparent 42%),
+    #f7f7f5;
+}
+.graph-grid {
+  position:absolute; inset:0; pointer-events:none; opacity:.5;
+  background-image: radial-gradient(circle, rgba(0,0,0,.045) 1px, transparent 1.2px);
+  background-size: 28px 28px;
+}
+.stage-top {
+  position:absolute; top:12px; left:12px; right:12px;
+  display:flex; align-items:center; gap:10px; z-index:4;
+}
+.agent-now {
+  display:flex; align-items:center; gap:8px;
+  background:var(--s1); border:1px solid var(--b1); border-radius:999px;
+  padding:6px 13px; font-size:12px;
+  box-shadow:0 1px 2px rgba(0,0,0,.03);
+}
+.agent-now .dot { width:6px; height:6px; border-radius:50%; background:var(--sg); animation:pulse 1.4s ease-in-out infinite; flex-shrink:0 }
+.sel-hint {
+  background:var(--s1); border:1px solid rgba(107,95,199,.28); border-radius:999px;
+  padding:5px 12px; font-size:11.5px; color:var(--n-think);
+  display:none; align-items:center; gap:8px;
+}
+.sel-hint.show { display:flex }
+.sel-hint .clr { color:var(--t3); font-size:11px; cursor:pointer; text-decoration:underline; text-decoration-style:dotted }
+.sel-hint .clr:hover { color:var(--tx) }
+.graph-tools {
+  margin-left:auto; display:flex; align-items:center; gap:3px;
+  background:var(--s1); border:1px solid var(--b1); border-radius:8px; padding:3px;
+  box-shadow:0 1px 2px rgba(0,0,0,.03);
+}
+.gt { width:28px; height:28px; border-radius:5px; background:transparent; color:var(--t2); display:inline-flex; align-items:center; justify-content:center }
+.gt:hover { background:var(--s2); color:var(--tx) }
+.gt.active { background:var(--s2); color:var(--tx) }
+.gt-sep { width:1px; height:16px; background:var(--b1); margin:0 2px }
+
+/* ── Canvas ── */
+.graph-canvas { position:absolute; inset:0 }
+.graph-canvas > svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible }
+
+/* ── Nodes (base) ── */
+.node {
+  position:absolute;
+  background:var(--s1); border:1.5px solid var(--b1);
+  border-radius:12px; padding:10px 13px;
+  max-width:190px; min-width:128px;
+  box-shadow:0 1px 2px rgba(0,0,0,.025), 0 3px 8px rgba(0,0,0,.02);
+  cursor:pointer; user-select:none;
+  transform:translate(-50%,-50%);
+  animation:node-pop 300ms cubic-bezier(.2,.7,.3,1) both;
+  transition:border-color 130ms, box-shadow 130ms;
+  z-index:2;
+}
+.node:hover { border-color:var(--b2); box-shadow:0 2px 5px rgba(0,0,0,.04), 0 8px 16px rgba(0,0,0,.04) }
+.node.selected { border-color:var(--sg) !important; box-shadow:0 0 0 3px rgba(94,156,111,.18), 0 4px 12px rgba(0,0,0,.05) !important }
+.node .n-tag { font-size:9.5px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; margin-bottom:4px; display:flex; align-items:center; gap:4px }
+.node .n-tag .pip { width:7px; height:7px; border-radius:2px; flex-shrink:0 }
+.node .n-text { font-size:12px; font-weight:500; line-height:1.4; color:var(--tx) }
+.node .n-meta { font-size:10.5px; color:var(--t3); margin-top:4px }
+
+/* Question */
+.node-q { background:var(--tx); border-color:transparent; max-width:220px; min-width:160px }
+.node-q .n-tag { color:rgba(255,255,255,.45) }
+.node-q .n-tag .pip { background:rgba(255,255,255,.3) }
+.node-q .n-text { color:#fff; font-size:12.5px }
+.node-q .n-meta { color:rgba(255,255,255,.38) }
+
+/* Thinking */
+.node-think { border-color:rgba(107,95,199,.3) }
+.node-think .n-tag { color:var(--n-think) }
+.node-think .n-tag .pip { background:var(--n-think) }
+
+/* Search */
+.node-srch { border-color:rgba(59,130,196,.32); min-width:148px }
+.node-srch .n-tag { color:var(--n-srch) }
+.node-srch .n-tag .pip { background:var(--n-srch) }
+.node-srch .n-meta .q { font-family:ui-monospace,monospace; font-size:10.5px; background:rgba(59,130,196,.08); border-radius:3px; padding:1px 5px; color:var(--n-srch) }
+
+/* Source — smaller */
+.node-src { min-width:110px; max-width:165px; padding:8px 10px }
+.node-src .n-tag { color:var(--n-src) }
+.node-src .n-tag .pip { background:var(--n-src); border-radius:2px; width:6px; height:6px }
+.node-src .n-text { font-size:11px }
+.node-src .n-meta .vn { background:var(--s3); border-radius:3px; padding:0 4px; font-size:10px }
+
+/* Answer */
+.node-ans { border-color:rgba(94,156,111,.3) }
+.node-ans .n-tag { color:var(--sg) }
+.node-ans .n-tag .pip { background:var(--sg) }
+
+/* running pulse */
+.node.running { animation: node-pop 300ms cubic-bezier(.2,.7,.3,1) both; border-color:rgba(59,130,196,.4) !important }
+.node.running::after {
+  content:''; position:absolute; inset:-5px; border-radius:16px;
+  animation: ring-out 1.8s ease-out infinite;
+  pointer-events:none;
+}
+
+/* fresh ring */
+@keyframes fresh-ring { 0%{opacity:.7;transform:translate(-50%,-50%) scale(.9)} 100%{opacity:0;transform:translate(-50%,-50%) scale(1.1)} }
+.node.fresh::before {
+  content:''; position:absolute; inset:-4px; border-radius:16px;
+  border:2px solid var(--sg); pointer-events:none;
+  animation: fresh-ring 1.2s ease-out forwards;
+  transform-origin:center;
+}
+
+/* ── Sequential animation ───────────────────────── */
+.node.node-hidden {
+  opacity: 0 !important;
+  transform: translate(-50%,-50%) scale(.6) !important;
+  pointer-events: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+@keyframes edge-fade { from{opacity:0} to{opacity:1} }
+
+/* Progress bar */
+.graph-progress {
+  position:absolute; top:0; left:0; right:0; height:2px;
+  background:transparent; z-index:10;
+}
+.graph-progress-fill {
+  height:100%; background:var(--sg); width:0%;
+  transition:width 400ms cubic-bezier(.4,0,.2,1);
+}
+
+/* Replay button */
+.replay-btn {
+  height:28px; padding:0 11px; border-radius:999px;
+  background:var(--s1); border:1px solid var(--b1);
+  font-size:11.5px; font-weight:500; color:var(--t2);
+  display:inline-flex; align-items:center; gap:5px;
+  transition:background 120ms, color 120ms, opacity 150ms;
+}
+.replay-btn:hover:not(:disabled) { background:var(--s2); color:var(--tx) }
+.replay-btn:disabled { opacity:.35; cursor:default }
+
+/* Step label (top of graph stage) */
+.anim-step-label {
+  position:absolute; top:10px; left:50%; transform:translateX(-50%);
+  font-size:11px; color:var(--t3); white-space:nowrap;
+  background:rgba(251,251,250,.88); border-radius:999px;
+  padding:3px 12px; z-index:5; pointer-events:none;
+  opacity:0; transition:opacity 200ms;
+}
+.anim-step-label.show { opacity:1 }
+
+/* ── Arrow marker ── */
+/* defined in SVG defs below */
+
+/* ── Graph detail panel ── */
+.graph-detail { border-left:1px solid var(--b1); background:var(--s1); overflow-y:auto; padding:16px 15px 80px }
+.gd-empty { padding-top:56px; text-align:center; color:var(--t3); font-size:12.5px; line-height:1.7 }
+.gd-empty svg { width:28px; height:28px; margin:0 auto 14px; display:block; opacity:.3 }
+.gd-card { display:none }
+.gd-card.vis { display:block }
+.gd-badge { font-size:9.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; padding:2px 8px; border-radius:4px; display:inline-block; margin-bottom:8px }
+.gd-title { font-size:13.5px; font-weight:600; letter-spacing:-.01em; line-height:1.38; margin-bottom:6px }
+.gd-sub { font-size:11.5px; color:var(--t3); margin-bottom:10px }
+.gd-body { font-size:12.5px; color:var(--t2); line-height:1.62; margin-bottom:10px }
+.gd-sep { height:1px; background:var(--b1); margin:10px 0 }
+.gd-kv { display:flex; justify-content:space-between; font-size:11.5px; padding:3px 0 }
+.gd-kv .k { color:var(--t3) }
+.gd-kv .v { color:var(--t2); font-weight:500 }
+.gd-edges { margin-top:10px; padding-top:10px; border-top:1px solid var(--b1) }
+.gd-edges h5 { font-size:10px; font-weight:600; letter-spacing:.1em; color:var(--t3); text-transform:uppercase; margin-bottom:8px }
+.gd-erow { display:flex; align-items:flex-start; gap:7px; padding:4px 0; font-size:12px; color:var(--t2) }
+.gd-epip { font-size:9.5px; padding:2px 6px; border-radius:3px; font-weight:600; flex-shrink:0; margin-top:1px }
+.gd-actions { margin-top:12px; display:flex; flex-direction:column; gap:5px }
+.gd-btn { width:100%; height:31px; border-radius:8px; font-size:12px; font-weight:500; display:flex; align-items:center; justify-content:center; gap:6px; transition:background 120ms }
+.gd-btn.pri { background:var(--sg); color:#fff }
+.gd-btn.pri:hover { background:var(--sg-d) }
+.gd-btn.sec { background:var(--s2); color:var(--tx); border:1px solid var(--b1) }
+.gd-btn.sec:hover { background:var(--s3); border-color:var(--b2) }
+
+/* ── Annotations ── */
+.annot { position:absolute; z-index:30; display:none }
+[data-annot="true"] .annot { display:block }
+.an-pill {
+  background:#1a1e2a; color:#e2e8ff;
+  font-size:10.5px; line-height:1.45; padding:7px 10px; border-radius:8px;
+  max-width:215px; pointer-events:none;
+  box-shadow:0 4px 14px rgba(0,0,0,.3);
+}
+.an-pill b { color:#9fb3ff; font-weight:500 }
+.an-dot {
+  position:absolute; width:16px; height:16px; border-radius:50%;
+  background:rgba(107,95,199,.9); border:2px solid #fff;
+  display:flex; align-items:center; justify-content:center;
+  color:#fff; font-size:9px; font-weight:700;
+  box-shadow:0 2px 6px rgba(107,95,199,.5);
+}
+
+/* ── Steer bar (graph view) ── */
+.graph-steer {
+  position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+  width:min(660px, calc(100% - 32px));
+  background:var(--s1); border:1px solid var(--b1); border-radius:16px;
+  padding:8px 8px 8px 16px;
+  display:flex; align-items:center; gap:8px;
+  box-shadow:0 2px 4px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.07);
+  z-index:15;
+}
+[data-view="chat"] .graph-steer { display:none }
+[data-view="graph"] .graph-steer { display:flex }
+.graph-steer input { flex:1; border:0; outline:0; background:transparent; font-family:inherit; font-size:13px; color:var(--tx); padding:6px 0 }
+.graph-steer input::placeholder { color:var(--t4) }
+.ctx-badge-g {
+  font-size:11px; padding:3px 9px; border-radius:999px;
+  background:var(--sg-bg); border:1px solid rgba(94,156,111,.25);
+  color:var(--sg); font-weight:500; display:none; align-items:center; gap:5px;
+  white-space:nowrap;
+}
+.ctx-badge-g.show { display:inline-flex }
+.ctx-badge-g .cx { color:rgba(94,156,111,.6); margin-left:2px; cursor:pointer }
+.graph-steer .send {
+  height:32px; padding:0 14px; border-radius:999px;
+  background:var(--sg); color:#fff; font-size:12px; font-weight:500;
+  display:inline-flex; align-items:center; gap:6px;
+}
+.graph-steer .send:hover { background:var(--sg-d) }
+.graph-steer .pause {
+  height:32px; padding:0 10px; border-radius:999px;
+  background:var(--s2); border:1px solid var(--b1); color:var(--t2);
+  font-size:12px; display:inline-flex; align-items:center; gap:5px;
+}
+.graph-steer .pause:hover { background:var(--s3) }
+</style>
+</head>
+<body>
+
+<!-- ── TOPBAR ─────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="brand"><span class="brand-mark"></span>ARES</div>
+  <div class="crumb">
+    <span>Search</span>
+    <svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <span>Agentic</span>
+    <svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <b>Run #2451</b>
+  </div>
+  <div class="view-toggle">
+    <button class="vt-btn active" id="btn-chat">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v6a2 2 0 01-2 2H6l-3 2V4z" stroke="currentColor" stroke-width="1.3"/></svg>
+      Chat
+    </button>
+    <button class="vt-btn" id="btn-graph">
+      <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="3" cy="12" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="13" cy="12" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.8v2.4M5 11l1.5-2.5M11 11l-1.5-2.5" stroke="currentColor" stroke-width="1.3"/></svg>
+      Graph
+    </button>
+  </div>
+  <div class="spacer"></div>
+  <div class="run-badge"><span class="dot"></span> Live · 14/32 · 1m 42s</div>
+  <button class="annot-btn" id="annot-btn">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 7v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="5" r="1" fill="currentColor"/></svg>
+    Annotations
+  </button>
+  <button class="iconbtn">
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor"><rect x="2.5" y="2" width="3" height="10" rx="1"/><rect x="8.5" y="2" width="3" height="10" rx="1"/></svg>
+  </button>
+</header>
+
+<!-- ══════════════════════════════════════════════════════
+     CHAT VIEW
+══════════════════════════════════════════════════════ -->
+<div class="view-chat">
+  <div class="chat-scroll" id="chat-scroll">
+    <div class="chat-inner">
+
+      <!-- Q header -->
+      <div class="q-block">
+        <div class="q-run-line">
+          <span class="badge">Agentic Search</span>
+          <span>Run #2451 · 17:32 · 4단계 계획</span>
+          <span style="margin-left:auto; display:flex; align-items:center; gap:5px">
+            <span style="width:5px;height:5px;border-radius:50%;background:var(--sg);display:inline-block;animation:pulse 1.4s ease-in-out infinite"></span>
+            진행 중
+          </span>
+        </div>
+        <h1 class="q-text">Diffusion 모델의 LoRA fine-tuning에서 catastrophic forgetting을 완화하는 최신 방법론을 비교하고, personalization 시나리오에서의 trade-off를 정리해줘</h1>
+        <div class="q-pills">
+          <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v4l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>약 4분</span>
+          <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12v9H2z M5 4V2 M11 4V2" stroke="currentColor" stroke-width="1.3"/></svg>arXiv · Scholar · OpenReview</span>
+          <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2v12 M2 8h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Reading에 저장</span>
+        </div>
+        <a class="q-graph-hint" id="to-graph">→ Graph 뷰로 탐색 과정 보기</a>
+      </div>
+
+      <!-- PHASE 1: Reader ─────────────────────────────── -->
+      <div class="phase-divider" style="animation-delay:80ms">
+        <div class="pd-inner"><span class="pd-tag reader">Reader</span> 정의 정리 · 완료 · 38s</div>
+      </div>
+
+      <div class="agent-turn" style="animation-delay:100ms">
+        <div class="agent-label">
+          <span class="av">A</span>
+          <span class="name">ARES Agent</span>
+          <span class="ts">17:32:38</span>
+        </div>
+        <div class="agent-body">
+          <div class="action-group">
+            <div class="action-line">
+              <svg class="act-ic" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <code>arxiv.search</code>
+              <span>"forgetting measurement diffusion PEFT"</span>
+              <span class="cnt">8 hits</span>
+              <span class="ok">✓ 2.1s</span>
+            </div>
+            <div class="action-line">
+              <svg class="act-ic" viewBox="0 0 16 16" fill="none"><path d="M2 12V4l5-1 5 2 2-1v8l-2 1-5-2-5 1z" stroke="currentColor" stroke-width="1.3"/></svg>
+              <code>local.library</code>
+              <span>tag:#forgetting #diffusion</span>
+              <span class="cnt">3 hits</span>
+              <span class="ok">✓ 0.4s</span>
+            </div>
+          </div>
+          <div class="agent-prose">
+            <p>비교를 시작하기 전에 <em>측정 지표를 통일</em>하겠습니다. "Catastrophic forgetting"의 정의가 논문마다 다르게 쓰입니다. 가장 많이 쓰이는 두 방식은:</p>
+            <p><em>(1) KID / FID 변동 폭</em><sup>1</sup> — 기존 task 이미지에 대해 fine-tuning 전후 생성 품질 차이를 측정합니다. <em>(2) CLIP-similarity 감소율</em><sup>2</sup> — reference set에 대한 의미적 정렬 유지 여부를 봅니다.</p>
+            <p>이번 비교에서는 <em>KID를 1차 지표</em>로, CLIP-sim을 보조로 사용합니다. Personalization 시나리오 기준선은 <em>5-shot</em>으로 잡겠습니다 — DreamBooth<sup>3</sup>, Custom Diffusion<sup>4</sup>, OFT-S<sup>5</sup> 모두가 공통적으로 보고한 설정입니다.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- PHASE 2: Reproduction ───────────────────────── -->
+      <div class="phase-divider" style="animation-delay:160ms">
+        <div class="pd-inner"><span class="pd-tag repro">Reproduction</span> 논문 수집 · 진행 중 · 1m 04s</div>
+      </div>
+
+      <div class="agent-turn" style="animation-delay:180ms">
+        <div class="agent-label">
+          <span class="av">A</span>
+          <span class="name">ARES Agent</span>
+          <span class="ts">17:33:16</span>
+        </div>
+        <div class="agent-body">
+          <div class="action-group">
+            <div class="action-line">
+              <svg class="act-ic" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <code>arxiv.search</code>
+              <span>"LoRA forgetting diffusion personalization"</span>
+              <span class="cnt">42 → 12</span>
+              <span class="ok">✓ 3.2s</span>
+            </div>
+            <div class="action-line">
+              <svg class="act-ic" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <code>semantic_scholar</code>
+              <span>cross-reference + relevance filter ≥ 0.78</span>
+              <span class="cnt">12 retained</span>
+              <span class="ok">✓ 1.6s</span>
+            </div>
+            <div class="action-line">
+              <svg class="act-ic" viewBox="0 0 16 16" fill="none"><path d="M3 5a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" stroke="currentColor" stroke-width="1.3"/></svg>
+              <code>openreview.fetch_discussion</code>
+              <span>forum_id="2024-orth-finetune-ld"</span>
+              <span class="cnt">3 reviews</span>
+              <span class="ok">✓ 2.1s</span>
+            </div>
+            <div class="action-line" style="opacity:.7">
+              <svg class="act-ic" viewBox="0 0 16 16" fill="none"><path d="M3 5a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" stroke="currentColor" stroke-width="1.3"/></svg>
+              <code>openreview.fetch_discussion</code>
+              <span>forum_id="2024-dora-iclr"</span>
+              <span class="run">가져오는 중…</span>
+            </div>
+          </div>
+
+          <div class="agent-prose">
+            <p>12편의 후보를 모았고 이 중 5편이 ICLR/NeurIPS 채택본입니다. OpenReview에서 reviewer들의 forgetting 관련 지적을 함께 가져오고 있습니다.</p>
+            <p>현재까지 가장 관련성 높은 논문들입니다 — 이 중 원하는 것을 컨텍스트로 선택해 후속 질문에 활용할 수 있습니다.</p>
+          </div>
+
+          <!-- Paper snippets -->
+          <div class="snippet-row" id="snippet-row">
+            <div class="snippet-card selected" data-sid="s1">
+              <div class="s-tag">Paper</div>
+              <div class="s-ttl">OFT-S: Orthogonal Fine-Tuning with Subspace Constraint</div>
+              <div class="s-meta"><span class="vn">ICLR'25</span> 137 cites <span class="s-sel">✓</span></div>
+            </div>
+            <div class="snippet-card" data-sid="s2">
+              <div class="s-tag">Paper</div>
+              <div class="s-ttl">DoRA: Weight-Decomposed Low-Rank Adaptation</div>
+              <div class="s-meta"><span class="vn">ICLR'24</span> 412 cites</div>
+            </div>
+            <div class="snippet-card" data-sid="s3">
+              <div class="s-tag">Paper</div>
+              <div class="s-ttl">Selective LoRA Re-init for Diffusion Personalization</div>
+              <div class="s-meta"><span class="vn">arXiv 2501</span></div>
+            </div>
+            <div class="snippet-card" data-sid="s4">
+              <div class="s-tag">Paper</div>
+              <div class="s-ttl">EWC-Lite: per-rank Fisher for PEFT</div>
+              <div class="s-meta"><span class="vn">NeurIPS'24</span> workshop</div>
+            </div>
+            <div class="snippet-card" data-sid="s5">
+              <div class="s-tag">Paper</div>
+              <div class="s-ttl">DreamBooth: Subject-Driven Generation</div>
+              <div class="s-meta"><span class="vn">CVPR'23</span> 📌 저장됨</div>
+            </div>
+          </div>
+
+          <!-- Claim -->
+          <div class="claim-card">
+            <div class="cl-lbl">핵심 발견 — OFT-S rebuttal (OpenReview)</div>
+            <div class="cl-text">OFT-S는 5-shot personalization에서 LoRA 대비 forgetting을 <strong>78% 감소</strong>시키지만, target fidelity가 <strong>1.4 FID 하락</strong>한다 — 이것이 다음 단계 trade-off 비교의 중심축이 됩니다.</div>
+            <div class="cl-meta">출처: reviewer R3 + author rebuttal Table 7 · 신뢰도 0.82</div>
+          </div>
+
+          <!-- Conflict -->
+          <div class="conflict-card">
+            <svg class="cf-ic" width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2L2 13h12L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 7v3 M8 11.5v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <div class="cf-text"><b>측정 충돌:</b> OFT-S는 KID로, DoRA는 ΔFID로 forgetting을 측정 — 직접 비교 전 지표 정렬이 필요합니다. Experiment 단계에서 자동 정규화합니다.</div>
+          </div>
+
+          <!-- Live streaming -->
+          <div class="working-line">
+            <span class="spin-ic"></span>
+            <span><b>Reproduction</b> 계속 — OpenReview DoRA 토론 스크랩 중 (paper 2/5)</span>
+          </div>
+          <div class="agent-prose live">
+            <p>DoRA의 reviewer들도 forgetting에 대한 우려를</p>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /chat-inner -->
+  </div><!-- /chat-scroll -->
+
+  <!-- context chips bar -->
+  <div class="ctx-bar show" id="ctx-bar">
+    <span class="lbl">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8h12 M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      컨텍스트
+    </span>
+    <div class="chips" id="chat-chips">
+      <span class="ctx-chip">OFT-S (ICLR'25) <span class="rm" data-cid="s1">×</span></span>
+    </div>
+    <span class="clear-all" id="chat-clear-all">전체 지우기</span>
+  </div>
+
+  <!-- input -->
+  <div class="chat-input-wrap">
+    <div class="chat-input-inner">
+      <div class="chat-input-box">
+        <textarea rows="1" placeholder="끼어들기 — 범위를 좁히거나 후속 질문을 던지세요 (선택한 논문이 컨텍스트로 포함됨)"></textarea>
+        <div class="input-actions">
+          <button class="stop-btn">
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor"><rect x="2.5" y="2" width="2.5" height="8" rx=".5"/><rect x="7" y="2" width="2.5" height="8" rx=".5"/></svg>
+            Pause
+          </button>
+          <button class="send-btn">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="input-hint">
+        <kbd>↵</kbd> 보내기 &nbsp;·&nbsp; <kbd>Shift ↵</kbd> 줄바꿈 &nbsp;·&nbsp; 카드를 클릭하면 컨텍스트로 추가됩니다
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     GRAPH VIEW
+══════════════════════════════════════════════════════ -->
+<div class="view-graph">
+
+  <!-- Legend rail -->
+  <aside class="graph-rail">
+    <div class="gr-h">Node types</div>
+
+    <div class="ntype-row">
+      <span class="nt-swatch" style="background:rgba(24,24,27,.08)">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="#18181b" stroke-width="1.6"/></svg>
+      </span>
+      <div class="nt-info"><div class="nm">Question</div><div class="ds">사용자 질의. 제출 즉시 생성 → 그래프의 root.</div></div>
+    </div>
+    <div class="ntype-row">
+      <span class="nt-swatch" style="background:var(--n-think-bg)">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="var(--n-think)" stroke-width="1.6"/></svg>
+      </span>
+      <div class="nt-info"><div class="nm">Thinking</div><div class="ds">에이전트 내부 추론. 어떤 검색을 왜 할지 결정.</div></div>
+    </div>
+    <div class="ntype-row">
+      <span class="nt-swatch" style="background:var(--n-srch-bg)">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" stroke="var(--n-srch)" stroke-width="1.6"/></svg>
+      </span>
+      <div class="nt-info"><div class="nm">Search</div><div class="ds">검색 행동. 쿼리 + 도구명 표시. Source들의 허브.</div></div>
+    </div>
+    <div class="ntype-row">
+      <span class="nt-swatch" style="background:var(--n-src-bg)">
+        <svg width="10" height="10" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" stroke="var(--n-src)" stroke-width="1.5"/></svg>
+      </span>
+      <div class="nt-info"><div class="nm">Source</div><div class="ds">검색 결과 논문·문서. Search를 중심으로 방사 배치.</div></div>
+    </div>
+    <div class="ntype-row">
+      <span class="nt-swatch" style="background:var(--n-ans-bg)">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="var(--sg)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div class="nt-info"><div class="nm">Answer</div><div class="ds">sub-question에 대한 답변 합성. Source들에서 도출.</div></div>
+    </div>
+
+    <div class="gr-h">Edges</div>
+    <div class="edge-row"><span class="el solid"></span><span>leads to (추론 흐름)</span></div>
+    <div class="edge-row"><span class="el dashed"></span><span>found (검색 결과)</span></div>
+    <div class="edge-row"><span class="el dotted"></span><span>supports (Answer 근거)</span></div>
+    <div class="edge-row"><span class="el ctx"></span><span>context (사용자 연결)</span></div>
+
+    <div class="gr-h">통계</div>
+    <div class="stat-box">
+      <div class="stat-row"><span>Question</span><b>1</b></div>
+      <div class="stat-row"><span>Thinking</span><b>2</b></div>
+      <div class="stat-row"><span>Search</span><b>3</b></div>
+      <div class="stat-row"><span>Source</span><b>8</b></div>
+      <div class="stat-row"><span>Answer</span><b>1 (partial)</b></div>
+      <div class="stat-row"><span>Selected</span><b id="g-sel-cnt">1</b></div>
+    </div>
+
+    <div class="interact-guide">
+      <b>인터랙션</b><br>
+      <span class="kd">Click</span> 노드 상세<br>
+      <span class="kd">Shift+Click</span> 다중 선택<br>
+      선택 노드 → 하단 입력에 컨텍스트로 전달<br>
+      <span class="kd">Drag</span> 연결선 그리기
+    </div>
+  </aside>
+
+  <!-- Canvas -->
+  <section class="graph-stage" id="gstage">
+    <div class="graph-grid"></div>
+    <div class="graph-progress"><div class="graph-progress-fill" id="g-progress"></div></div>
+    <div class="anim-step-label" id="anim-step-label"></div>
+
+    <div class="stage-top">
+      <div class="agent-now">
+        <span class="dot"></span>
+        <b>Reproduction</b>&nbsp;·&nbsp;
+        <span style="color:var(--t3)">OpenReview 토론 스크랩 (2/5)</span>
+      </div>
+      <div class="sel-hint show" id="g-sel-hint">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8h12 M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="g-sel-text">1 node selected</span>
+        <span class="clr" id="g-clear-sel">지우기</span>
+      </div>
+      <button class="replay-btn" id="replay-btn" disabled>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8A5 5 0 1 0 5.5 3.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 1v3.2H2.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Replay
+      </button>
+      <div class="graph-tools">
+        <button class="gt active" title="Select">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 3l5.5 13 2-5.5 5.5-2L3 3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="gt" title="Connect">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="12" r="2" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M5.4 10.6L10.6 5.4" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 1.5"/></svg>
+        </button>
+        <span class="gt-sep"></span>
+        <button class="gt" title="Fit">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 6V3h3 M13 6V3h-3 M3 10v3h3 M13 10v3h-3" stroke="currentColor" stroke-width="1.4"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Canvas: SVG edges + DOM nodes -->
+    <div class="graph-canvas">
+      <svg id="edge-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible">
+        <defs>
+          <marker id="arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M1 1L6 3.5L1 6" stroke="#b0b0ae" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+          <marker id="arr-srch" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M1 1L6 3.5L1 6" stroke="rgba(59,130,196,.7)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+          <marker id="arr-ans" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M1 1L6 3.5L1 6" stroke="rgba(94,156,111,.75)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+          <marker id="arr-ctx" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M1 1L6 3.5L1 6" stroke="rgba(94,156,111,.9)" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <!-- edges drawn by drawEdges() JS -->
+      </svg>
+
+      <!-- ══ NODES ════════════════════════════════════════ -->
+
+      <!-- Question — left center -->
+      <div class="node node-q" style="left:12%; top:50%; animation-delay:0ms" id="gn-q">
+        <div class="n-tag"><span class="pip"></span>Question</div>
+        <div class="n-text">Diffusion LoRA에서 catastrophic forgetting 완화 방법론 비교 + personalization trade-off</div>
+        <div class="n-meta">Run #2451 · 17:32</div>
+      </div>
+
+      <!-- Thinking 1 — upper middle -->
+      <div class="node node-think" style="left:39%; top:28%; animation-delay:180ms" id="gn-t1">
+        <div class="n-tag"><span class="pip"></span>Thinking 1</div>
+        <div class="n-text">측정 지표 KID vs CLIP-sim 먼저 정리, 5-shot 기준선 설정 후 검색</div>
+        <div class="n-meta">Reader · 38s</div>
+      </div>
+
+      <!-- Thinking 2 — lower middle -->
+      <div class="node node-think" style="left:39%; top:72%; animation-delay:500ms" id="gn-t2">
+        <div class="n-tag"><span class="pip"></span>Thinking 2</div>
+        <div class="n-text">ICLR'25 OFT-S rebuttal에 KID 직접 비교표가 있을 것 → OpenReview 스크랩</div>
+        <div class="n-meta">Reproduction · 1m 02s</div>
+      </div>
+
+      <!-- Search 1 — upper right area -->
+      <div class="node node-srch" style="left:66%; top:21%; animation-delay:320ms" id="gn-s1">
+        <div class="n-tag"><span class="pip"></span>Search 1</div>
+        <div class="n-text">arXiv + Semantic Scholar</div>
+        <div class="n-meta"><span class="q">"LoRA forgetting diffusion"</span><br>42 → 12</div>
+      </div>
+
+      <!-- Search 2 — middle right -->
+      <div class="node node-srch" style="left:66%; top:44%; animation-delay:430ms" id="gn-s2">
+        <div class="n-tag"><span class="pip"></span>Search 2</div>
+        <div class="n-text">Local Library</div>
+        <div class="n-meta"><span class="q">tag:#diffusion #forgetting</span><br>3 hits</div>
+      </div>
+
+      <!-- Search 3 — lower right (in progress) -->
+      <div class="node node-srch running" style="left:66%; top:72%; animation-delay:620ms; opacity:.75" id="gn-s3">
+        <div class="n-tag"><span class="pip"></span>Search 3 · <span style="color:var(--n-srch); animation:pulse 1.4s ease-in-out infinite; display:inline-block">진행 중</span></div>
+        <div class="n-text">OpenReview</div>
+        <div class="n-meta"><span class="q">"OFT-S DoRA rebuttal forgetting"</span></div>
+      </div>
+
+      <!-- Source nodes radiating from Search 1 -->
+      <div class="node node-src selected" style="left:82%; top:11%; animation-delay:460ms" id="gn-src1">
+        <div class="n-tag"><span class="pip"></span>Source</div>
+        <div class="n-text">OFT-S: Orthogonal Fine-Tuning with Subspace Constraint</div>
+        <div class="n-meta"><span class="vn">ICLR'25</span> 137 cites</div>
+      </div>
+      <div class="node node-src" style="left:86%; top:19%; animation-delay:500ms" id="gn-src2">
+        <div class="n-tag"><span class="pip"></span>Source</div>
+        <div class="n-text">DoRA: Weight-Decomposed Low-Rank Adaptation</div>
+        <div class="n-meta"><span class="vn">ICLR'24</span> 412 cites</div>
+      </div>
+      <div class="node node-src" style="left:82%; top:28%; animation-delay:540ms" id="gn-src3">
+        <div class="n-tag"><span class="pip"></span>Source</div>
+        <div class="n-text">Selective LoRA Re-init for Diffusion</div>
+        <div class="n-meta"><span class="vn">arXiv 2501</span></div>
+      </div>
+
+      <!-- Source nodes radiating from Search 2 -->
+      <div class="node node-src" style="left:82%; top:36%; animation-delay:570ms" id="gn-src4">
+        <div class="n-tag"><span class="pip"></span>Source</div>
+        <div class="n-text">DreamBooth: Subject-Driven Generation</div>
+        <div class="n-meta"><span class="vn">CVPR'23</span> 📌</div>
+      </div>
+      <div class="node node-src" style="left:87%; top:44%; animation-delay:600ms" id="gn-src5">
+        <div class="n-tag"><span class="pip"></span>Source</div>
+        <div class="n-text">Custom Diffusion: Multi-Concept</div>
+        <div class="n-meta"><span class="vn">CVPR'23</span></div>
+      </div>
+      <div class="node node-src" style="left:82%; top:52%; animation-delay:630ms" id="gn-src6">
+        <div class="n-tag"><span class="pip"></span>Source</div>
+        <div class="n-text">EWC-Lite: per-rank Fisher estimation</div>
+        <div class="n-meta"><span class="vn">NeurIPS'24 WS</span></div>
+      </div>
+
+      <!-- Source from Search 3 (just appeared) -->
+      <div class="node node-src fresh" style="left:82%; top:65%; animation-delay:700ms; opacity:.8" id="gn-src7">
+        <div class="n-tag"><span class="pip"></span>Source · <span style="color:var(--sg)">새로 발견</span></div>
+        <div class="n-text">OFT-S rebuttal Table 7 (KID forgetting)</div>
+        <div class="n-meta"><span class="vn">OpenReview</span></div>
+      </div>
+
+      <!-- Answer node -->
+      <div class="node node-ans" style="left:86%; top:61%; animation-delay:800ms" id="gn-ans">
+        <div class="n-tag"><span class="pip"></span>Answer · partial</div>
+        <div class="n-text">OFT-S ↓78% forgetting, ↓1.4 FID fidelity vs LoRA — trade-off 정렬 중</div>
+        <div class="n-meta">신뢰도 0.82 · Analyst 대기</div>
+      </div>
+
+      <!-- Annotations (graph) -->
+      <div class="annot" style="left:6%; top:18%">
+        <div class="an-dot" style="left:0;top:0">①</div>
+        <div class="an-pill" style="margin-top:22px; width:200px">
+          <b>질문 제출 즉시 생성</b><br>
+          사용자가 Enter를 누르는 순간 이 검은 노드가 canvas에 나타납니다. 체인의 출발점.
+        </div>
+      </div>
+      <div class="annot" style="left:28%; top:14%">
+        <div class="an-dot" style="left:0;top:0">②</div>
+        <div class="an-pill" style="margin-top:22px; width:205px">
+          <b>Thinking → Search 체인</b><br>
+          에이전트가 "무엇을 검색할지" 결정할 때 Thinking 노드가 생기고, 실행하면 Search 노드가 이어집니다. 굵은 화살표가 인과 흐름을 나타냅니다.
+        </div>
+      </div>
+      <div class="annot" style="left:57%; top:6%">
+        <div class="an-dot" style="left:0;top:0">③</div>
+        <div class="an-pill" style="margin-top:22px; width:205px">
+          <b>Search 중심 방사 클러스터</b><br>
+          Search 노드를 허브로 결과 논문들이 주위에 배치됩니다. 결과 수가 많으면 그룹으로 묶어 "▶ 8 sources"로 축약됩니다.
+        </div>
+      </div>
+      <div class="annot" style="left:62%; top:56%">
+        <div class="an-dot" style="left:0;top:0">④</div>
+        <div class="an-pill" style="margin-top:22px; width:200px">
+          <b>진행 중 노드 — ring 애니메이션</b><br>
+          Search 3은 아직 실행 중. 파란 ring이 퍼지며 "지금 여기"를 표시합니다.
+        </div>
+      </div>
+      <div class="annot" style="left:70%; top:76%">
+        <div class="an-dot" style="left:0;top:0">⑤</div>
+        <div class="an-pill" style="margin-top:22px; width:200px">
+          <b>새로 발견된 노드 — green ring</b><br>
+          방금 찾은 Source는 초록 ring이 한 번 번쩍이며 나타납니다. 사용자가 실시간으로 탐색 결과를 인식하도록 합니다.
+        </div>
+      </div>
+      <div class="annot" style="left:5%; top:6%">
+        <div class="an-dot" style="left:0;top:0">⑥</div>
+        <div class="an-pill" style="margin-top:22px; width:205px">
+          <b>초록 점선 = 사용자 컨텍스트 연결</b><br>
+          OFT-S Source 노드가 선택되어 Question에 연결된 초록 점선이 보입니다. 다음 질문을 보낼 때 이 노드의 내용이 컨텍스트로 전달됩니다.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Graph detail panel -->
+  <aside class="graph-detail">
+    <div class="gd-empty" id="gd-empty">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4"/><path d="M8 12h8 M14 9l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      노드를 클릭하면<br>상세 정보와<br>액션이 나타납니다
+    </div>
+
+    <!-- OFT-S detail (pre-shown for selected node) -->
+    <div class="gd-card vis" id="gd-src1">
+      <span class="gd-badge" style="background:rgba(74,74,80,.08); color:var(--n-src)">SOURCE</span>
+      <div class="gd-title">OFT-S: Orthogonal Fine-Tuning with Subspace Constraint for Personalization</div>
+      <div class="gd-sub">Liu et al. · ICLR 2025 · 137 citations</div>
+      <div class="gd-body">Orthogonal constraint를 LoRA의 rank subspace에 적용해 기존 task의 representation을 보존. 5-shot personalization에서 LoRA 대비 forgetting 78% 감소, fidelity 1.4 FID 하락.</div>
+      <div class="gd-sep"></div>
+      <div class="gd-kv"><span class="k">발견 경로</span><span class="v">Search 1 (arXiv)</span></div>
+      <div class="gd-kv"><span class="k">관련도</span><span class="v">0.94</span></div>
+      <div class="gd-kv"><span class="k">재현 가능</span><span class="v">✓ GitHub</span></div>
+      <div class="gd-kv"><span class="k">컨텍스트 선택</span><span class="v" style="color:var(--sg)">✓ 선택됨</span></div>
+      <div class="gd-edges">
+        <h5>연결 관계</h5>
+        <div class="gd-erow"><span class="gd-epip" style="background:rgba(94,156,111,.12);color:var(--sg)">supports</span><span>Answer "forgetting 78% 감소"</span></div>
+        <div class="gd-erow"><span class="gd-epip" style="background:rgba(214,138,60,.12);color:var(--n-fu)">conflicts</span><span>DoRA "PEFT forgetting 영향 미미"</span></div>
+        <div class="gd-erow"><span class="gd-epip" style="background:rgba(59,130,196,.12);color:var(--n-srch)">found by</span><span>Search 1</span></div>
+      </div>
+      <div class="gd-actions">
+        <button class="gd-btn pri">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8h8M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          컨텍스트로 사용
+        </button>
+        <button class="gd-btn sec">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v12 M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          이 노드에서 새 검색
+        </button>
+        <button class="gd-btn sec">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 12V4l4-1.5L12 4v8" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          Reading에 저장
+        </button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Graph steering bar -->
+<div class="graph-steer">
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8h10 M8 3v10" stroke="var(--t3)" stroke-width="1.4" stroke-linecap="round"/></svg>
+  <input placeholder="이 그래프에서 새 질문 — 선택된 노드가 컨텍스트로 포함됩니다…">
+  <span class="ctx-badge-g show" id="g-ctx-badge">
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M2 8h12 M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    OFT-S 포함
+    <span class="cx" id="g-badge-clr">×</span>
+  </span>
+  <button class="pause">
+    <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="1.5" width="3" height="9" rx=".5"/><rect x="7" y="1.5" width="3" height="9" rx=".5"/></svg>
+    Pause
+  </button>
+  <button class="send">
+    Ask
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 6h6 M6 3l3 3-3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+</div>
+
+<script>
+/* ── Edge drawing (JS-computed, visibility-aware) ── */
+function drawEdges({ anim = false } = {}) {
+  const stage = document.getElementById('gstage');
+  const svg   = document.getElementById('edge-svg');
+  if (!stage || !svg) return;
+
+  svg.querySelectorAll('path.e').forEach(p => p.remove());
+
+  const sr = stage.getBoundingClientRect();
+
+  function isVis(id) {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('node-hidden');
+  }
+
+  function box(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      cx: r.left - sr.left + r.width  / 2,
+      cy: r.top  - sr.top  + r.height / 2,
+      l:  r.left  - sr.left,
+      r:  r.right - sr.left,
+      t:  r.top   - sr.top,
+      b:  r.bottom - sr.top,
+      w:  r.width, h: r.height,
+    };
+  }
+
+  function addPath(d, stroke, width, dash, marker) {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', stroke);
+    p.setAttribute('stroke-width', String(width));
+    p.classList.add('e');
+    if (dash)   p.setAttribute('stroke-dasharray', dash);
+    if (marker) p.setAttribute('marker-end', `url(#${marker})`);
+    if (anim)   p.style.animation = 'edge-fade 300ms ease-out both';
+    svg.appendChild(p);
+  }
+
+  function hcurve(x1, y1, x2, y2) {
+    const dx = (x2 - x1) * 0.55;
+    return `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
+  }
+
+  function backbone(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    addPath(hcurve(f.r, f.cy, t.l, t.cy), '#bdbdbb', 1.5, null, 'arr');
+  }
+
+  function inProgress(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    addPath(hcurve(f.r, f.cy, t.l, t.cy), 'rgba(59,130,196,.55)', 1.5, '5 3', 'arr-srch');
+  }
+
+  function spoke(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    const ex = f.r, ey = f.cy + (t.cy - f.cy) * 0.4;
+    addPath(hcurve(ex, ey, t.l, t.cy), '#c4c4c2', 1.2, '3 2.5');
+  }
+
+  function support(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    addPath(hcurve(f.r, f.cy, t.l, t.cy), 'rgba(94,156,111,.5)', 1.3, '4 2.5', 'arr-ans');
+  }
+
+  function ctxArc(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    const fx = f.cx, fy = f.t;
+    const tx = t.r,  ty = t.cy;
+    const cpx = (fx + tx) / 2, cpy = Math.min(fy, ty) - 70;
+    addPath(`M ${fx} ${fy} Q ${cpx} ${cpy}, ${tx} ${ty}`,
+            'rgba(94,156,111,.75)', 2, '6 3', 'arr-ctx');
+  }
+
+  backbone('gn-q',  'gn-t1');
+  backbone('gn-q',  'gn-t2');
+  backbone('gn-t1', 'gn-s1');
+  backbone('gn-t1', 'gn-s2');
+  inProgress('gn-t2', 'gn-s3');
+  spoke('gn-s1', 'gn-src1');
+  spoke('gn-s1', 'gn-src2');
+  spoke('gn-s1', 'gn-src3');
+  spoke('gn-s2', 'gn-src4');
+  spoke('gn-s2', 'gn-src5');
+  spoke('gn-s2', 'gn-src6');
+  spoke('gn-s3', 'gn-src7');
+  support('gn-src1', 'gn-ans');
+  support('gn-src4', 'gn-ans');
+  ctxArc('gn-src1', 'gn-q');
+}
+
+/* ── Sequential graph animation ─────────────────── */
+const ANIM_SEQ = [
+  { id:'gn-q',    ms:0,    label:'질문 접수 → 그래프 시작',              pct:4  },
+  { id:'gn-t1',   ms:750,  label:'Thinking 1 — 측정 지표 · 기준선 계획', pct:13 },
+  { id:'gn-s1',   ms:1400, label:'Search 1 — arXiv · Semantic Scholar',  pct:24 },
+  { id:'gn-s2',   ms:1850, label:'Search 2 — Local Library 검색',        pct:33 },
+  { id:'gn-src1', ms:2300, label:'Source — OFT-S (ICLR\'25)',            pct:41 },
+  { id:'gn-src2', ms:2600, label:'Source — DoRA (ICLR\'24)',             pct:48 },
+  { id:'gn-src3', ms:2900, label:'Source — Selective LoRA Re-init',      pct:54 },
+  { id:'gn-src4', ms:3200, label:'Source — DreamBooth (CVPR\'23)',       pct:59 },
+  { id:'gn-src5', ms:3500, label:'Source — Custom Diffusion',            pct:64 },
+  { id:'gn-src6', ms:3800, label:'Source — EWC-Lite (NeurIPS\'24)',      pct:68 },
+  { id:'gn-t2',   ms:4300, label:'Thinking 2 — OpenReview rebuttal 탐색',pct:76 },
+  { id:'gn-s3',   ms:5000, label:'Search 3 — OpenReview 검색 (진행 중)', pct:84 },
+  { id:'gn-src7', ms:5700, label:'새 Source 발견 — OFT-S rebuttal Table 7', pct:91 },
+  { id:'gn-ans',  ms:6400, label:'Answer 합성 시작 (partial)',           pct:98 },
+];
+
+let _animTimers = [];
+let _animDone = false;
+
+function _hideAllNodes() {
+  ANIM_SEQ.forEach(({id}) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('node-hidden');
+  });
+  document.getElementById('edge-svg')?.querySelectorAll('path.e').forEach(p => p.remove());
+  const bar = document.getElementById('g-progress');
+  if (bar) bar.style.width = '0%';
+  const lbl = document.getElementById('anim-step-label');
+  if (lbl) { lbl.textContent = ''; lbl.classList.remove('show'); }
+}
+
+function _revealNode(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('node-hidden');
+  // Re-trigger node-pop animation
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+}
+
+function _setStepLabel(text) {
+  const lbl = document.getElementById('anim-step-label');
+  if (!lbl) return;
+  lbl.textContent = text;
+  lbl.classList.add('show');
+}
+
+function playGraphAnimation() {
+  _animTimers.forEach(t => clearTimeout(t));
+  _animTimers = [];
+  _animDone = false;
+
+  const replayBtn = document.getElementById('replay-btn');
+  if (replayBtn) replayBtn.disabled = true;
+
+  _hideAllNodes();
+
+  const total = ANIM_SEQ.length;
+  ANIM_SEQ.forEach(({id, ms, label, pct}, i) => {
+    const t = setTimeout(() => {
+      _revealNode(id);
+      _setStepLabel(label);
+      const bar = document.getElementById('g-progress');
+      if (bar) bar.style.width = pct + '%';
+      // Redraw edges after node layout settles
+      requestAnimationFrame(() => drawEdges({ anim: true }));
+    }, ms);
+    _animTimers.push(t);
+  });
+
+  const lastMs = ANIM_SEQ[ANIM_SEQ.length - 1].ms + 700;
+  _animTimers.push(setTimeout(() => {
+    _animDone = true;
+    if (replayBtn) replayBtn.disabled = false;
+    const bar = document.getElementById('g-progress');
+    if (bar) bar.style.width = '100%';
+    const lbl = document.getElementById('anim-step-label');
+    if (lbl) {
+      lbl.textContent = '탐색 완료 — 노드를 클릭하면 상세 정보가 나타납니다';
+      // Fade out label after 2.5s
+      setTimeout(() => lbl.classList.remove('show'), 2500);
+    }
+  }, lastMs));
+}
+
+/* ── View toggle ─────────────────────────────────── */
+const root = document.documentElement;
+function setView(v) {
+  root.setAttribute('data-view', v);
+  document.getElementById('btn-chat').classList.toggle('active', v === 'chat');
+  document.getElementById('btn-graph').classList.toggle('active', v === 'graph');
+  if (v === 'graph') {
+    // Small delay so CSS display:grid takes effect before getBoundingClientRect
+    setTimeout(() => playGraphAnimation(), 60);
+  }
+}
+document.getElementById('btn-chat').addEventListener('click', () => setView('chat'));
+document.getElementById('btn-graph').addEventListener('click', () => setView('graph'));
+document.getElementById('to-graph')?.addEventListener('click', () => setView('graph'));
+window.addEventListener('resize', () => { if (!_animDone) return; drawEdges({ anim: false }); });
+document.getElementById('replay-btn')?.addEventListener('click', () => {
+  if (_animDone) playGraphAnimation();
+});
+
+/* ── Annotations ─────────────────────────────────── */
+document.getElementById('annot-btn').addEventListener('click', () => {
+  const cur = root.getAttribute('data-annot') === 'true';
+  root.setAttribute('data-annot', cur ? 'false' : 'true');
+});
+
+/* ── Chat snippet card selection ─────────────────── */
+const selectedCards = new Set(['s1']);
+document.querySelectorAll('.snippet-card').forEach(card => {
+  card.addEventListener('click', () => {
+    const sid = card.dataset.sid;
+    if (selectedCards.has(sid)) {
+      selectedCards.delete(sid);
+      card.classList.remove('selected');
+      card.querySelector('.s-sel')?.remove();
+    } else {
+      selectedCards.add(sid);
+      card.classList.add('selected');
+      if (!card.querySelector('.s-sel')) {
+        const sp = document.createElement('span');
+        sp.className = 's-sel'; sp.textContent = '✓';
+        card.querySelector('.s-meta').appendChild(sp);
+      }
+    }
+    updateChatCtx();
+  });
+});
+function updateChatCtx() {
+  const bar = document.getElementById('ctx-bar');
+  const chips = document.getElementById('chat-chips');
+  const labels = { s1:'OFT-S (ICLR\'25)', s2:'DoRA (ICLR\'24)', s3:'Selective LoRA Re-init', s4:'EWC-Lite', s5:'DreamBooth' };
+  if (selectedCards.size === 0) {
+    bar.classList.remove('show');
+    return;
+  }
+  bar.classList.add('show');
+  chips.innerHTML = [...selectedCards].map(sid =>
+    `<span class="ctx-chip">${labels[sid]||sid}<span class="rm" data-cid="${sid}">×</span></span>`
+  ).join('');
+  chips.querySelectorAll('.rm').forEach(r => r.addEventListener('click', e => {
+    e.stopPropagation();
+    const cid = r.dataset.cid;
+    selectedCards.delete(cid);
+    document.querySelector(`.snippet-card[data-sid="${cid}"]`)?.classList.remove('selected');
+    document.querySelector(`.snippet-card[data-sid="${cid}"] .s-sel`)?.remove();
+    updateChatCtx();
+  }));
+}
+document.getElementById('chat-clear-all')?.addEventListener('click', () => {
+  selectedCards.clear();
+  document.querySelectorAll('.snippet-card.selected').forEach(c => {
+    c.classList.remove('selected');
+    c.querySelector('.s-sel')?.remove();
+  });
+  updateChatCtx();
+});
+
+/* ── Graph node selection ────────────────────────── */
+const gSelected = new Set(['gn-src1']);
+function updateGraphSel() {
+  const cnt = gSelected.size;
+  document.getElementById('g-sel-cnt').textContent = cnt;
+  const hint = document.getElementById('g-sel-hint');
+  const badge = document.getElementById('g-ctx-badge');
+  if (cnt > 0) {
+    hint.classList.add('show');
+    document.getElementById('g-sel-text').textContent = `${cnt} node${cnt>1?'s':''} selected`;
+    badge.classList.add('show');
+  } else {
+    hint.classList.remove('show');
+    badge.classList.remove('show');
+  }
+}
+document.querySelectorAll('.node').forEach(node => {
+  node.addEventListener('click', e => {
+    if (!node.id) return;
+    if (e.shiftKey) {
+      node.classList.toggle('selected');
+      if (node.classList.contains('selected')) gSelected.add(node.id);
+      else gSelected.delete(node.id);
+    } else {
+      const wasSelected = node.classList.contains('selected');
+      // single click toggles
+      node.classList.toggle('selected');
+      if (!wasSelected) gSelected.add(node.id);
+      else gSelected.delete(node.id);
+    }
+    updateGraphSel();
+  });
+});
+document.getElementById('g-clear-sel')?.addEventListener('click', () => {
+  gSelected.clear();
+  document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
+  updateGraphSel();
+});
+document.getElementById('g-badge-clr')?.addEventListener('click', () => {
+  gSelected.clear();
+  document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
+  updateGraphSel();
+});
+
+// init
+updateChatCtx();
+updateGraphSel();
+</script>
+</body>
+</html>

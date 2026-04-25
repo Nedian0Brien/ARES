@@ -18,7 +18,7 @@ export function createReadingFeature({
 }) {
   function readingProgress(session) {
     const sections = Array.isArray(session?.sections) ? session.sections : [];
-    if (session?.summaryStatus === "done") {
+    if (session?.summaryStatus === "done" && session?.summaryRuntimeUsed) {
       return 100;
     }
 
@@ -54,6 +54,51 @@ export function createReadingFeature({
     }
   
     return `${text.slice(0, limit - 1).trimEnd()}…`;
+  }
+
+  function readingSelectionLineCount(selection) {
+    const explicit = Number(selection?.lineCount);
+    if (Number.isFinite(explicit) && explicit > 0) {
+      return Math.max(1, Math.round(explicit));
+    }
+
+    const text = String(selection?.quote || "").trim();
+    if (!text) {
+      return 0;
+    }
+
+    const explicitLines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean).length;
+    if (explicitLines > 1) {
+      return explicitLines;
+    }
+
+    return Math.max(1, Math.ceil(text.replace(/\s+/g, " ").trim().length / 84));
+  }
+
+  function renderReadingMessageSelectionContext(message) {
+    if (message?.role !== "user" || !message?.selection?.quote) {
+      return "";
+    }
+
+    const lineCount = readingSelectionLineCount(message.selection);
+    const selectedLineLabel = `${lineCount || 1} ${lineCount === 1 ? "line" : "lines"} selected`;
+    const pageLabel = message.selection.page ? `p.${message.selection.page}` : "p.?";
+
+    return `
+      <div class="reading-chat-message-context">
+        <div class="reading-chat-selection-status is-message-context">
+          <div class="reading-chat-selection-main">
+            ${icon("quote", { size: 12, color: "currentColor" })}
+            <span>${escapeHtml(selectedLineLabel)}</span>
+            <span class="reading-chat-selection-page mono">${escapeHtml(pageLabel)}</span>
+          </div>
+          <div class="reading-chat-selection-preview">"${escapeHtml(readingExcerpt(message.selection.quote, "selected text", 110))}"</div>
+        </div>
+      </div>
+    `;
   }
   
   function readingSentence(value, fallback = "") {
@@ -91,7 +136,40 @@ export function createReadingFeature({
   }
   
   function readingIsSummarized(session) {
-    return Boolean(session && session.summaryStatus === "done");
+    return Boolean(session && session.summaryStatus === "done" && session.summaryRuntimeUsed);
+  }
+
+  function readingSummaryFailed(session) {
+    return Boolean(session && (session.summaryStatus === "error" || session.summaryGeneratedBy === "fallback"));
+  }
+
+  function readingUnsupportedMeta(session) {
+    const error = String(session?.parseError || "").trim();
+    if (!session?.pdfUrl) {
+      return {
+        copy: "v1은 pdfUrl 기반 논문만 완전 지원합니다. Search에서 PDF가 있는 버전을 저장하거나 원문 링크를 열어 확인하세요.",
+        title: "PDF URL이 없는 논문입니다",
+      };
+    }
+
+    if (/text layer|ocr|scanned/i.test(error)) {
+      return {
+        copy: "이 PDF는 추출 가능한 텍스트 레이어를 제공하지 않습니다. OCR은 현재 Reading v1 범위 밖입니다.",
+        title: "OCR이 필요한 PDF입니다",
+      };
+    }
+
+    if (/download|failed to download|load failed|status/i.test(error)) {
+      return {
+        copy: "PDF 다운로드 또는 로딩에 실패했습니다. 원문 링크를 확인하거나 잠시 뒤 다시 Parse를 실행하세요.",
+        title: "PDF를 불러오지 못했습니다",
+      };
+    }
+
+    return {
+      copy: error || "Parse 중 문제가 발생했습니다. 원문을 확인하거나 다시 시도하세요.",
+      title: "Parse가 완료되지 않았습니다",
+    };
   }
   
   function filterReadingSessions(sessions = []) {
@@ -199,7 +277,12 @@ export function createReadingFeature({
   }
   
   function deriveReadingMessages(session) {
-    return (Array.isArray(session?.chatMessages) ? session.chatMessages : []).map((message) => ({
+    const persistedMessages = Array.isArray(session?.chatMessages) ? session.chatMessages : [];
+    const optimisticMessages = (Array.isArray(state.readingOptimisticChatMessages) ? state.readingOptimisticChatMessages : []).filter(
+      (message) => message.sessionId === session?.id,
+    );
+
+    return [...persistedMessages, ...optimisticMessages].map((message) => ({
       ...message,
       cites: Array.isArray(message.citations)
         ? message.citations.map((citation) => ({
@@ -222,7 +305,19 @@ export function createReadingFeature({
     }));
   }
   
-  function renderReadingAssetThumb(asset) {
+  function renderReadingAssetThumb(asset, session = null) {
+    if (asset.thumbPath && session?.id && asset.id) {
+      const src = `api/reading-sessions/${encodeURIComponent(session.id)}/assets/${encodeURIComponent(asset.id)}/file?kind=thumb`;
+      return `
+        <img
+          class="reading-asset-thumb-image"
+          src="${escapeHtml(src)}"
+          alt="${escapeHtml(asset.caption || `${asset.kind || "Asset"} ${asset.number || ""}`)}"
+          loading="lazy"
+        />
+      `;
+    }
+
     if (asset.kind === "Table") {
       const rows = Array.isArray(asset.rows) ? asset.rows.slice(0, 3) : [];
       return `
@@ -357,6 +452,22 @@ export function createReadingFeature({
   
           <h2 class="reading-home-preview-title">${escapeHtml(item.title)}</h2>
           <div class="reading-home-preview-authors">${escapeHtml(item.authorsLabel || "Unknown authors")}</div>
+          <div class="reading-home-preview-cta">
+            <button
+              type="button"
+              class="btn-p"
+              data-action="open-reading-detail"
+              data-reading-paper-id="${escapeHtml(item.paperId)}"
+              ${!item.session && state.readingStartingPaperId === item.paperId ? "disabled" : ""}
+            >
+              ${icon(actionMeta.primaryIcon, { size: 13, color: "#ffffff" })}
+              <span>${escapeHtml(primaryLabel)}</span>
+            </button>
+            <button type="button" class="btn-s" aria-label="Add bookmark" title="Add bookmark">
+              ${icon("bookmark", { size: 13, color: "currentColor" })}
+              <span>Add bookmark</span>
+            </button>
+          </div>
   
           <section class="reading-home-preview-section">
             <div class="reading-home-preview-section-title">Abstract</div>
@@ -400,23 +511,6 @@ export function createReadingFeature({
               <div class="reading-home-preview-stat-value mono">${escapeHtml(item.lastActivityLabel)}</div>
             </article>
           </section>
-  
-          <div class="reading-home-preview-footer">
-            <button
-              type="button"
-              class="btn-p"
-              data-action="open-reading-detail"
-              data-reading-paper-id="${escapeHtml(item.paperId)}"
-              ${!item.session && state.readingStartingPaperId === item.paperId ? "disabled" : ""}
-            >
-              ${icon(actionMeta.primaryIcon, { size: 13, color: "#ffffff" })}
-              <span>${escapeHtml(primaryLabel)}</span>
-            </button>
-            <button type="button" class="btn-s" data-action="select-stage" data-stage-id="search">
-              ${icon(actionMeta.secondaryIcon, { size: 13, color: "currentColor" })}
-              <span>${escapeHtml(actionMeta.secondaryLabel)}</span>
-            </button>
-          </div>
         </div>
       </aside>
     `;
@@ -701,6 +795,7 @@ export function createReadingFeature({
     const summary = deriveReadingSummary(session);
     const parsed = readingIsParsed(session);
     const summarized = readingIsSummarized(session);
+    const summaryFailed = readingSummaryFailed(session);
     const split = state.readingOrientation === "vertical" ? state.readingSplitVertical : state.readingSplitHorizontal;
     const activeSectionIndex = readingActiveSectionIndex(sections);
     const docPaneStyle = state.readingWorkbenchCollapsed ? "flex:1 1 auto" : `flex:0 0 calc(${split}% - 2.5px)`;
@@ -951,6 +1046,16 @@ export function createReadingFeature({
             <section class="reading-summary-block">
               <div class="reading-summary-label">${icon("sparkles", { size: 11, color: TOKENS.read })}<span>TL;DR</span></div>
               <div class="reading-summary-body">${escapeHtml(summary.tldr)}</div>
+              ${
+                session?.summaryGeneratedBy
+                  ? `
+                      <div class="reading-provenance-pill">
+                        <span>${escapeHtml(session.summaryGeneratedBy === "fallback" ? "Local fallback" : "Agent generated")}</span>
+                        ${session.summaryFallbackReason ? `<span class="mono">${escapeHtml(readingExcerpt(session.summaryFallbackReason, "", 64))}</span>` : ""}
+                      </div>
+                    `
+                  : ""
+              }
             </section>
 
             <section class="reading-summary-block">
@@ -995,7 +1100,13 @@ export function createReadingFeature({
                             (entry) => `
                               <li>
                                 <span class="bullet" style="background:${TOKENS.t3}"></span>
-                                <span>${escapeHtml(entry.label)}${entry.page ? ` · p.${escapeHtml(String(entry.page))}` : ""} · ${escapeHtml(entry.summary)}</span>
+                                <button
+                                  type="button"
+                                  class="reading-section-jump"
+                                  data-action="jump-reading-page"
+                                  data-reading-page="${escapeHtml(String(entry.page || ""))}"
+                                  ${entry.page ? "" : "disabled"}
+                                >${escapeHtml(entry.label)}${entry.page ? ` · p.${escapeHtml(String(entry.page))}` : ""} · ${escapeHtml(entry.summary)}</button>
                               </li>
                             `,
                           )
@@ -1005,6 +1116,24 @@ export function createReadingFeature({
                   `
                 : ""
             }
+          </div>
+        `
+      : summaryFailed
+        ? `
+          <div class="reading-empty-view">
+            <div class="reading-empty-icon">${icon("sparkles", { size: 24, color: TOKENS.result })}</div>
+            <div class="reading-empty-title">AI 요약을 생성하지 못했습니다</div>
+            <div class="reading-empty-copy">
+              ${
+                session?.summaryGeneratedBy === "fallback"
+                  ? "이전에 저장된 본문 기반 fallback 요약은 AI 요약으로 표시하지 않습니다."
+                  : escapeHtml(session?.summaryError || session?.summaryFallbackReason || "Codex runtime이 응답하지 않았거나 유효한 JSON 요약을 반환하지 않았습니다.")
+              }
+            </div>
+            <button type="button" class="btn-p" data-action="reading-summarize-session" ${!parsed || summarizeBusy ? "disabled" : ""}>
+              ${icon("sparkles", { size: 13, color: "#fff" })}
+              <span>${summarizeBusy ? "Summarizing..." : "Retry AI summary"}</span>
+            </button>
           </div>
         `
       : `
@@ -1019,26 +1148,215 @@ export function createReadingFeature({
           </div>
         `;
 
+    const unsupportedMeta = readingUnsupportedMeta(session);
+    const hasRememberedPdfSelection = state.readingPdfSelection?.sessionId === session.id;
+    const hasDockPdfSelection = Boolean(hasRememberedPdfSelection && state.readingPdfDockSelectionActive);
+    const dockZoom = Number(state.readingPdfZoom) || 100;
+    const dockPanel = state.readingPdfDockPanel || "";
+    const activeDockPage = Number(state.readingPdfSelection?.page || state.readingPdfTargetPage || 1) || 1;
+    const dockTocItems = (sections.length ? sections : [{ label: "Document", page: 1 }]).slice(0, 8);
+    const dockPageCount = Math.max(1, Number(session?.pageCount) || 1);
+    const dockPreviewWidths = [
+      [90, 70, 100, 60, 85, 100, 75, 90, 55, 80],
+      [100, 80, 65, 100, 90, 70, 100, 60, 75, 85],
+      [80, 100, 60, 90, 75, 100],
+      [100, 70, 85, 60, 100, 80],
+    ];
+    const dockPreviewLine = (width) => `<div class="pgl pgl-${width}"></div>`;
+    const pdfDock = `
+      <div class="reading-pdf-dock-layer dock-layer ${hasDockPdfSelection ? "has-selection" : ""}">
+        <div class="sel-chip ${hasDockPdfSelection ? "visible" : ""}">
+          <span class="sel-chip-icon">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M2.5 4h11M2.5 8h8M2.5 12h5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="sel-chip-text">"${escapeHtml(readingExcerpt(state.readingPdfSelection?.quote || "", "selected text", 84))}"</span>
+          <button type="button" class="sel-chip-dismiss" data-action="clear-reading-pdf-selection" title="선택 해제" aria-label="선택 해제">
+            <svg width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+              <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="pdf-dock" role="toolbar" aria-label="PDF tools">
+          <button
+            type="button"
+            class="dock-btn ${dockPanel === "toc" ? "on" : ""}"
+            data-action="toggle-reading-pdf-dock-panel"
+            data-reading-pdf-dock-panel="toc"
+            title="목차"
+            aria-label="목차"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M2.5 4h11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M2.5 8h7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M4.5 11.5h7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <path d="M4.5 14h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <div class="dock-div"></div>
+
+          <button type="button" class="dock-btn" data-action="set-reading-pdf-zoom" data-reading-pdf-zoom-delta="-10" title="축소 (-)" aria-label="축소">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3.5 8h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <span class="zoom-val">${escapeHtml(String(dockZoom))}%</span>
+
+          <button type="button" class="dock-btn" data-action="set-reading-pdf-zoom" data-reading-pdf-zoom-delta="10" title="확대 (+)" aria-label="확대">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <div class="dock-div"></div>
+
+          <button type="button" class="dock-btn ${dockZoom === 100 ? "on" : ""}" data-action="fit-reading-pdf-zoom" title="화면에 맞추기" aria-label="화면에 맞추기">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M2 5.5V3a1 1 0 011-1h2.5M11.5 2H13a1 1 0 011 1v2.5M14 10.5V13a1 1 0 01-1 1h-2.5M4.5 14H3a1 1 0 01-1-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+
+          <div class="dock-div"></div>
+
+          <button
+            type="button"
+            class="dock-btn ${dockPanel === "pageGrid" ? "on" : ""}"
+            data-action="toggle-reading-pdf-dock-panel"
+            data-reading-pdf-dock-panel="pageGrid"
+            title="페이지 미리보기"
+            aria-label="페이지 미리보기"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="1.5" y="1.5" width="4" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="6.5" y="1.5" width="4" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="11.5" y="1.5" width="3" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="1.5" y="9" width="4" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="6.5" y="9" width="4" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="11.5" y="9" width="3" height="5.5" rx="0.75" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+          </button>
+
+          <div class="dock-sel-group">
+            <div class="dock-div"></div>
+
+            <button type="button" class="dock-btn dock-btn-highlight" data-action="create-reading-highlight-from-selection" title="하이라이트" aria-label="하이라이트">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M10.5 2.5L13.5 5.5L7 12H4V9L10.5 2.5Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" fill="none"/>
+                <path d="M2 14.5h12" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+                <path d="M8 4.5L11 7.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+              </svg>
+              <span class="lbl-wrap"><span class="lbl">하이라이트</span></span>
+            </button>
+
+            <button type="button" class="dock-btn dock-btn-note" data-action="create-reading-note-from-selection" title="메모 추가" aria-label="메모 추가">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M12 2H4a1.5 1.5 0 00-1.5 1.5v9A1.5 1.5 0 004 14h5l4-4V3.5A1.5 1.5 0 0012 2z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>
+                <path d="M5.5 6.5h5M5.5 9h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                <path d="M9 14v-4h4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="lbl-wrap"><span class="lbl">메모 추가</span></span>
+            </button>
+
+            <button type="button" class="dock-btn" data-action="open-reading-note-linker" title="노트 링크" aria-label="노트 링크">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M6.5 9.5a3 3 0 004.24 0l2-2a3 3 0 00-4.24-4.24L7 4.76" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                <path d="M9.5 6.5a3 3 0 00-4.24 0l-2 2A3 3 0 007.5 12.74L9 11.24" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+              <span class="lbl-wrap"><span class="lbl">노트 링크</span></span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="popup-panel toc-panel ${dockPanel === "toc" ? "visible" : ""}">
+        <div class="popup-header">목차</div>
+        ${dockTocItems
+          .map((section, index) => {
+            const page = Number(section.page || readingSectionPage(index)) || 1;
+            return `
+              <button
+                type="button"
+                class="toc-item ${page === activeDockPage ? "cur" : ""}"
+                data-action="jump-reading-page"
+                data-reading-page="${escapeHtml(String(page))}"
+              >
+                <span class="toc-num">${index === 0 && !section.page ? "—" : escapeHtml(String(index || "—"))}</span>
+                <span class="toc-title">${escapeHtml(readingExcerpt(section.label || `Page ${page}`, "Section", 46))}</span>
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+
+      <div class="popup-panel page-grid-panel ${dockPanel === "pageGrid" ? "visible" : ""}">
+        <div class="popup-header">페이지 미리보기</div>
+        <div class="page-grid">
+          ${Array.from({ length: dockPageCount })
+            .map((_, index) => {
+              const page = index + 1;
+              const widths = dockPreviewWidths[index % dockPreviewWidths.length];
+              return `
+                <button
+                  type="button"
+                  class="page-grid-item ${page === activeDockPage ? "cur" : ""}"
+                  data-action="jump-reading-page"
+                  data-reading-page="${escapeHtml(String(page))}"
+                >
+                  <span class="page-grid-thumb">${widths.map(dockPreviewLine).join("")}</span>
+                  <span class="page-grid-num">${escapeHtml(String(page))}</span>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+    `;
     const pdfBody = !session?.pdfUrl
       ? `
           <div class="reading-empty-view">
             <div class="reading-empty-icon">${icon("pdf", { size: 24, color: TOKENS.t3 })}</div>
-            <div class="reading-empty-title">PDF URL이 없는 논문입니다</div>
-            <div class="reading-empty-copy">v1은 <strong>pdfUrl</strong> 기반 논문만 완전 지원합니다. 이 세션은 metadata-only 상태로 유지됩니다.</div>
+            <div class="reading-empty-title">${escapeHtml(unsupportedMeta.title)}</div>
+            <div class="reading-empty-copy">${escapeHtml(unsupportedMeta.copy)}</div>
+            <div class="reading-empty-actions">
+              <button type="button" class="btn-s" data-action="open-reading-source" ${session?.paperUrl ? "" : "disabled"}>
+                ${icon("ext", { size: 13, color: "currentColor" })}
+                <span>Open source</span>
+              </button>
+              <button type="button" class="btn-s" data-action="select-stage" data-stage-id="search">
+                ${icon("search", { size: 13, color: "currentColor" })}
+                <span>Back to Search</span>
+              </button>
+            </div>
           </div>
         `
       : `
-          <div class="reading-pdf-viewer">
-            <div class="reading-pdf-viewer-head">
-              <div class="reading-pdf-viewer-meta">
-                ${renderTag(parseStatusLabel, parseStatusColor, session?.parseStatus === "done")}
-                ${summarized ? renderTag("Summary ready", TOKENS.read, true) : ""}
-                ${session?.pageCount ? renderTag(`${session.pageCount} pages`) : ""}
-              </div>
-              <div class="reading-pdf-viewer-copy">
-                ${session?.parseError ? `<span class="reading-pdf-viewer-warning">${escapeHtml(session.parseError)}</span>` : `<span>실제 PDF를 렌더링합니다.</span>`}
-              </div>
-            </div>
+          <div class="reading-pdf-viewer ${hasDockPdfSelection ? "has-selection-dock" : ""}">
+            ${
+              session?.parseStatus === "error"
+                ? `
+                    <div class="reading-pdf-unsupported-card">
+                      <div>
+                        <div class="reading-pdf-unsupported-title">${escapeHtml(unsupportedMeta.title)}</div>
+                        <div class="reading-pdf-unsupported-copy">${escapeHtml(unsupportedMeta.copy)}</div>
+                      </div>
+                      <div class="reading-pdf-unsupported-actions">
+                        <button type="button" class="btn-p" data-action="reading-parse-session">
+                          ${icon("sparkles", { size: 13, color: "#fff" })}
+                          <span>Retry parse</span>
+                        </button>
+                        <button type="button" class="btn-s" data-action="open-reading-source" ${session?.paperUrl ? "" : "disabled"}>
+                          ${icon("ext", { size: 13, color: "currentColor" })}
+                          <span>Open source</span>
+                        </button>
+                      </div>
+                    </div>
+                  `
+                : ""
+            }
             <div
               class="reading-pdf-canvas-root"
               data-reading-pdf-host="true"
@@ -1063,18 +1381,92 @@ export function createReadingFeature({
                 ${visibleAssets
                   .map(
                     (asset) => `
-                      <article class="reading-asset-card">
-                        <div class="reading-asset-thumb">${renderReadingAssetThumb(asset)}</div>
+                      <button
+                        type="button"
+                        class="reading-asset-card"
+                        data-action="open-reading-asset-detail"
+                        data-reading-asset-id="${escapeHtml(asset.id || "")}"
+                      >
+                        <div class="reading-asset-thumb">${renderReadingAssetThumb(asset, session)}</div>
                         <div class="reading-asset-meta">
                           <div class="reading-asset-kind" style="color:${asset.kind === "Figure" ? TOKENS.research : TOKENS.writing}">${escapeHtml(asset.kind)} ${asset.number}</div>
                           <div class="reading-asset-caption">${escapeHtml(asset.caption)}</div>
                           <div class="reading-asset-page mono">${asset.page ? `p.${escapeHtml(String(asset.page))}` : "page n/a"}</div>
                         </div>
-                      </article>
+                      </button>
                     `,
                   )
                   .join("")}
               </div>
+              ${(() => {
+                const detailAsset =
+                  assets.find((asset) => asset.id && asset.id === state.readingAssetDetailId) ||
+                  visibleAssets.find((asset) => asset.id && asset.id === state.readingAssetDetailId) ||
+                  null;
+                if (!detailAsset) {
+                  return "";
+                }
+
+                return `
+                  <aside class="reading-asset-detail">
+                    <div class="reading-asset-detail-head">
+                      <div>
+                        <div class="reading-asset-detail-kicker">${escapeHtml(detailAsset.kind)} ${escapeHtml(String(detailAsset.number || ""))}</div>
+                        <h3 class="reading-asset-detail-title">${escapeHtml(detailAsset.caption || "Untitled asset")}</h3>
+                      </div>
+                      <button type="button" class="reading-asset-detail-close" data-action="close-reading-asset-detail" aria-label="Close asset detail">
+                        ${icon("x", { size: 14, color: "currentColor" })}
+                      </button>
+                    </div>
+
+                    <div class="reading-asset-detail-body">
+                      <div class="reading-asset-detail-preview">
+                        ${renderReadingAssetThumb(detailAsset, session)}
+                      </div>
+                      <div class="reading-asset-detail-meta">
+                        <div class="reading-asset-detail-row">
+                          <span>Source page</span>
+                          <strong class="mono">${detailAsset.page ? `p.${escapeHtml(String(detailAsset.page))}` : "n/a"}</strong>
+                        </div>
+                        <div class="reading-asset-detail-row">
+                          <span>Type</span>
+                          <strong>${escapeHtml(detailAsset.kind)}</strong>
+                        </div>
+                        ${
+                          detailAsset.rows?.length
+                            ? `
+                                <div class="reading-asset-detail-table">
+                                  ${detailAsset.rows.slice(0, 5).map((row) => `
+                                    <div class="reading-asset-detail-table-row">
+                                      ${row.slice(0, 4).map((cell) => `<span>${escapeHtml(readingExcerpt(cell, "Cell", 30))}</span>`).join("")}
+                                    </div>
+                                  `).join("")}
+                                </div>
+                              `
+                            : ""
+                        }
+                      </div>
+                    </div>
+
+                    <div class="reading-asset-detail-actions">
+                      <button
+                        type="button"
+                        class="btn-p"
+                        data-action="jump-reading-page"
+                        data-reading-page="${escapeHtml(String(detailAsset.page || ""))}"
+                        ${detailAsset.page ? "" : "disabled"}
+                      >
+                        ${icon("pdf", { size: 13, color: "#fff" })}
+                        <span>Go to source page</span>
+                      </button>
+                      <button type="button" class="btn-s" data-action="close-reading-asset-detail">
+                        ${icon("grid", { size: 13, color: "currentColor" })}
+                        <span>Back to assets</span>
+                      </button>
+                    </div>
+                  </aside>
+                `;
+              })()}
             </div>
           `
         : `
@@ -1088,6 +1480,21 @@ export function createReadingFeature({
               </button>
             </div>
           `;
+
+    const selectedLineCount = readingSelectionLineCount(state.readingPdfSelection);
+    const selectedLineLabel = `${selectedLineCount || 1} ${selectedLineCount === 1 ? "line" : "lines"} selected`;
+    const chatContextChips = hasRememberedPdfSelection
+      ? `
+          <div class="reading-chat-selection-status">
+            <div class="reading-chat-selection-main">
+              ${icon("quote", { size: 12, color: "currentColor" })}
+              <span>${escapeHtml(selectedLineLabel)}</span>
+              <span class="reading-chat-selection-page mono">p.${escapeHtml(String(state.readingPdfSelection.page || "?"))}</span>
+            </div>
+            <div class="reading-chat-selection-preview">"${escapeHtml(readingExcerpt(state.readingPdfSelection.quote, "selected text", 86))}"</div>
+          </div>
+        `
+      : "";
 
     const chatBody = `
       <div class="reading-chat-wrap">
@@ -1107,24 +1514,51 @@ export function createReadingFeature({
               ? messages
                   .map(
                     (message) => `
-                      <div class="reading-bubble ${message.role}">
+                      ${renderReadingMessageSelectionContext(message)}
+                      <div class="reading-bubble ${message.role} ${message.pending ? "is-pending" : ""} ${message.typing ? "is-typing" : ""}">
                         ${
                           message.role === "assistant"
                             ? `<div class="reading-bubble-avatar">${icon("sparkles", { size: 12, color: TOKENS.read })}</div>`
                             : ""
                         }
                         <div class="reading-bubble-content">
-                          ${escapeHtml(message.text)}
+                          ${
+                            message.typing
+                              ? `
+                                  <span class="reading-typing-dots" aria-label="Agent is responding">
+                                    <i></i>
+                                    <i></i>
+                                    <i></i>
+                                  </span>
+                                `
+                              : escapeHtml(message.text)
+                          }
+                          ${
+                            message.role === "assistant" && message.generatedBy
+                              ? `
+                                  <div class="reading-provenance-pill is-chat">
+                                    <span>${escapeHtml(message.generatedBy === "fallback" ? "Local fallback" : "Agent generated")}</span>
+                                    ${message.fallbackReason ? `<span class="mono">${escapeHtml(readingExcerpt(message.fallbackReason, "", 54))}</span>` : ""}
+                                  </div>
+                                `
+                              : ""
+                          }
                           ${
                             message.cites?.length
                               ? `<div class="reading-cite-row">${message.cites
                                   .map(
                                     (cite) => `
-                                      <span class="reading-cite">
+                                      <button
+                                        type="button"
+                                        class="reading-cite"
+                                        data-action="jump-reading-page"
+                                        data-reading-page="${escapeHtml(String(cite.pg || ""))}"
+                                        ${cite.pg ? "" : "disabled"}
+                                      >
                                         <span class="dot"></span>
                                         <span>${escapeHtml(cite.label)}</span>
                                         ${cite.pg ? `<span class="mono">p.${escapeHtml(String(cite.pg))}</span>` : ""}
-                                      </span>
+                                      </button>
                                     `,
                                   )
                                   .join("")}</div>`
@@ -1146,10 +1580,7 @@ export function createReadingFeature({
         </div>
 
         <form class="reading-chat-input" data-action="submit-reading-chat-form">
-          <div class="reading-chat-chips">
-            <span class="reading-chip">${icon("pdf", { size: 10, color: "currentColor" })}<span>${escapeHtml(sections[activeSectionIndex]?.label || "Current section")}</span></span>
-            ${notes[0]?.quote ? `<span class="reading-chip">${icon("quote", { size: 10, color: "currentColor" })}<span>${escapeHtml(readingExcerpt(notes[0].quote, "note", 42))}</span></span>` : ""}
-          </div>
+          ${chatContextChips}
           <div class="reading-chat-input-box">
             <textarea name="readingChatMessage" rows="2" placeholder="${parsed ? "논문에게 질문하기…" : "Parse paper 후 질문할 수 있습니다"}" ${!parsed || chatBusy ? "disabled" : ""}></textarea>
             <button type="submit" class="reading-chat-send" ${!parsed || chatBusy ? "disabled" : ""}>${icon("send", { size: 13, color: "#fff" })}</button>
@@ -1167,7 +1598,7 @@ export function createReadingFeature({
         <div class="reading-notes-toolbar">
           <span class="reading-mini-label">All notes</span>
           <button type="button" class="btn-s" style="padding:3px 8px;font-size:11.5px" data-action="create-reading-note" ${noteBusy ? "disabled" : ""}>${icon("plus", { size: 11, color: "currentColor" })}<span>New note</span></button>
-          <button type="button" class="btn-s" style="padding:3px 8px;font-size:11.5px;margin-left:auto;color:${TOKENS.research}" data-action="select-stage" data-stage-id="research">${icon("flask", { size: 11, color: "currentColor" })}<span>Send to Research</span></button>
+          <button type="button" class="btn-s reading-notes-research-btn" data-action="handoff-reading-to-research">${icon("flask", { size: 11, color: "currentColor" })}<span>Send to Research</span></button>
         </div>
 
         ${
@@ -1178,7 +1609,13 @@ export function createReadingFeature({
                     <article class="reading-note-card" data-reading-note-id="${escapeHtml(note.id)}">
                       <div class="reading-note-head">
                         ${renderTag(note.cat, note.color, true)}
-                        <span class="reading-note-page mono">${note.page ? `p.${escapeHtml(String(note.page))}` : "page n/a"}</span>
+                          <button
+                            type="button"
+                            class="reading-note-page mono"
+                            data-action="jump-reading-page"
+                            data-reading-page="${escapeHtml(String(note.page || ""))}"
+                            ${note.page ? "" : "disabled"}
+                          >${note.page ? `p.${escapeHtml(String(note.page))}` : "page n/a"}</button>
                       </div>
                       <div class="reading-note-quote">"${escapeHtml(note.quote || note.text || "Quote 없음")}"</div>
                       <textarea class="reading-note-editor" name="readingNoteBody" rows="4" placeholder="메모를 입력하세요…" ${noteBusy ? "disabled" : ""}>${escapeHtml(note.memo || "")}</textarea>
@@ -1235,9 +1672,40 @@ export function createReadingFeature({
               ${icon("grid", { size: 13, color: "currentColor" })}
               <span>${extractBusy ? "Extracting..." : "Extract"}</span>
             </button>
-            <button type="button" class="btn-ghost" aria-label="Open reading context menu">
+            <button
+              type="button"
+              class="btn-ghost reading-context-trigger"
+              data-action="toggle-reading-context-menu"
+              aria-label="Open reading context menu"
+              aria-expanded="${state.readingContextMenuOpen ? "true" : "false"}"
+            >
               ${icon("moreH", { size: 14, color: "currentColor" })}
             </button>
+            ${
+              state.readingContextMenuOpen
+                ? `
+                    <div class="reading-context-menu" role="menu" aria-label="Reading actions">
+                      <button type="button" class="reading-context-menu-item" data-action="open-reading-source" role="menuitem">
+                        ${icon("ext", { size: 13, color: "currentColor" })}
+                        <span>Open source</span>
+                      </button>
+                      <button type="button" class="reading-context-menu-item" data-action="copy-reading-citation" role="menuitem">
+                        ${icon("share", { size: 13, color: "currentColor" })}
+                        <span>Copy citation</span>
+                      </button>
+                      <button type="button" class="reading-context-menu-item" data-action="export-reading-notes" role="menuitem">
+                        ${icon("dl", { size: 13, color: "currentColor" })}
+                        <span>Export notes</span>
+                      </button>
+                      <div class="reading-context-menu-divider"></div>
+                      <button type="button" class="reading-context-menu-item" data-action="reading-parse-session" role="menuitem">
+                        ${icon("sparkles", { size: 13, color: "currentColor" })}
+                        <span>${parsed ? "Re-parse paper" : "Parse paper"}</span>
+                      </button>
+                    </div>
+                  `
+                : ""
+            }
           </div>
         </div>
 
@@ -1345,6 +1813,7 @@ export function createReadingFeature({
               <div class="pane-body">
                 ${state.readingDocumentTab === "pdf" ? pdfBody : state.readingDocumentTab === "assets" ? assetsBody : summaryBody}
               </div>
+              ${state.readingDocumentTab === "pdf" ? pdfDock : ""}
             </section>
 
             ${

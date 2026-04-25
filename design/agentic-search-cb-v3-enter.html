@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ARES · Agentic Search · 진입 전환 (fade)</title>
+<style>
+/* ════════════════════════════════════════════════════════════════
+   ARES Agentic Search — Entry Transition (fade)
+
+   변경:
+     · pill reshape 모핑 폐기. pill 형태는 그대로 유지된다.
+     · home content 가 fade-out 한 직후 run content 가 fade-in.
+     · 같은 자리에 두 layer 가 stacked, opacity 만 교차한다.
+     · 모션 방향은 보조용 8px translateY 만 사용해 "진입/이탈"
+       방향만 살짝 표현한다. 형태는 그대로.
+
+   왜 fade 가 더 자연스러운가:
+     · reshape 은 변형 중인 면(border, shape) 이 미세하게 보여
+       사용자가 "뭔가 일그러진다" 는 느낌을 받는다.
+     · fade 는 정보 layer 가 바뀌는 느낌이라 화면 전환에 가까워
+       인지 부담이 적다.
+══════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+:root {
+  --bg: #fbfbfa;
+  --sb: #f5f5f4;
+  --s1: #ffffff;
+  --s2: #f7f7f6;
+  --s3: #f0efed;
+  --b1: #e8e8e6;
+  --b2: #d4d4d2;
+  --tx: #0a0a0b;
+  --t2: #4a4a50;
+  --t3: #8a8a92;
+  --t4: #b0b0b8;
+  --accent: #5e6ad2;
+  --search:    #5e9c6f;
+  --search-d:  #4e8a5e;
+  --search-bg: rgba(94,156,111,.10);
+  --read:      #5e6ad2;
+  --read-d:    #4e5ac2;
+  --warn:      #c87f3a;
+  --c-folder:  #8957c9;
+  --c-queue:   #3fa8a1;
+  --c-tag:     #5e6ad2;
+  --c-pdf:     #5e9c6f;
+  --n-srch:    #3b82c4;
+}
+html, body { height: 100% }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
+  font-feature-settings: 'cv11','ss01','ss03';
+  background: var(--bg); color: var(--tx);
+  font-size: 13px; letter-spacing: -.006em; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: 'zero' }
+::-webkit-scrollbar { width:6px; height:6px }
+::-webkit-scrollbar-thumb { background:#d8d7d3; border-radius:3px }
+
+/* timing tokens */
+:root {
+  --t-out:  280ms;     /* home fade-out */
+  --t-in:   360ms;     /* run fade-in */
+  --gap:    140ms;     /* 둘 사이 비어있는 호흡 */
+  --eaze:   cubic-bezier(.32,.72,.0,1.0);
+}
+body.slow-mo { --t-out: 1120ms; --t-in: 1440ms; --gap: 560ms }
+
+/* ── App shell ─────────────────────────────────────────── */
+.app  { display: grid; grid-template-columns: 56px 1fr; height: 100vh }
+.rail {
+  background: var(--sb); border-right: 1px solid var(--b1);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px 0; gap: 2px;
+}
+.rail-brand {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: linear-gradient(135deg, #2a2a2e, #0a0a0b);
+  color: #fff; display: grid; place-items: center;
+  font-weight: 700; font-size: 12px; letter-spacing: -.02em;
+  margin-bottom: 10px;
+}
+.rail-btn {
+  width: 36px; height: 36px; border-radius: 6px;
+  display: grid; place-items: center;
+  color: var(--t3); cursor: pointer;
+  border: 0; background: transparent;
+  transition: background 120ms, color 120ms;
+}
+.rail-btn:hover { background: rgba(0,0,0,.04); color: var(--t2) }
+.rail-btn.active { background: var(--s1); color: var(--tx); box-shadow: 0 0 0 1px var(--b1) }
+.rail-sep { flex: 1 }
+
+/* ── Topbar ────────────────────────────────────────────── */
+.main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative }
+.topbar {
+  height: 44px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 20px; border-bottom: 1px solid var(--b1);
+  background: var(--bg);
+  position: relative; z-index: 30;
+}
+.crumb {
+  color: var(--t3); font-size: 12px;
+  display: flex; align-items: center; gap: 5px; min-width: 0;
+  transition: opacity var(--t-out) ease;
+}
+.crumb svg { width: 11px; height: 11px; opacity: .45 }
+.crumb strong { color: var(--tx); font-weight: 500 }
+.crumb b.run-id { color: var(--tx); font-weight: 500; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px }
+/* topbar 의 crumb 도 fade-swap */
+.crumb-running {
+  position: absolute; left: 20px; top: 50%; transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity var(--t-in) ease;
+}
+body.is-run .crumb-start   { opacity: 0 }
+body.is-run .crumb-running { opacity: 1; transition-delay: calc(var(--t-out) + var(--gap)) }
+
+.topbar-spacer { flex: 1 }
+.top-action { width: 28px; height: 28px; display: grid; place-items: center; color: var(--t3); border-radius: 5px; cursor: pointer; background: transparent; border: 0 }
+.top-action:hover { background: var(--s2); color: var(--t2) }
+.avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: linear-gradient(135deg, #d4b37a, #a67c3f); color: white;
+  display: grid; place-items: center; font-size: 10px; font-weight: 600;
+}
+.run-badge {
+  font-size: 11.5px; color: var(--t2); padding: 4px 11px;
+  background: var(--search-bg); border-radius: 999px;
+  border: 1px solid rgba(94,156,111,.2);
+  display: inline-flex; align-items: center; gap: 7px;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity var(--t-in) ease, transform var(--t-in) var(--eaze);
+}
+body.is-run .run-badge {
+  opacity: 1; transform: translateY(0);
+  transition-delay: calc(var(--t-out) + var(--gap) + 200ms);
+}
+.run-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--search); animation: pulse 1.4s ease-in-out infinite }
+
+@keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:.42} }
+@keyframes blink  { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+@keyframes ringout{ 0%{box-shadow:0 0 0 0 rgba(94,156,111,.45)} 100%{box-shadow:0 0 0 22px rgba(94,156,111,0)} }
+
+/* ════════════════════════════════════════════════════════════════
+   STAGES — home / run 가 같은 scroll 영역 안에 stacked, opacity 만 교차
+══════════════════════════════════════════════════════════════════ */
+.scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  position: relative;
+}
+.stage-home, .stage-run {
+  position: absolute; inset: 0;
+  overflow-y: auto; overflow-x: hidden;
+}
+/* 시작: home 만 보임 */
+.stage-home {
+  opacity: 1;
+  transition: opacity var(--t-out) ease, transform var(--t-out) var(--eaze);
+}
+.stage-run {
+  opacity: 0; pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity var(--t-in) ease, transform var(--t-in) var(--eaze);
+}
+body.is-run .stage-home {
+  opacity: 0; pointer-events: none;
+  transform: translateY(-8px);
+}
+body.is-run .stage-run {
+  opacity: 1; pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: calc(var(--t-out) + var(--gap)),
+                    calc(var(--t-out) + var(--gap));
+}
+
+/* dashboard 콘텐츠 컨테이너 */
+.scroll-inner { max-width: 1240px; margin: 0 auto; padding: 26px 32px 80px; min-height: 100% }
+.run-inner    { max-width: 740px;  margin: 0 auto; padding: 32px 16px 80px; }
+
+/* ════════════════════════════════════════════════════════════════
+   HERO PILL — Dashboard refined 그대로 (형태 변형 없음)
+══════════════════════════════════════════════════════════════════ */
+.hero-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.hero {
+  display: flex; align-items: center;
+  background: #fff; border: 1px solid var(--b1); border-radius: 999px;
+  padding: 6px 6px 6px 18px; gap: 10px;
+  width: min(680px, 100%);
+  transition: border-color 220ms ease, box-shadow 220ms ease;
+}
+.hero input {
+  background: transparent; border: 0; outline: 0; flex: 1; min-width: 0;
+  font-size: 15px; color: var(--tx); padding: 4px 0; font-family: inherit;
+}
+.hero input::placeholder { color: var(--t4) }
+.hero.scout {
+  border-color: rgba(94,156,111,.32);
+  box-shadow: 0 1px 2px rgba(0,0,0,.02), 0 8px 28px rgba(94,156,111,.08);
+}
+.hero.scout:focus-within {
+  border-color: var(--search);
+  box-shadow: 0 0 0 3px rgba(94,156,111,.14), 0 8px 28px rgba(94,156,111,.10);
+}
+.lead-icon { display: inline-flex; color: var(--t3); flex-shrink: 0 }
+.submit {
+  display: inline-flex; align-items: stretch;
+  border-radius: 999px; padding: 3px; gap: 3px; flex-shrink: 0;
+  background: rgba(94,156,111,.10);
+}
+.sbtn {
+  border: 0; background: transparent; color: var(--t3);
+  font-size: 13px; font-weight: 550;
+  height: 30px; padding: 0 10px;
+  border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 5px;
+  cursor: pointer; font-family: inherit;
+  transition: background 240ms, color 200ms, padding 280ms var(--eaze), box-shadow 240ms;
+  white-space: nowrap;
+}
+.sbtn:hover:not(.active) { color: var(--tx); background: rgba(0,0,0,.04) }
+.sbtn.active[data-mode="scout"] {
+  background: var(--search); color: #fff; font-weight: 600;
+  padding: 7px 12px;
+  box-shadow: 0 1px 2px rgba(94,156,111,.28), 0 2px 10px rgba(94,156,111,.25);
+}
+.sbtn.active[data-mode="scout"]:hover { background: var(--search-d) }
+
+/* click ring-out — 한 번 펄스만 */
+body.is-pressed .sbtn.active[data-mode="scout"] { animation: ringout 700ms var(--eaze) }
+
+.scope-row {
+  display: flex; align-items: center; gap: 5px;
+  flex-wrap: wrap; justify-content: center;
+  max-width: 680px;
+}
+.scope-label { font-size: 11px; color: var(--t3); margin-right: 2px }
+.scope-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 11px;
+  background: var(--s2); border: 1px solid var(--b1);
+  font-size: 11px; color: var(--t2);
+}
+.scope-chip .x { color: var(--t4); margin-left: 2px; cursor: pointer; font-size: 10px }
+.scope-add {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 9px; border-radius: 11px;
+  background: transparent; border: 1px dashed var(--b2);
+  font-size: 11px; color: var(--t3); cursor: pointer; font-family: inherit;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DASHBOARD INNER (refined와 동일)
+══════════════════════════════════════════════════════════════════ */
+.sec-head { display: flex; align-items: baseline; gap: 10px; margin: 30px 0 12px }
+.sec-head h2 { font-size: 11px; font-weight: 600; color: var(--t3); letter-spacing: .08em; text-transform: uppercase }
+.sec-head .hint { font-size: 11.5px; color: var(--t4) }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--b1); border: 1px solid var(--b1); border-radius: 10px; overflow: hidden }
+.kpi { background: var(--s1); padding: 14px 16px; display: flex; flex-direction: column; gap: 3px }
+.kpi-label { font-size: 10.5px; color: var(--t3); font-weight: 500; text-transform: uppercase; letter-spacing: .06em }
+.kpi-val { font-size: 22px; font-weight: 600; color: var(--tx); letter-spacing: -.02em; margin-top: 2px; font-variant-numeric: tabular-nums; line-height: 1.1 }
+.kpi-val .of { font-size: 12px; color: var(--t4); font-weight: 400; margin-left: 2px }
+.kpi-sub { font-size: 11px; color: var(--t3); margin-top: 4px }
+.kpi-sub .up { color: var(--search); font-weight: 500 }
+.kpi-sub .down { color: var(--warn); font-weight: 500 }
+.kc-area { width: 100%; height: 30px; display: block; margin-top: 10px }
+.kc-bars { display: flex; align-items: flex-end; gap: 4px; height: 30px; padding: 0 2px; margin-top: 10px }
+.kc-bars .b { flex: 1; min-width: 0; min-height: 4px; border-radius: 3px; background: var(--c-queue) }
+.kc-bars .b.dim { background: rgba(63,168,161,.3) }
+.kc-seg { display: flex; width: 100%; height: 9px; gap: 2px; margin-top: 12px }
+.kc-seg .s { height: 100%; border-radius: 999px; min-width: 2px }
+.kc-seg .dashed { flex: 1; height: 100%; background: transparent; border: 1px dashed var(--warn); border-radius: 999px; box-sizing: border-box; min-width: 2px }
+
+.chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 10px }
+.card { background: var(--s1); border: 1px solid var(--b1); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column }
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px }
+.card-title { font-size: 12.5px; font-weight: 600; color: var(--tx) }
+.card-sub { font-size: 11px; color: var(--t3); margin-top: 2px }
+.chart-area { width: 100%; height: 130px }
+.funnel { display: flex; flex-direction: column; gap: 10px; padding: 2px 0 }
+.funnel-row { display: flex; align-items: center; gap: 10px; font-size: 11.5px }
+.funnel-label { width: 80px; color: var(--t2); flex-shrink: 0 }
+.funnel-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--s3); position: relative; overflow: hidden }
+.funnel-bar span { display: block; height: 100%; border-radius: 3px }
+.funnel-val { width: 36px; text-align: right; color: var(--t2); font-variant-numeric: tabular-nums; font-size: 11.5px }
+
+/* ════════════════════════════════════════════════════════════════
+   STAGE-RUN: Q-block + Phase area
+   Stage 단위로 fade-in 됨. 내부에서는 stagger 로 자식들이
+   순차 등장 (q-block → phase divider → phase card).
+══════════════════════════════════════════════════════════════════ */
+.q-block { margin-bottom: 24px }
+.q-run-line {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  font-size: 11px; color: var(--t3);
+}
+.q-run-line .badge {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 4px;
+  color: var(--search); background: var(--search-bg);
+}
+.q-run-line .live-mark { margin-left: auto; display: inline-flex; align-items: center; gap: 5px }
+.q-run-line .live-mark .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--search); animation: pulse 1.4s ease-in-out infinite }
+h1.q-text {
+  font-size: 22px; font-weight: 600; letter-spacing: -.018em; line-height: 1.32;
+  margin-bottom: 12px;
+}
+.q-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px }
+.q-pill {
+  font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
+  background: var(--s1); border: 1px solid var(--b1); color: var(--t2);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.q-pill svg { width: 11px; height: 11px; color: var(--t3) }
+
+.phase-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 22px 0 14px; font-size: 11px; color: var(--t3);
+}
+.phase-divider::before, .phase-divider::after { content: ''; flex: 1; height: 1px; background: var(--b1) }
+.pd-inner { display: flex; align-items: center; gap: 6px; flex-shrink: 0 }
+.pd-tag {
+  font-size: 10px; font-weight: 600; letter-spacing: .07em;
+  padding: 2px 7px; border-radius: 4px;
+  background: rgba(59,130,196,.1); color: var(--n-srch);
+}
+
+.phase-card {
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 10px;
+  padding: 14px 16px;
+}
+.pc-h {
+  font-size: 12px; font-weight: 600; color: var(--tx); margin-bottom: 6px;
+  display: flex; align-items: center; gap: 6px;
+}
+.pc-h svg { width: 12px; height: 12px; color: var(--n-srch) }
+.pc-h .step-cur {
+  font-size: 10.5px; font-weight: 500; color: var(--t3);
+  margin-left: auto; font-variant-numeric: tabular-nums;
+}
+.pc-bullets { padding-left: 14px; color: var(--t2); line-height: 1.6 }
+.pc-bullets li { font-size: 12px; margin-bottom: 4px; list-style: disc }
+.pc-bullets li b { color: var(--tx); font-weight: 500 }
+.pc-stream-cursor {
+  display: inline-block; width: 7px; height: 12px; background: var(--n-srch);
+  vertical-align: -2px; animation: blink 900ms steps(2) infinite;
+  margin-left: 2px;
+}
+
+/* run-stage 내부 자식들의 stagger fade-in */
+.stage-run .q-block,
+.stage-run .phase-divider,
+.stage-run .phase-card {
+  opacity: 0; transform: translateY(6px);
+  transition: opacity var(--t-in) ease, transform var(--t-in) var(--eaze);
+}
+body.is-run .stage-run .q-block       { opacity: 1; transform: translateY(0); transition-delay: calc(var(--t-out) + var(--gap)) }
+body.is-run .stage-run .phase-divider { opacity: 1; transform: translateY(0); transition-delay: calc(var(--t-out) + var(--gap) + 180ms) }
+body.is-run .stage-run .phase-card    { opacity: 1; transform: translateY(0); transition-delay: calc(var(--t-out) + var(--gap) + 320ms) }
+
+/* ════════════════════════════════════════════════════════════════
+   CONTROL DECK
+══════════════════════════════════════════════════════════════════ */
+.deck {
+  position: fixed; left: 16px; bottom: 16px; z-index: 100;
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 12px;
+  padding: 10px 12px;
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.06);
+  font-size: 11.5px;
+}
+.deck-title {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--t3);
+  padding-right: 10px; border-right: 1px solid var(--b1);
+}
+.deck-btn {
+  font-family: inherit; font-size: 11.5px;
+  padding: 5px 11px; border-radius: 6px;
+  background: var(--s2); border: 1px solid var(--b1); color: var(--t2);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.deck-btn:hover { background: var(--s3); color: var(--tx) }
+.deck-btn.primary { background: var(--search); border-color: var(--search); color: #fff; font-weight: 600 }
+.deck-btn.primary:hover { background: var(--search-d) }
+.deck-btn svg { width: 11px; height: 11px }
+.deck-speed { display: inline-flex; gap: 1px; padding: 2px; background: var(--s2); border: 1px solid var(--b1); border-radius: 6px }
+.deck-speed button { font-family: inherit; font-size: 10.5px; padding: 3px 8px; background: transparent; border: 0; color: var(--t3); cursor: pointer; border-radius: 4px }
+.deck-speed button.active { background: #fff; color: var(--tx); box-shadow: 0 1px 1px rgba(0,0,0,.04); font-weight: 500 }
+
+.annot {
+  position: fixed; right: 16px; bottom: 16px; z-index: 90;
+  width: 280px; background: var(--s1); border: 1px solid var(--b1); border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.06);
+  font-size: 11.5px; color: var(--t2); line-height: 1.55;
+  display: none;
+}
+body.show-annot .annot { display: block }
+.annot h4 {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em; color: var(--read-d);
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.annot ul { padding-left: 14px; margin-top: 4px }
+.annot li { margin-bottom: 5px; font-size: 11px; line-height: 1.5 }
+.annot li b { color: var(--tx); font-weight: 500 }
+.annot li .ms {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px; color: var(--t3); margin-right: 6px;
+}
+.annot .core {
+  background: var(--search-bg); padding: 8px 10px; border-radius: 6px;
+  margin-bottom: 8px; font-size: 11px; line-height: 1.5; color: var(--t2);
+}
+.annot .core b { color: var(--search-d, var(--search)) }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="rail">
+    <div class="rail-brand">A</div>
+    <button class="rail-btn active" title="Search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    </button>
+    <button class="rail-btn" title="Reading">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h6a2 2 0 0 1 2 2 2 2 0 0 1 2-2h6V4h-6a4 4 0 0 0-2 1 4 4 0 0 0-2-1H4z"/></svg>
+    </button>
+    <button class="rail-btn" title="Research">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+    </button>
+    <button class="rail-btn" title="Result">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+    </button>
+    <div class="rail-sep"></div>
+    <button class="rail-btn" title="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.08 7.08 4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.08-7.08 4.24-4.24"/></svg>
+    </button>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <span class="crumb crumb-start"><strong>Literature Review — Trust-region methods</strong></span>
+      <span class="crumb crumb-running">
+        <span>Search</span>
+        <svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>Agentic</span>
+        <svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <b class="run-id">Run #2451</b>
+      </span>
+      <div class="topbar-spacer"></div>
+      <div class="run-badge"><span class="dot"></span> Live · 1/32 · 1s</div>
+      <button class="top-action" title="Command">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
+      </button>
+      <div class="avatar">MP</div>
+    </header>
+
+    <div class="scroll">
+
+      <!-- ════════════════════════════════════════════════════
+           STAGE-HOME — Dashboard refined 그대로 (형태 변형 X)
+           click 시 통째로 fade-out 한다.
+      ════════════════════════════════════════════════════ -->
+      <div class="stage-home">
+        <div class="scroll-inner">
+          <section class="hero-wrap">
+            <form class="hero scout" id="hero-form" onsubmit="return false">
+              <span class="lead-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              </span>
+              <input type="text" value="Diffusion 모델의 LoRA fine-tuning에서 catastrophic forgetting을 완화하는 최신 방법론을 비교하고 trade-off를 정리해줘" />
+              <div class="submit" aria-label="Search mode">
+                <button type="button" class="sbtn active" data-mode="scout" id="agent-go" title="Agent Search">
+                  <svg width="14.5" height="14.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-3 6-6 3 3-6Z"/>
+                  </svg>
+                  Agent
+                </button>
+                <button type="button" class="sbtn" data-mode="keyword" title="Keyword Search">
+                  <svg width="14.5" height="14.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V4.5A1.5 1.5 0 0 1 5.5 3H20v16H5.5A1.5 1.5 0 0 1 4 17.5Z"/><path d="M8 7h8M8 11h6"/></svg>
+                  Keyword
+                </button>
+              </div>
+            </form>
+            <div class="scope-row">
+              <span class="scope-label">Target</span>
+              <span class="scope-chip">arXiv · cs.LG<span class="x">×</span></span>
+              <span class="scope-chip">NeurIPS '23–'25<span class="x">×</span></span>
+              <span class="scope-chip">OpenReview<span class="x">×</span></span>
+              <button class="scope-add">+ Add target</button>
+            </div>
+          </section>
+
+          <!-- Dashboard KPI / Charts -->
+          <div class="sec-head"><h2>Overview</h2><span class="hint">프로젝트 라이브러리 · 최근 30일</span></div>
+          <div class="kpi-grid">
+            <div class="kpi">
+              <div class="kpi-label">총 수집</div>
+              <div class="kpi-val">248</div>
+              <div class="kpi-sub"><span class="up">+14</span> · 지난 7일</div>
+              <svg class="kc-area" viewBox="0 0 120 30" preserveAspectRatio="none">
+                <defs><linearGradient id="gA" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#2a2a2e" stop-opacity=".14"/><stop offset="100%" stop-color="#2a2a2e" stop-opacity="0"/></linearGradient></defs>
+                <path d="M0,28 C18,27 26,23 48,20 C70,17 80,12 96,7 C106,4 114,2 120,1 L120,30 L0,30 Z" fill="url(#gA)"/>
+                <path d="M0,28 C18,27 26,23 48,20 C70,17 80,12 96,7 C106,4 114,2 120,1" fill="none" stroke="#2a2a2e" stroke-width="1.4"/>
+              </svg>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">폴더 지정</div>
+              <div class="kpi-val">154<span class="of">/248</span></div>
+              <div class="kpi-sub"><span class="down">94</span> 미분류</div>
+              <div class="kc-seg">
+                <span class="s" style="width:15%; background:#8957c9"></span>
+                <span class="s" style="width:13%; background:#5e9c6f"></span>
+                <span class="s" style="width:9%;  background:#c48a3e"></span>
+                <span class="s" style="width:8%;  background:#3fa8a1"></span>
+                <span class="s" style="width:7%;  background:#5e6ad2"></span>
+                <span class="dashed"></span>
+              </div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">Reading queue</div>
+              <div class="kpi-val">42</div>
+              <div class="kpi-sub"><span class="up">+6</span> · 대기</div>
+              <div class="kc-bars">
+                <span class="b dim" style="height:25%"></span>
+                <span class="b dim" style="height:38%"></span>
+                <span class="b" style="height:28%"></span>
+                <span class="b" style="height:52%"></span>
+                <span class="b" style="height:40%"></span>
+                <span class="b" style="height:74%"></span>
+                <span class="b" style="height:96%"></span>
+              </div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">수집 출처</div>
+              <div class="kpi-val">12 <span class="of">venues</span></div>
+              <div class="kpi-sub">NeurIPS 60 · 최다</div>
+              <div class="kc-seg">
+                <span class="s" style="width:24%; background:#2a2a2e"></span>
+                <span class="s" style="width:20%; background:#5e6ad2"></span>
+                <span class="s" style="width:18%; background:#5e9c6f"></span>
+                <span class="s" style="width:14%; background:#c48a3e"></span>
+                <span class="s" style="width:24%; background:#b0b0b8"></span>
+              </div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-label">PDF 수집</div>
+              <div class="kpi-val">56<span class="of">/248</span></div>
+              <div class="kpi-sub"><span class="down">192</span> 없음</div>
+              <div class="kc-seg">
+                <span class="s" style="width:23%; background:#5e9c6f"></span>
+                <span class="dashed"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="sec-head"><h2>Analytics</h2><span class="hint">수집 흐름 · 정리 진행도</span></div>
+          <div class="chart-row">
+            <article class="card">
+              <div class="card-head"><div><div class="card-title">수집 추이</div><div class="card-sub">기간별 수집 논문 수</div></div></div>
+              <svg class="chart-area" viewBox="0 0 640 130" preserveAspectRatio="none">
+                <defs><linearGradient id="gAr" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#5e9c6f" stop-opacity=".18"/><stop offset="100%" stop-color="#5e9c6f" stop-opacity="0"/></linearGradient></defs>
+                <g stroke="#efeeeb" stroke-width="1">
+                  <line x1="0" y1="24" x2="640" y2="24"/>
+                  <line x1="0" y1="65" x2="640" y2="65"/>
+                  <line x1="0" y1="106" x2="640" y2="106"/>
+                </g>
+                <path d="M0,108 L32,104 L64,98 L96,100 L128,88 L160,90 L192,82 L224,76 L256,72 L288,76 L320,66 L352,60 L384,52 L416,54 L448,44 L480,40 L512,36 L544,30 L576,26 L608,22 L640,16 L640,130 L0,130 Z" fill="url(#gAr)"/>
+                <path d="M0,108 L32,104 L64,98 L96,100 L128,88 L160,90 L192,82 L224,76 L256,72 L288,76 L320,66 L352,60 L384,52 L416,54 L448,44 L480,40 L512,36 L544,30 L576,26 L608,22 L640,16" fill="none" stroke="#5e9c6f" stroke-width="1.6"/>
+              </svg>
+            </article>
+            <article class="card">
+              <div class="card-head"><div><div class="card-title">워크플로우 상태</div><div class="card-sub">수집 → Reading</div></div></div>
+              <div class="funnel">
+                <div class="funnel-row"><span class="funnel-label">수집됨</span><div class="funnel-bar"><span style="width:100%; background:#2a2a2e"></span></div><span class="funnel-val mono">248</span></div>
+                <div class="funnel-row"><span class="funnel-label">폴더 지정</span><div class="funnel-bar"><span style="width:62%; background:var(--c-folder)"></span></div><span class="funnel-val mono">154</span></div>
+                <div class="funnel-row"><span class="funnel-label">태그 생성</span><div class="funnel-bar"><span style="width:58%; background:var(--c-tag)"></span></div><span class="funnel-val mono">144</span></div>
+                <div class="funnel-row"><span class="funnel-label">Reading 큐</span><div class="funnel-bar"><span style="width:17%; background:var(--c-queue)"></span></div><span class="funnel-val mono">42</span></div>
+                <div class="funnel-row"><span class="funnel-label">PDF 수집</span><div class="funnel-bar"><span style="width:23%; background:var(--c-pdf)"></span></div><span class="funnel-val mono">56</span></div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════
+           STAGE-RUN — home 이 fade-out 한 뒤 fade-in.
+           내부에서는 q-block → divider → card 순으로 stagger.
+      ════════════════════════════════════════════════════ -->
+      <div class="stage-run">
+        <div class="run-inner">
+
+          <div class="q-block">
+            <div class="q-run-line">
+              <span class="badge">Agentic Search</span>
+              <span>Run #2451 · 17:32 · 4단계 계획 (Reader → Reproduction → Experiment → Analyst)</span>
+              <span class="live-mark"><span class="dot"></span>진행 중</span>
+            </div>
+            <h1 class="q-text">Diffusion 모델의 LoRA fine-tuning에서 catastrophic forgetting을 완화하는 최신 방법론을 비교하고 trade-off를 정리해줘</h1>
+            <div class="q-pills">
+              <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v4l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>예상 4분</span>
+              <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12v9H2z M5 4V2 M11 4V2" stroke="currentColor" stroke-width="1.3"/></svg>arXiv · NeurIPS · OpenReview</span>
+              <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2v12 M2 8h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Reading 큐에 자동 저장</span>
+              <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 0 1.5-3.5" stroke="currentColor" stroke-width="1.3"/><path d="M3 4v3.5h3.5" stroke="currentColor" stroke-width="1.3"/></svg>중간 결과 자동 체크포인트</span>
+            </div>
+          </div>
+
+          <div class="phase-divider">
+            <div class="pd-inner"><span class="pd-tag">READER</span> 정의·지표 정렬 · 진행 중</div>
+          </div>
+
+          <div class="phase-card">
+            <div class="pc-h">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              핵심 정의 추출
+              <span class="step-cur">3 / 12 sources</span>
+            </div>
+            <ul class="pc-bullets">
+              <li><b>Catastrophic forgetting</b> — pre-trained 모델이 추가 학습 후 기존 분포에 대한 generative quality 를 잃는 현상.</li>
+              <li><b>LoRA</b> 의 low-rank 가정이 이 손실의 정도와 형태를 어떻게 제약하는지가 핵심 변수.</li>
+              <li>비교 축: <b>parameter footprint</b> · <b>concept retention</b> · <b>compose-ability</b><span class="pc-stream-cursor"></span></li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CONTROL DECK
+══════════════════════════════════════════════════════════════════ -->
+<div class="deck">
+  <span class="deck-title">전환 데모</span>
+  <button class="deck-btn primary" id="deck-play">
+    <svg viewBox="0 0 16 16" fill="none"><path d="M5 3l7 5-7 5z" fill="currentColor"/></svg>
+    재생
+  </button>
+  <button class="deck-btn" id="deck-reset">
+    <svg viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 0 1.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M3 4v3.5h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    처음부터
+  </button>
+  <span class="deck-speed" role="group">
+    <button id="sp-1x" class="active">1×</button>
+    <button id="sp-4x">0.25×</button>
+  </span>
+  <button class="deck-btn" id="deck-annot">
+    <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 7v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="5" r="1" fill="currentColor"/></svg>
+    의도 라벨
+  </button>
+</div>
+
+<div class="annot">
+  <h4>구성 — fade out → gap → fade in</h4>
+  <div class="core">
+    home 과 run 이 같은 위치에 stacked. <b>opacity 만 교차</b>, 형태 변형 없음.
+    <br>둘 사이 <b>140ms 호흡 간격</b>으로 잔상이 겹치지 않게.
+    <br>run 진입 후 q-block → divider → card 순 <b>stagger</b>.
+  </div>
+  <h4 style="margin-top:10px">타임라인</h4>
+  <ul>
+    <li><span class="ms mono">0</span><b>ring-out</b> · Agent 버튼 펄스 한 번</li>
+    <li><span class="ms mono">0~280</span><b>home fade-out</b> · pill+scope+dashboard 모두 opacity 1→0, 살짝 위로 8px</li>
+    <li><span class="ms mono">280~420</span><b>호흡 간격</b> · 둘 다 사라진 비어있는 구간 (어색한 겹침 방지)</li>
+    <li><span class="ms mono">420~780</span><b>run fade-in</b> · q-block opacity 0→1, 아래에서 6px 진입</li>
+    <li><span class="ms mono">600</span><b>phase divider</b> · 180ms 지연 stagger</li>
+    <li><span class="ms mono">740</span><b>phase card</b> · 320ms 지연 stagger</li>
+    <li><span class="ms mono">420~780</span><b>topbar crumb swap</b> · "Search › Agentic › Run #2451" 페이드 인</li>
+    <li><span class="ms mono">620~980</span><b>run-badge</b> · "Live · 1/32 · 1s" 등장</li>
+  </ul>
+</div>
+
+<script>
+const body = document.body;
+const goBtn = document.getElementById('agent-go');
+const playBtn = document.getElementById('deck-play');
+const resetBtn = document.getElementById('deck-reset');
+const annotBtn = document.getElementById('deck-annot');
+const sp1 = document.getElementById('sp-1x');
+const sp4 = document.getElementById('sp-4x');
+
+let t1;
+function start() {
+  body.classList.remove('is-run');
+  body.classList.add('is-pressed');
+  clearTimeout(t1);
+  t1 = setTimeout(() => body.classList.add('is-run'), 30);
+}
+function reset() {
+  clearTimeout(t1);
+  body.classList.remove('is-pressed', 'is-run');
+}
+
+goBtn.addEventListener('click', start);
+playBtn.addEventListener('click', () => { reset(); setTimeout(start, 80); });
+resetBtn.addEventListener('click', reset);
+annotBtn.addEventListener('click', () => body.classList.toggle('show-annot'));
+
+sp1.addEventListener('click', () => { sp1.classList.add('active'); sp4.classList.remove('active'); body.classList.remove('slow-mo'); });
+sp4.addEventListener('click', () => { sp4.classList.add('active'); sp1.classList.remove('active'); body.classList.add('slow-mo'); });
+
+body.classList.add('show-annot');
+</script>
+</body>
+</html>

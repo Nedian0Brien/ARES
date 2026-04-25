@@ -1,0 +1,2680 @@
+<!DOCTYPE html>
+<html lang="ko" data-view="chat" data-annot="false" data-spec="open" data-tab="spec" data-stage="running">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARES · Agentic Search · v3 (final)</title>
+<style>
+/* ════════════════════════════════════════════════════════════════
+   DESIGN TOKENS  ─ 모든 색·간격은 여기서만 정의한다.
+   Dashboard refined.html 과 동일한 토큰 세트를 공유해
+   ARES 시스템 전반의 시각적 일관성을 유지한다.
+══════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  /* surfaces */
+  --bg:   #fbfbfa;            /* app bg */
+  --sb:   #f5f5f4;            /* sidebar / rail bg */
+  --s1:   #ffffff;            /* card surface 1 (raised) */
+  --s2:   #f7f7f6;            /* card surface 2 (recessed) */
+  --s3:   #f0efed;            /* divider/chip bg */
+  --b1:   #e8e8e6;            /* border default */
+  --b2:   #d4d4d2;            /* border emphasis */
+
+  /* typography */
+  --tx:   #0a0a0b;            /* primary text */
+  --t2:   #4a4a50;            /* secondary text */
+  --t3:   #8a8a92;            /* tertiary / labels */
+  --t4:   #b0b0b8;            /* placeholder */
+
+  /* brand semantics — ARES System tokens */
+  --search:   #5e9c6f;        /* Agentic Search 메인 컬러 */
+  --search-d: #4e8a5e;
+  --search-bg: rgba(94,156,111,.10);
+  --read:     #5e6ad2;        /* Reading 메인 컬러 */
+  --read-d:   #4e5ac2;
+  --accent:   #5e6ad2;        /* generic accent (=read) */
+  --warn:     #c87f3a;        /* 경고 / 미수집 강조 */
+
+  /* Graph node taxonomy — 이 색은 노드 종류와 1:1 대응 */
+  --n-q:        #18181b;                    /* Question root */
+  --n-think:    #6b5fc7;                    /* Thinking */
+  --n-think-bg: rgba(107,95,199,.10);
+  --n-srch:     #3b82c4;                    /* Search */
+  --n-srch-bg:  rgba(59,130,196,.10);
+  --n-src:      #4a4a50;                    /* Source */
+  --n-src-bg:   rgba(74,74,80,.06);
+  --n-ans:      #5e9c6f;                    /* Answer = search 톤과 동일 */
+  --n-ans-bg:   rgba(94,156,111,.10);
+  --n-fu:       #d68a3c;                    /* Follow-up / Conflict */
+}
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
+  font-feature-settings: 'cv11','ss01','ss03';
+  background: var(--bg); color: var(--tx);
+  font-size: 13px; letter-spacing: -.006em; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; cursor: pointer; border: 0; background: transparent; }
+.mono { font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace; font-feature-settings: 'zero'; }
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-thumb { background:#d8d7d3; border-radius:3px }
+::-webkit-scrollbar-thumb:hover { background:#b8b7b3 }
+
+/* ────────────────────────────────────────────────────────
+   GLOBAL ANIMATIONS
+─────────────────────────────────────────────────────────── */
+@keyframes pulse     { 0%,100%{opacity:1} 50%{opacity:.38} }
+@keyframes fade-up   { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+@keyframes node-pop  { from{opacity:0;transform:translate(-50%,-50%) scale(.68)} to{opacity:1;transform:translate(-50%,-50%) scale(1)} }
+@keyframes blink     { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+@keyframes spin      { to{ transform: rotate(360deg) } }
+@keyframes ring-out  { 0%{box-shadow:0 0 0 0 rgba(59,130,196,.6)} 100%{box-shadow:0 0 0 12px rgba(59,130,196,0)} }
+@keyframes fresh-ring{ 0%{opacity:.7;transform:translate(-50%,-50%) scale(.9)} 100%{opacity:0;transform:translate(-50%,-50%) scale(1.1)} }
+@keyframes edge-fade { from{opacity:0} to{opacity:1} }
+
+/* ════════════════════════════════════════════════════════════════
+   APP SHELL  ─ Dashboard refined.html 과 동일 구조
+   .app : grid 56px 1fr
+   .rail: 좌측 고정 네비 레일 (브랜드 마크 + 섹션 진입)
+   .main: 상단 topbar(44px) + 콘텐츠
+══════════════════════════════════════════════════════════════════ */
+.app  { display: grid; grid-template-columns: 56px 1fr; height: 100vh; }
+.main { display: flex; flex-direction: column; min-width: 0; overflow: hidden }
+
+/* ── Rail ─────────────────────────────────────────────── */
+.rail {
+  background: var(--sb); border-right: 1px solid var(--b1);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px 0; gap: 2px;
+}
+.rail-brand {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: linear-gradient(135deg, #2a2a2e, #0a0a0b);
+  color: #fff; display: grid; place-items: center;
+  font-weight: 700; font-size: 12px; letter-spacing: -.02em;
+  margin-bottom: 10px;
+}
+.rail-btn {
+  width: 36px; height: 36px; border-radius: 6px;
+  display: grid; place-items: center;
+  color: var(--t3); cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.rail-btn:hover { background: rgba(0,0,0,.04); color: var(--t2) }
+.rail-btn.active { background: var(--s1); color: var(--tx); box-shadow: 0 0 0 1px var(--b1) }
+.rail-btn svg { width:15px; height:15px }
+.rail-sep { flex: 1 }
+.rail-mode-tag {
+  font-size: 8.5px; font-weight: 600; letter-spacing: .06em;
+  color: var(--search); background: var(--search-bg);
+  padding: 2px 5px; border-radius: 4px; margin-top: 6px;
+  writing-mode: vertical-rl; transform: rotate(180deg);
+}
+
+/* ── Topbar (44px) ─────────────────────────────────────── */
+.topbar {
+  height: 44px; flex-shrink: 0; border-bottom: 1px solid var(--b1);
+  background: rgba(251,251,250,.92); backdrop-filter: blur(10px) saturate(140%);
+  display: flex; align-items: center; gap: 11px; padding: 0 16px 0 12px;
+  z-index: 20;
+}
+.crumb { font-size: 12px; color: var(--t3); display: flex; align-items: center; gap: 5px }
+.crumb svg { width: 11px; height: 11px; opacity: .45 }
+.crumb b { color: var(--tx); font-weight: 500 }
+.crumb .run-id { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px }
+
+.view-toggle {
+  display: flex; align-items: center;
+  background: var(--s2); border: 1px solid var(--b1);
+  border-radius: 8px; padding: 3px; gap: 2px; margin-left: 14px;
+}
+.vt-btn {
+  height: 26px; padding: 0 11px; border-radius: 5px;
+  font-size: 11.5px; font-weight: 500; color: var(--t2);
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: background 120ms, color 120ms, box-shadow 120ms;
+}
+.vt-btn svg { width: 12px; height: 12px; opacity: .65 }
+.vt-btn:hover { color: var(--tx) }
+.vt-btn.active { background: var(--s1); color: var(--tx); box-shadow: 0 1px 2px rgba(0,0,0,.06) }
+.vt-btn.active svg { opacity: 1 }
+.spacer { flex: 1 }
+
+.run-badge {
+  font-size: 11.5px; color: var(--t2); padding: 4px 11px;
+  background: var(--search-bg); border-radius: 999px;
+  border: 1px solid rgba(94,156,111,.2);
+  display: flex; align-items: center; gap: 7px;
+}
+.run-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--search); animation: pulse 1.4s ease-in-out infinite }
+
+.tb-btn {
+  font-size: 11.5px; height: 28px; padding: 0 11px; border-radius: 999px;
+  background: var(--s1); border: 1px solid var(--b1); color: var(--t2);
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.tb-btn:hover { background: var(--s2); color: var(--tx) }
+.tb-btn svg { width: 12px; height: 12px }
+[data-annot="true"] #annot-btn { background:#f0f4ff; border-color:#c5cefc; color:#4a55c7 }
+[data-spec="open"] #spec-btn   { background:rgba(94,106,210,.08); border-color:rgba(94,106,210,.32); color:var(--read-d) }
+
+.iconbtn {
+  width: 28px; height: 28px; border-radius: 6px;
+  display: inline-grid; place-items: center;
+  color: var(--t3); transition: background 120ms, color 120ms;
+}
+.iconbtn:hover { background: var(--s2); color: var(--t2) }
+.avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: linear-gradient(135deg, #d4b37a, #a67c3f);
+  color: #fff; display: grid; place-items: center;
+  font-size: 10.5px; font-weight: 600;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ENTRY FLOW (Stage system)  ─ 검색 홈에서 에이전틱 서치까지의
+   3단계 전환을 표현한다.
+
+     [data-stage="home"]    Dashboard refined의 hero pill을 그대로 재현.
+                            입력에 포커스되면 아래로 "예상 계획 프리뷰"가
+                            자동 펼쳐진다 (실행 전 신뢰감 + 즉시 수정 진입).
+
+     [data-stage="plan"]    pill이 위로 압축되며 편집 가능한 Run Plan 카드가
+                            펼쳐진다. 단계 추가/삭제, 단계별 출처 변경, 깊이
+                            조절을 통해 실행 직전에 마지막으로 다듬는다.
+
+     [data-stage="running"] 기존 cb-v3의 chat/graph 뷰. Plan 카드는 Q header로
+                            collapse된다.
+
+   디자인 원칙:
+     ① pill이 시각적 anchor 역할을 한다 — 같은 모양/위치에서 출발해
+        plan으로 갈 때 위로 압축, running으로 갈 때 Q header에 흡수된다.
+     ② scope chips → plan card의 source picker → Q header의 q-pills로
+        같은 의미가 형태만 바뀌어 따라간다.
+     ③ 사용자가 "실행 후 끼어들기"를 하기 전에, 실행 직전에 가볍게
+        수정할 수 있는 사전 게이트(plan stage)를 둔다.
+══════════════════════════════════════════════════════════════════ */
+
+/* stage container 가시성 — running 시 home/plan 숨기고 view-chat/graph 노출 */
+.stage-home, .stage-plan { display: none }
+[data-stage="home"] .stage-home { display: flex }
+[data-stage="plan"] .stage-plan { display: flex }
+[data-stage="home"] .view-chat,
+[data-stage="home"] .view-graph,
+[data-stage="plan"] .view-chat,
+[data-stage="plan"] .view-graph { display: none !important }
+
+/* topbar 안의 chat/graph view-toggle 도 home/plan 단계에선 의미 없음 */
+[data-stage="home"] .view-toggle,
+[data-stage="plan"] .view-toggle { display: none }
+[data-stage="home"] .run-badge,
+[data-stage="plan"] .run-badge  { display: none }
+[data-stage="home"] #annot-btn,
+[data-stage="plan"] #annot-btn  { display: none }
+[data-stage="home"] #spec-btn,
+[data-stage="plan"] #spec-btn   { display: none }
+
+/* topbar 의 dynamic crumb — stage 별로 다른 텍스트 표시 */
+.crumb-running { display: none }
+[data-stage="running"] .crumb-running { display: inline-flex; align-items: center; gap: 5px }
+[data-stage="running"] .crumb-home    { display: none }
+.crumb-home .stage-step {
+  font-size: 11px; padding: 3px 8px; border-radius: 999px;
+  color: var(--t3); transition: background 120ms, color 120ms;
+}
+.crumb-home .stage-step.active { color: var(--tx); background: var(--s2); font-weight: 500 }
+.crumb-home .stage-step:hover:not(.active) { color: var(--t2); background: var(--s2) }
+.crumb-home .stage-arr { color: var(--t4); font-size: 11px; margin: 0 1px }
+
+/* ── Stage container shells ─────────────────────────────── */
+.stage-home, .stage-plan {
+  flex: 1; min-height: 0; overflow-y: auto;
+  flex-direction: column; align-items: center;
+  padding: 36px 32px 80px;
+}
+.sh-container, .sp-container {
+  width: 100%; max-width: 880px; display: flex; flex-direction: column; gap: 22px;
+  animation: fade-up 280ms ease-out both;
+}
+
+/* ── Stage intent block (설명 카드) ──────────────────────── */
+.stage-intent {
+  background: linear-gradient(135deg, rgba(94,106,210,.05), rgba(94,156,111,.04));
+  border: 1px solid rgba(94,106,210,.16); border-radius: 12px;
+  padding: 14px 18px;
+}
+.stage-intent .si-tag {
+  display: inline-block;
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  color: var(--read-d); padding: 2px 7px;
+  background: rgba(94,106,210,.10); border-radius: 4px;
+  margin-bottom: 6px;
+}
+.stage-intent h2 {
+  font-size: 14px; font-weight: 600; color: var(--tx); letter-spacing: -.012em;
+  margin-bottom: 5px;
+}
+.stage-intent p { font-size: 12px; color: var(--t2); line-height: 1.6 }
+.stage-intent b  { color: var(--tx); font-weight: 500 }
+
+/* ════════════════════════════════════════════════════════════════
+   STAGE 1: HOME — Dashboard refined의 hero pill 재현
+══════════════════════════════════════════════════════════════════ */
+.hero-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  margin-top: 12px;
+}
+.hero {
+  display: flex; align-items: center;
+  background: #fff; border: 1px solid var(--b1); border-radius: 999px;
+  padding: 6px 6px 6px 18px; gap: 10px;
+  width: min(680px, 100%);
+  transition: border-color 220ms, box-shadow 220ms, transform 280ms cubic-bezier(.4,0,.2,1);
+}
+.hero input {
+  background: transparent; border: 0; outline: 0; flex: 1; min-width: 0;
+  font-size: 14px; color: var(--tx); padding: 4px 0; font-family: inherit;
+}
+.hero input::placeholder { color: var(--t4) }
+.hero.scout { border-color: rgba(94,156,111,.32); box-shadow: 0 1px 2px rgba(0,0,0,.02), 0 8px 28px rgba(94,156,111,.08) }
+.hero.scout:focus-within { border-color: var(--search); box-shadow: 0 0 0 3px rgba(94,156,111,.14), 0 8px 28px rgba(94,156,111,.10) }
+.hero .lead-icon { display: inline-flex; color: var(--t3); flex-shrink: 0 }
+.hero .submit { display: inline-flex; align-items: stretch; border-radius: 999px; padding: 3px; gap: 3px; flex-shrink: 0; background: rgba(94,156,111,.10) }
+.hero .sbtn {
+  border: 0; background: transparent; color: var(--t3);
+  font-size: 12.5px; font-weight: 550;
+  min-width: 30px; height: 30px; padding: 0 6px;
+  border-radius: 999px; display: inline-flex; align-items: center; gap: 5px;
+  transition: background 240ms, color 200ms, padding 280ms cubic-bezier(.4,0,.2,1);
+  white-space: nowrap;
+}
+.hero .sbtn:hover:not(.active) { color: var(--tx); background: rgba(0,0,0,.04) }
+.hero .sbtn.active[data-mode="scout"] {
+  background: var(--search); color: #fff; font-weight: 600;
+  padding: 7px 12px; box-shadow: 0 1px 2px rgba(94,156,111,.28), 0 2px 10px rgba(94,156,111,.25);
+}
+.hero .sbtn svg { width: 13px; height: 13px }
+
+/* scope chips — Dashboard와 동일 패턴 */
+.scope-row {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap; justify-content: center;
+  max-width: 680px;
+}
+.scope-label { font-size: 11px; color: var(--t3); margin-right: 2px }
+.scope-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 11px;
+  background: var(--s2); border: 1px solid var(--b1);
+  font-size: 11px; color: var(--t2);
+}
+.scope-chip .x { color: var(--t4); margin-left: 2px; cursor: pointer; font-size: 10px }
+.scope-add {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 9px; border-radius: 11px;
+  background: transparent; border: 1px dashed var(--b2);
+  font-size: 11px; color: var(--t3); cursor: pointer;
+}
+.scope-add:hover { border-color: var(--t3); color: var(--t2) }
+
+/* ── Plan preview peek ─ 입력 시 자동으로 슬라이드 다운 ── */
+.plan-peek {
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 12px;
+  padding: 16px 18px; margin-top: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.04);
+  animation: fade-up 320ms cubic-bezier(.4,0,.2,1) 80ms both;
+}
+.pp-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px }
+.pp-tag {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--search);
+  background: var(--search-bg); padding: 3px 8px; border-radius: 4px;
+}
+.pp-info { font-size: 11.5px; color: var(--t2) }
+.pp-info b { color: var(--tx); font-weight: 500 }
+
+.pp-phases {
+  display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+  gap: 8px; align-items: stretch;
+  margin-bottom: 14px;
+}
+.pp-ph {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 11px; border-radius: 8px;
+  background: var(--s2); border: 1px solid var(--b1);
+  min-width: 0;
+}
+.pp-num {
+  width: 18px; height: 18px; border-radius: 4px;
+  display: grid; place-items: center;
+  font-size: 10.5px; font-weight: 600; color: #fff; flex-shrink: 0;
+}
+.pp-ph.reader  .pp-num, .pc-pn.reader  { background: var(--n-srch) }
+.pp-ph.repro   .pp-num, .pc-pn.repro   { background: var(--n-fu) }
+.pp-ph.exper   .pp-num, .pc-pn.exper   { background: var(--n-think) }
+.pp-ph.analyst .pp-num, .pc-pn.analyst { background: var(--search) }
+.pp-ph-body { flex: 1; min-width: 0 }
+.pp-ph-name {
+  font-size: 11.5px; font-weight: 600; color: var(--tx);
+  letter-spacing: -.005em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pp-ph-desc {
+  font-size: 10.5px; color: var(--t3); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pp-time { font-size: 10px; color: var(--t3); font-variant-numeric: tabular-nums; flex-shrink: 0 }
+.pp-arr { color: var(--t4); font-size: 13px; align-self: center }
+
+.pp-foot {
+  display: flex; align-items: center; gap: 12px;
+  padding-top: 12px; border-top: 1px dashed var(--b1);
+  flex-wrap: wrap;
+}
+.pp-foot-info { font-size: 11px; color: var(--t3); flex: 1; min-width: 220px }
+.pp-foot-actions { display: flex; gap: 6px }
+.pp-edit, .pp-launch {
+  font-size: 12px; height: 30px; padding: 0 14px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 4px;
+  cursor: pointer; transition: background 120ms, color 120ms, box-shadow 120ms;
+}
+.pp-edit { background: var(--s1); border: 1px solid var(--b1); color: var(--t2) }
+.pp-edit:hover { background: var(--s2); color: var(--tx) }
+.pp-launch {
+  background: var(--search); border: 1px solid var(--search);
+  color: #fff; font-weight: 600;
+  box-shadow: 0 1px 2px rgba(94,156,111,.28), 0 2px 10px rgba(94,156,111,.22);
+}
+.pp-launch:hover { background: var(--search-d) }
+
+/* ── Quick templates ─ 최근 패턴에서 시작 ─────────────── */
+.qt-section { margin-top: 6px }
+.qt-head {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--t3);
+  margin-bottom: 8px;
+}
+.qt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px }
+.qt-card {
+  text-align: left; padding: 12px 14px;
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 10px;
+  cursor: pointer; transition: border-color 140ms, box-shadow 140ms, transform 120ms;
+}
+.qt-card:hover { border-color: var(--b2); box-shadow: 0 2px 10px rgba(0,0,0,.04); transform: translateY(-1px) }
+.qt-name { font-size: 12.5px; font-weight: 600; color: var(--tx); margin-bottom: 3px }
+.qt-desc { font-size: 11.5px; color: var(--t2); margin-bottom: 8px; line-height: 1.5 }
+.qt-meta { font-size: 10.5px; color: var(--t4); font-variant-numeric: tabular-nums }
+
+/* ════════════════════════════════════════════════════════════════
+   STAGE 2: PLAN — 압축된 pill + 편집 가능한 Run Plan 카드
+══════════════════════════════════════════════════════════════════ */
+.hero-mini {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1px solid var(--b1); border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.03);
+  animation: fade-up 280ms ease-out both;
+}
+.hm-icon { display: inline-flex; color: var(--search); flex-shrink: 0 }
+.hm-icon svg { width: 14px; height: 14px }
+.hm-q {
+  flex: 1; min-width: 0; font-size: 13px; color: var(--tx);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hm-edit {
+  font-size: 11.5px; padding: 4px 10px; border-radius: 999px;
+  background: var(--s2); border: 1px solid var(--b1); color: var(--t2);
+  cursor: pointer; flex-shrink: 0;
+}
+.hm-edit:hover { background: var(--s3); color: var(--tx) }
+
+/* Plan card — 편집 가능한 실행 계획 */
+.plan-card {
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(0,0,0,.05);
+  overflow: hidden;
+}
+.pc-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 16px 20px; border-bottom: 1px solid var(--b1);
+}
+.pc-head h3 {
+  font-size: 13px; font-weight: 600; color: var(--tx); letter-spacing: -.005em;
+  flex: 1; min-width: 0;
+}
+.pc-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap }
+.pc-budget {
+  font-size: 11px; color: var(--t2);
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--s2); border: 1px solid var(--b1);
+  font-variant-numeric: tabular-nums;
+}
+.pc-depth { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--t3) }
+.pc-depth-group {
+  display: inline-flex; gap: 1px; padding: 2px;
+  background: var(--s2); border: 1px solid var(--b1); border-radius: 6px;
+}
+.pc-depth-btn {
+  font-size: 10.5px; font-weight: 500; color: var(--t3);
+  padding: 3px 9px; border-radius: 4px; cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.pc-depth-btn:hover { color: var(--t2) }
+.pc-depth-btn.active { background: #fff; color: var(--tx); box-shadow: 0 1px 1px rgba(0,0,0,.04) }
+
+/* Plan phases list — drag, source picker, remove */
+.pc-phases {
+  padding: 10px 14px 14px;
+  display: flex; flex-direction: column; gap: 0;
+}
+.pc-ph {
+  display: grid;
+  grid-template-columns: 16px 22px 1fr auto 22px;
+  align-items: center; gap: 10px;
+  padding: 11px 6px;
+  border-bottom: 1px dashed var(--b1);
+}
+.pc-ph:last-of-type { border-bottom: 0 }
+.pc-drag {
+  color: var(--t4); cursor: grab;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pc-drag svg { width: 11px; height: 11px }
+.pc-pn {
+  width: 22px; height: 22px; border-radius: 5px;
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 600; color: #fff;
+}
+.pc-pb { min-width: 0 }
+.pc-pname { font-size: 12.5px; font-weight: 600; color: var(--tx); margin-bottom: 4px }
+.pc-psrc { display: flex; gap: 4px; flex-wrap: wrap; align-items: center }
+.pc-src-tag {
+  font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
+  background: var(--s2); border: 1px solid var(--b1); color: var(--t2);
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.pc-src-tag .pc-src-x { color: var(--t4); font-size: 10px; cursor: pointer; margin-left: 2px }
+.pc-src-add {
+  font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
+  background: transparent; border: 1px dashed var(--b2); color: var(--t3);
+  cursor: pointer;
+}
+.pc-src-add:hover { border-color: var(--t3); color: var(--t2) }
+.pc-time {
+  font-size: 11px; color: var(--t3);
+  font-variant-numeric: tabular-nums;
+}
+.pc-rm {
+  width: 22px; height: 22px; border-radius: 5px;
+  color: var(--t4); display: inline-grid; place-items: center;
+  cursor: pointer; transition: background 120ms, color 120ms;
+}
+.pc-rm:hover { background: rgba(200,127,58,.10); color: var(--warn) }
+.pc-rm svg { width: 11px; height: 11px }
+
+.pc-add-ph {
+  margin: 6px 6px 0;
+  font-size: 11.5px; padding: 8px 12px; border-radius: 8px;
+  background: transparent; border: 1px dashed var(--b2); color: var(--t3);
+  cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 6px;
+}
+.pc-add-ph:hover { border-color: var(--t3); color: var(--t2); background: var(--s2) }
+
+/* Plan card footer */
+.pc-foot {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 20px; border-top: 1px solid var(--b1);
+  background: var(--bg);
+}
+.pc-checks { display: flex; flex-wrap: wrap; gap: 14px; flex: 1; min-width: 220px }
+.pc-checks label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--t2); cursor: pointer;
+}
+.pc-checks input { width: 13px; height: 13px; accent-color: var(--search) }
+.pc-actions { display: flex; gap: 6px }
+.pc-cancel {
+  font-size: 12px; height: 32px; padding: 0 14px; border-radius: 999px;
+  background: var(--s1); border: 1px solid var(--b1); color: var(--t2);
+  cursor: pointer;
+}
+.pc-cancel:hover { background: var(--s2); color: var(--tx) }
+.pc-launch-btn {
+  font-size: 12px; font-weight: 600; height: 32px; padding: 0 16px; border-radius: 999px;
+  background: var(--search); border: 1px solid var(--search); color: #fff;
+  display: inline-flex; align-items: center; gap: 5px;
+  cursor: pointer; transition: background 120ms, box-shadow 120ms;
+  box-shadow: 0 1px 2px rgba(94,156,111,.28), 0 2px 10px rgba(94,156,111,.22);
+}
+.pc-launch-btn:hover { background: var(--search-d) }
+.pc-launch-btn svg { width: 12px; height: 12px }
+
+/* ────────────────────────────────────────────────────────
+   Stage transition micro-animations:
+   - hero pill 이 home → plan으로 갈 때 위로 압축되는 느낌
+     (실제로는 다른 element이지만 같은 위치에 놓아 시각적으로 morph 한다)
+─────────────────────────────────────────────────────────── */
+[data-stage="plan"] .sp-container > .stage-intent { animation-delay: 0ms }
+[data-stage="plan"] .sp-container > .hero-mini    { animation-delay: 60ms }
+[data-stage="plan"] .sp-container > .plan-card    { animation-delay: 140ms }
+
+/* ════════════════════════════════════════════════════════════════
+   CHAT VIEW
+   레이아웃 의도:
+     ┌───────────── chat-scroll (max-w 740px) ─────────────┬── spec-panel ──┐
+     │  Q header → Phase divider → Agent turn → ...        │  (collapsible) │
+     └─────────────────────────────────────────────────────┴────────────────┘
+   spec-panel은 우측에서 펼쳐지는 "설계 의도" 도크.
+   topbar의 [Spec] 버튼으로 토글하며, 구현 단계의 reference panel 역할.
+══════════════════════════════════════════════════════════════════ */
+.view-chat {
+  flex: 1; min-height: 0; position: relative;
+  display: grid; grid-template-columns: 1fr 0;
+  transition: grid-template-columns 280ms cubic-bezier(.4,0,.2,1);
+}
+[data-view="graph"] .view-chat { display: none }
+[data-spec="open"][data-view="chat"] .view-chat { grid-template-columns: 1fr 320px }
+
+.chat-area { position: relative; overflow: hidden; display: flex; flex-direction: column }
+.chat-scroll { overflow-y: auto; padding: 32px 0 180px; flex: 1 }
+.chat-inner  { max-width: 740px; margin: 0 auto; padding: 0 16px }
+
+/* ── Q header ─────────────────────────────────────────── */
+.q-block { margin-bottom: 28px; animation: fade-up 300ms ease-out both }
+.q-run-line {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  font-size: 11px; color: var(--t3);
+}
+.q-run-line .badge {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 4px; color: var(--search); background: var(--search-bg);
+}
+h1.q-text {
+  font-size: 22px; font-weight: 600; letter-spacing: -.018em; line-height: 1.32;
+  margin-bottom: 12px;
+}
+.q-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px }
+.q-pill {
+  font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
+  background: var(--s1); border: 1px solid var(--b1); color: var(--t2);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.q-pill svg { width: 11px; height: 11px; color: var(--t3) }
+.q-graph-hint {
+  font-size: 11.5px; color: var(--search); cursor: pointer;
+  text-decoration: underline; text-decoration-style: dotted; margin-top: 8px;
+  display: inline-block;
+}
+
+/* ── Phase divider ────────────────────────────────────── */
+.phase-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 22px 0 18px; font-size: 11px; color: var(--t3);
+  animation: fade-up 300ms ease-out both;
+}
+.phase-divider::before, .phase-divider::after { content: ''; flex: 1; height: 1px; background: var(--b1) }
+.pd-inner { display: flex; align-items: center; gap: 6px; flex-shrink: 0 }
+.pd-tag {
+  font-size: 10px; font-weight: 600; letter-spacing: .07em; padding: 2px 7px; border-radius: 4px;
+}
+.pd-tag.reader   { background: rgba(59,130,196,.1); color: var(--n-srch) }
+.pd-tag.repro    { background: rgba(214,138,60,.1); color: var(--n-fu) }
+.pd-tag.exper    { background: rgba(107,95,199,.1); color: var(--n-think) }
+.pd-tag.analyst  { background: var(--search-bg);    color: var(--search) }
+
+/* ── Design intent banner (chat 진입 시 1회 노출) ─────── */
+.intent-banner {
+  background: linear-gradient(135deg, rgba(94,106,210,.06), rgba(94,156,111,.04));
+  border: 1px solid rgba(94,106,210,.18); border-radius: 12px;
+  padding: 14px 16px; margin: 0 0 24px;
+  position: relative; animation: fade-up 280ms ease-out both;
+}
+.intent-banner h3 {
+  font-size: 12px; font-weight: 600; color: var(--read-d);
+  letter-spacing: .04em; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 6px;
+}
+.intent-banner h3 svg { width: 13px; height: 13px }
+.intent-banner p {
+  font-size: 12px; color: var(--t2); line-height: 1.6;
+}
+.intent-banner p + p { margin-top: 6px }
+.intent-banner b { color: var(--tx); font-weight: 500 }
+.intent-banner .ib-close {
+  position: absolute; top: 10px; right: 10px;
+  width: 22px; height: 22px; border-radius: 5px;
+  display: inline-grid; place-items: center;
+  color: var(--t3);
+}
+.intent-banner .ib-close:hover { background: rgba(0,0,0,.04); color: var(--tx) }
+.intent-banner.dismissed { display: none }
+
+/* ── User message ─────────────────────────────────────── */
+.user-msg {
+  display: flex; justify-content: flex-end; margin-bottom: 20px;
+  animation: fade-up 250ms ease-out both;
+}
+.user-bubble {
+  background: var(--tx); color: #fff;
+  border-radius: 18px 18px 4px 18px;
+  padding: 10px 15px; font-size: 13.5px; line-height: 1.5;
+  max-width: 75%;
+}
+
+/* ── Agent turn ──────────────────────────────────────────
+   설계: 에이전트 응답은 버블 없이 흰 배경에 prose 형태로 흐른다.
+   이유: 연구 분석 텍스트는 길고 구조적이므로 버블로 가두지 않는다.
+        consumer chatbot이 아니라 research workbench임을 시각적으로 구분한다.
+─────────────────────────────────────────────────────────── */
+.agent-turn { margin-bottom: 22px; animation: fade-up 280ms ease-out both }
+.agent-label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 11.5px; color: var(--t3) }
+.agent-label .av {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--tx); color: #fff; font-size: 10px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.agent-label .name { font-weight: 500; color: var(--t2) }
+.agent-label .ts { font-size: 10.5px; color: var(--t4) }
+
+.agent-prose { font-size: 13.5px; color: var(--t2); line-height: 1.68; margin-bottom: 14px }
+.agent-prose p + p { margin-top: 10px }
+.agent-prose em { color: var(--tx); font-style: normal; font-weight: 500 }
+.agent-prose sup {
+  font-size: 9.5px; font-weight: 600; color: var(--search); background: var(--search-bg);
+  border-radius: 3px; padding: 0 3px; margin: 0 1px; cursor: pointer;
+  vertical-align: super; line-height: 1;
+}
+.agent-prose sup:hover { background: rgba(94,156,111,.22) }
+.agent-prose.live p:last-child::after {
+  content: '▍'; display: inline-block; margin-left: 2px;
+  color: var(--n-srch); animation: blink .9s steps(1) infinite; font-weight: 600;
+}
+
+/* ── Action line (도구 호출 인라인 표시) ─────────────────
+   설계: 에이전트가 tool_use를 발화할 때마다 한 줄짜리 칩으로 노출.
+   요소: [icon] code(tool_name) "args" [count] [status]
+   status: ✓ ok · run(pulsing) · err(red)
+─────────────────────────────────────────────────────────── */
+.action-line {
+  display: inline-flex; align-items: center; gap: 8px; margin: 6px 0;
+  background: var(--s2); border: 1px solid var(--b1); border-radius: 8px;
+  padding: 6px 11px; font-size: 12px; color: var(--t2); max-width: 100%;
+}
+.action-line .act-ic { width: 14px; height: 14px; flex-shrink: 0; color: var(--t3) }
+.action-line code {
+  font-family: ui-monospace, monospace; font-size: 11px;
+  color: var(--n-srch); background: rgba(59,130,196,.08);
+  border-radius: 3px; padding: 1px 5px;
+}
+.action-line .ok  { margin-left: auto; color: var(--search); font-size: 11px; font-weight: 500; flex-shrink: 0 }
+.action-line .run { margin-left: auto; color: var(--n-srch); font-size: 11px; flex-shrink: 0; animation: pulse 1.4s ease-in-out infinite }
+.action-line .cnt { background: var(--s3); border-radius: 3px; padding: 0 5px; font-size: 11px }
+.action-group { margin: 10px 0; display: flex; flex-direction: column; gap: 4px }
+
+/* ── Snippet cards (Source 후보) ─────────────────────────
+   설계: 카드 클릭 = "이 논문을 다음 질문에 컨텍스트로 포함".
+   선택된 카드는 아래 ctx-bar에 chip으로 누적되어
+   사용자가 에이전트의 컨텍스트 윈도우를 직접 편집한다.
+─────────────────────────────────────────────────────────── */
+.snippet-row { display: flex; gap: 8px; margin: 12px 0; overflow-x: auto; padding-bottom: 4px }
+.snippet-row::-webkit-scrollbar { height: 4px }
+.snippet-card {
+  flex-shrink: 0; width: 220px;
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 10px;
+  padding: 10px 12px; cursor: pointer; transition: border-color 120ms, background 120ms;
+}
+.snippet-card:hover { border-color: var(--b2); background: var(--s2) }
+.snippet-card.selected { border-color: var(--search); background: rgba(94,156,111,.04) }
+.snippet-card .s-tag { font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--t3); margin-bottom: 5px }
+.snippet-card .s-ttl { font-size: 12px; font-weight: 500; line-height: 1.38; color: var(--tx) }
+.snippet-card .s-meta { font-size: 10.5px; color: var(--t3); margin-top: 5px; display: flex; gap: 6px; align-items: center }
+.snippet-card .s-meta .vn { background: var(--s3); border-radius: 3px; padding: 0 4px; font-size: 10px }
+.snippet-card .s-sel { margin-left: auto; color: var(--search); font-size: 11px; font-weight: 500 }
+
+/* ── Claim card (에이전트의 핵심 발견 요약) ────────────── */
+.claim-card {
+  background: rgba(94,156,111,.06); border: 1px solid rgba(94,156,111,.22);
+  border-radius: 10px; padding: 12px 14px; margin: 12px 0;
+}
+.claim-card .cl-lbl { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--search); margin-bottom: 5px }
+.claim-card .cl-text { font-size: 13px; font-weight: 500; color: var(--tx); line-height: 1.45 }
+.claim-card .cl-meta { font-size: 11px; color: var(--t3); margin-top: 6px }
+
+/* ── Conflict card (소스 간 충돌 경고) ─────────────────── */
+.conflict-card {
+  background: rgba(214,138,60,.06); border: 1px solid rgba(214,138,60,.22);
+  border-radius: 10px; padding: 10px 14px; margin: 10px 0;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.conflict-card .cf-ic { flex-shrink: 0; margin-top: 1px; color: var(--n-fu) }
+.conflict-card .cf-text { font-size: 12.5px; color: var(--t2); line-height: 1.45 }
+.conflict-card .cf-text b { color: var(--tx); font-weight: 500 }
+
+/* ── Working / live status ───────────────────────────── */
+.working-line {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 12px; font-size: 12px; color: var(--t3);
+  margin: 6px 0; animation: fade-up 200ms ease-out both;
+}
+.working-line .spin-ic { width: 14px; height: 14px; border: 2px solid var(--b2); border-top-color: var(--n-srch); border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0 }
+.working-line b { color: var(--t2); font-weight: 500 }
+
+/* ── Context chips bar ───────────────────────────────── */
+.ctx-bar {
+  display: none; align-items: center; gap: 8px;
+  padding: 8px 16px; background: var(--s1); border-top: 1px solid var(--b1);
+  font-size: 11.5px;
+}
+.ctx-bar.show { display: flex }
+.ctx-bar .lbl { color: var(--search); font-weight: 600; flex-shrink: 0; display: flex; align-items: center; gap: 5px }
+.ctx-bar .chips { display: flex; gap: 5px; flex-wrap: wrap; flex: 1 }
+.ctx-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: 999px;
+  background: var(--s2); border: 1px solid rgba(94,156,111,.3);
+  color: var(--t2); font-size: 11px;
+}
+.ctx-chip .rm { cursor: pointer; color: var(--t3); font-size: 10px; margin-left: 2px }
+.ctx-chip .rm:hover { color: #b04545 }
+.ctx-bar .clear-all { color: var(--t3); font-size: 11px; cursor: pointer; flex-shrink: 0 }
+.ctx-bar .clear-all:hover { color: var(--tx) }
+
+/* ── Chat input ───────────────────────────────────────── */
+.chat-input-wrap {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(251,251,250,.95); backdrop-filter: blur(8px) saturate(140%);
+  border-top: 1px solid var(--b1); padding: 12px 16px 16px; z-index: 15;
+}
+.chat-input-inner { max-width: 740px; margin: 0 auto }
+.chat-input-box {
+  display: flex; align-items: flex-end; gap: 10px;
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 14px;
+  padding: 10px 10px 10px 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.03), 0 8px 24px rgba(0,0,0,.04);
+  transition: border-color 180ms, box-shadow 180ms;
+}
+.chat-input-box:focus-within { border-color: var(--search); box-shadow: 0 0 0 3px rgba(94,156,111,.12), 0 8px 24px rgba(0,0,0,.04) }
+.chat-input-box textarea {
+  flex: 1; border: 0; outline: 0; background: transparent;
+  font-family: inherit; font-size: 13.5px; color: var(--tx);
+  resize: none; line-height: 1.5; max-height: 120px; padding: 4px 0;
+}
+.chat-input-box textarea::placeholder { color: var(--t4) }
+.input-actions { display: flex; align-items: center; gap: 6px }
+.send-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--search); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.send-btn:hover { background: var(--search-d) }
+.stop-btn {
+  height: 34px; padding: 0 12px; border-radius: 999px;
+  background: var(--s2); border: 1px solid var(--b1); color: var(--t2);
+  font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+}
+.stop-btn:hover { background: var(--s3) }
+.input-hint { font-size: 11px; color: var(--t3); margin-top: 7px; display: flex; align-items: center; gap: 8px }
+.input-hint kbd { font-family: ui-monospace, monospace; font-size: 10.5px; background: var(--s2); border: 1px solid var(--b1); border-radius: 3px; padding: 1px 4px; color: var(--t2) }
+
+/* ════════════════════════════════════════════════════════════════
+   SPEC PANEL  ─ 우측에서 슬라이드되는 설계 명세 도크.
+   Chat 뷰 옆 320px. 토글 버튼은 topbar [Spec].
+   목적: 구현자(개발자/AI)가 화면을 보면서 설계 의도를 함께 읽는다.
+══════════════════════════════════════════════════════════════════ */
+.spec-panel {
+  border-left: 1px solid var(--b1); background: var(--s1);
+  overflow-y: auto; opacity: 0; visibility: hidden;
+  transition: opacity 220ms 80ms, visibility 0s 300ms;
+}
+[data-spec="open"] .spec-panel { opacity: 1; visibility: visible; transition: opacity 220ms; }
+.spec-panel-inner { padding: 18px 18px 40px }
+.spec-h {
+  font-size: 10px; font-weight: 600; letter-spacing: .1em; color: var(--t3);
+  text-transform: uppercase; margin: 18px 0 10px;
+}
+.spec-h:first-child { margin-top: 0 }
+.spec-block {
+  background: var(--s2); border: 1px solid var(--b1); border-radius: 10px;
+  padding: 12px 13px; margin-bottom: 10px; font-size: 12px; line-height: 1.62; color: var(--t2);
+}
+.spec-block b { color: var(--tx); font-weight: 500 }
+.spec-block ul { padding-left: 16px; margin-top: 4px }
+.spec-block li { margin-bottom: 3px }
+.spec-block code {
+  font-family: ui-monospace, monospace; font-size: 11px;
+  background: var(--s3); border-radius: 3px; padding: 1px 5px;
+}
+.spec-callout {
+  background: rgba(94,106,210,.06); border-left: 3px solid var(--read);
+  border-radius: 4px; padding: 8px 11px; margin: 8px 0;
+  font-size: 11.5px; color: var(--t2); line-height: 1.55;
+}
+.spec-callout b { color: var(--read-d); font-weight: 600 }
+
+.spec-page-tabs {
+  display: flex; gap: 4px; padding: 2px;
+  background: var(--s2); border: 1px solid var(--b1); border-radius: 8px;
+  margin-bottom: 14px;
+}
+.spec-page-tab {
+  flex: 1; height: 26px; border-radius: 5px;
+  font-size: 11.5px; font-weight: 500; color: var(--t2);
+}
+.spec-page-tab.active { background: var(--s1); color: var(--tx); box-shadow: 0 1px 2px rgba(0,0,0,.06) }
+.spec-page { display: none }
+.spec-page.active { display: block }
+
+/* ════════════════════════════════════════════════════════════════
+   GRAPH VIEW
+══════════════════════════════════════════════════════════════════ */
+.view-graph {
+  display: none;
+  grid-template-columns: 230px 1fr 300px;
+  flex: 1; min-height: 0;
+}
+[data-view="graph"] .view-graph { display: grid }
+
+/* ── Graph legend rail ────────────────────────────────── */
+.graph-rail {
+  border-right: 1px solid var(--b1); background: var(--s1);
+  overflow-y: auto; padding: 14px 13px 30px;
+}
+.gr-h { font-size: 10px; font-weight: 600; letter-spacing: .1em; color: var(--t3); text-transform: uppercase; margin: 16px 0 8px }
+.gr-h:first-child { margin-top: 0 }
+.gr-intro {
+  font-size: 11.5px; color: var(--t3); line-height: 1.55;
+  background: var(--s2); border-radius: 8px; padding: 10px 11px; margin-bottom: 4px;
+}
+.ntype-row { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 12px }
+.nt-swatch { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0 }
+.nt-info .nm { font-size: 12px; font-weight: 500; color: var(--tx) }
+.nt-info .ds { font-size: 10.5px; color: var(--t3); line-height: 1.42; margin-top: 2px }
+.nt-info .trig { font-size: 10px; color: var(--t4); margin-top: 2px; font-style: italic }
+
+.edge-row { display: flex; align-items: flex-start; gap: 9px; padding: 5px 0; font-size: 11.5px; color: var(--t2) }
+.edge-row .el { width: 20px; height: 0; flex-shrink: 0; margin-top: 8px }
+.el.solid  { border-top: 1.5px solid var(--t3) }
+.el.dashed { border-top: 1.5px dashed var(--n-srch) }
+.el.dotted { border-top: 1.5px dotted var(--n-src) }
+.el.supp   { border-top: 1.5px dashed rgba(94,156,111,.7) }
+.el.ctx    { border-top: 2px dashed var(--search) }
+.edge-row .info { flex: 1 }
+.edge-row .info b { color: var(--tx); font-weight: 500 }
+.edge-row .info .ds { font-size: 10.5px; color: var(--t3); line-height: 1.4; margin-top: 1px }
+
+.stat-box { background: var(--s2); border-radius: 8px; padding: 10px 11px; margin-top: 4px }
+.stat-row { display: flex; justify-content: space-between; font-size: 11.5px; padding: 2px 0 }
+.stat-row b { font-weight: 500; color: var(--tx); font-variant-numeric: tabular-nums }
+
+.interact-guide {
+  background: rgba(107,95,199,.07); border: 1px solid rgba(107,95,199,.18);
+  border-radius: 8px; padding: 10px 11px; margin-top: 10px;
+  font-size: 11px; color: var(--t3); line-height: 1.55;
+}
+.interact-guide b { color: var(--n-think); font-weight: 500 }
+.kd { font-family: ui-monospace, monospace; font-size: 10px; background: var(--s1); border: 1px solid var(--b1); border-radius: 3px; padding: 1px 4px; color: var(--t2) }
+
+/* ── Graph stage ──────────────────────────────────────── */
+.graph-stage {
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(ellipse at 15% 30%, rgba(107,95,199,.05), transparent 40%),
+    radial-gradient(ellipse at 80% 70%, rgba(94,156,111,.05), transparent 42%),
+    #f7f7f5;
+}
+.graph-grid {
+  position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: radial-gradient(circle, rgba(0,0,0,.045) 1px, transparent 1.2px);
+  background-size: 28px 28px;
+}
+.graph-progress {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: transparent; z-index: 10;
+}
+.graph-progress-fill {
+  height: 100%; background: var(--search); width: 0%;
+  transition: width 400ms cubic-bezier(.4,0,.2,1);
+}
+.anim-step-label {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; color: var(--t3); white-space: nowrap;
+  background: rgba(251,251,250,.92); border: 1px solid var(--b1); border-radius: 999px;
+  padding: 3px 12px; z-index: 5; pointer-events: none;
+  opacity: 0; transition: opacity 200ms;
+}
+.anim-step-label.show { opacity: 1 }
+
+.stage-top {
+  position: absolute; top: 12px; left: 12px; right: 12px;
+  display: flex; align-items: center; gap: 10px; z-index: 4;
+}
+.agent-now {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 999px;
+  padding: 6px 13px; font-size: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.03);
+}
+.agent-now .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--search); animation: pulse 1.4s ease-in-out infinite; flex-shrink: 0 }
+.sel-hint {
+  background: var(--s1); border: 1px solid rgba(107,95,199,.28); border-radius: 999px;
+  padding: 5px 12px; font-size: 11.5px; color: var(--n-think);
+  display: none; align-items: center; gap: 8px;
+}
+.sel-hint.show { display: flex }
+.sel-hint .clr { color: var(--t3); font-size: 11px; cursor: pointer; text-decoration: underline; text-decoration-style: dotted }
+.sel-hint .clr:hover { color: var(--tx) }
+
+.replay-btn {
+  height: 28px; padding: 0 11px; border-radius: 999px;
+  background: var(--s1); border: 1px solid var(--b1);
+  font-size: 11.5px; font-weight: 500; color: var(--t2);
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: background 120ms, color 120ms, opacity 150ms;
+}
+.replay-btn:hover:not(:disabled) { background: var(--s2); color: var(--tx) }
+.replay-btn:disabled { opacity: .35; cursor: default }
+
+.graph-tools {
+  margin-left: auto; display: flex; align-items: center; gap: 3px;
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 8px;
+  padding: 3px; box-shadow: 0 1px 2px rgba(0,0,0,.03);
+}
+.gt { width: 28px; height: 28px; border-radius: 5px; color: var(--t2); display: inline-flex; align-items: center; justify-content: center }
+.gt:hover { background: var(--s2); color: var(--tx) }
+.gt.active { background: var(--s2); color: var(--tx) }
+.gt-sep { width: 1px; height: 16px; background: var(--b1); margin: 0 2px }
+
+.graph-canvas { position: absolute; inset: 0 }
+.graph-canvas > svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible }
+
+/* ── Nodes (base) ─────────────────────────────────────── */
+.node {
+  position: absolute;
+  background: var(--s1); border: 1.5px solid var(--b1);
+  border-radius: 12px; padding: 10px 13px;
+  max-width: 190px; min-width: 128px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.025), 0 3px 8px rgba(0,0,0,.02);
+  cursor: pointer; user-select: none;
+  transform: translate(-50%, -50%);
+  animation: node-pop 300ms cubic-bezier(.2,.7,.3,1) both;
+  transition: border-color 130ms, box-shadow 130ms;
+  z-index: 2;
+}
+.node:hover { border-color: var(--b2); box-shadow: 0 2px 5px rgba(0,0,0,.04), 0 8px 16px rgba(0,0,0,.04) }
+.node.selected { border-color: var(--search) !important; box-shadow: 0 0 0 3px rgba(94,156,111,.18), 0 4px 12px rgba(0,0,0,.05) !important }
+.node .n-tag { font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; margin-bottom: 4px; display: flex; align-items: center; gap: 4px }
+.node .n-tag .pip { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0 }
+.node .n-text { font-size: 12px; font-weight: 500; line-height: 1.4; color: var(--tx) }
+.node .n-meta { font-size: 10.5px; color: var(--t3); margin-top: 4px }
+
+.node-q { background: var(--n-q); border-color: transparent; max-width: 220px; min-width: 160px }
+.node-q .n-tag { color: rgba(255,255,255,.45) }
+.node-q .n-tag .pip { background: rgba(255,255,255,.3) }
+.node-q .n-text { color: #fff; font-size: 12.5px }
+.node-q .n-meta { color: rgba(255,255,255,.38) }
+
+.node-think { border-color: rgba(107,95,199,.3) }
+.node-think .n-tag { color: var(--n-think) }
+.node-think .n-tag .pip { background: var(--n-think) }
+
+.node-srch { border-color: rgba(59,130,196,.32); min-width: 148px }
+.node-srch .n-tag { color: var(--n-srch) }
+.node-srch .n-tag .pip { background: var(--n-srch) }
+.node-srch .n-meta .q { font-family: ui-monospace, monospace; font-size: 10.5px; background: rgba(59,130,196,.08); border-radius: 3px; padding: 1px 5px; color: var(--n-srch) }
+
+.node-src { min-width: 110px; max-width: 165px; padding: 8px 10px }
+.node-src .n-tag { color: var(--n-src) }
+.node-src .n-tag .pip { background: var(--n-src); border-radius: 2px; width: 6px; height: 6px }
+.node-src .n-text { font-size: 11px }
+.node-src .n-meta .vn { background: var(--s3); border-radius: 3px; padding: 0 4px; font-size: 10px }
+
+.node-ans { border-color: rgba(94,156,111,.3) }
+.node-ans .n-tag { color: var(--search) }
+.node-ans .n-tag .pip { background: var(--search) }
+
+.node.running { animation: node-pop 300ms cubic-bezier(.2,.7,.3,1) both; border-color: rgba(59,130,196,.4) !important }
+.node.running::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 16px;
+  animation: ring-out 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.node.fresh::before {
+  content: ''; position: absolute; inset: -4px; border-radius: 16px;
+  border: 2px solid var(--search); pointer-events: none;
+  animation: fresh-ring 1.2s ease-out forwards;
+  transform-origin: center;
+}
+
+/* sequential animation (initially hidden) */
+.node.node-hidden {
+  opacity: 0 !important;
+  transform: translate(-50%,-50%) scale(.6) !important;
+  pointer-events: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+/* ── Annotations (toggle: data-annot="true") ──────────── */
+.annot { position: absolute; z-index: 30; display: none }
+[data-annot="true"] .annot { display: block }
+.an-pill {
+  background: #1a1e2a; color: #e2e8ff;
+  font-size: 10.5px; line-height: 1.5; padding: 8px 11px; border-radius: 8px;
+  max-width: 240px; pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,.3);
+}
+.an-pill b { color: #9fb3ff; font-weight: 500 }
+.an-pill em { font-style: normal; color: #ffd49f }
+.an-dot {
+  position: absolute; width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(107,95,199,.92); border: 2px solid #fff;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 9px; font-weight: 700;
+  box-shadow: 0 2px 6px rgba(107,95,199,.5);
+}
+
+/* ── Graph detail panel (with Detail / Spec tabs) ─────── */
+.graph-detail {
+  border-left: 1px solid var(--b1); background: var(--s1);
+  overflow-y: auto; padding: 14px 14px 80px;
+  display: flex; flex-direction: column;
+}
+.gd-tabs {
+  display: flex; gap: 3px; padding: 3px;
+  background: var(--s2); border: 1px solid var(--b1); border-radius: 8px;
+  margin-bottom: 14px;
+}
+.gd-tab {
+  flex: 1; height: 28px; border-radius: 5px;
+  font-size: 11.5px; font-weight: 500; color: var(--t2);
+}
+.gd-tab.active { background: var(--s1); color: var(--tx); box-shadow: 0 1px 2px rgba(0,0,0,.06) }
+.gd-pane { display: none }
+.gd-pane.active { display: block }
+
+.gd-empty { padding-top: 40px; text-align: center; color: var(--t3); font-size: 12.5px; line-height: 1.7 }
+.gd-empty svg { width: 28px; height: 28px; margin: 0 auto 14px; display: block; opacity: .3 }
+.gd-card { display: none }
+.gd-card.vis { display: block }
+.gd-badge { font-size: 9.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px }
+.gd-title { font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; line-height: 1.38; margin-bottom: 6px }
+.gd-sub { font-size: 11.5px; color: var(--t3); margin-bottom: 10px }
+.gd-body { font-size: 12.5px; color: var(--t2); line-height: 1.62; margin-bottom: 10px }
+.gd-sep { height: 1px; background: var(--b1); margin: 10px 0 }
+.gd-kv { display: flex; justify-content: space-between; font-size: 11.5px; padding: 3px 0 }
+.gd-kv .k { color: var(--t3) }
+.gd-kv .v { color: var(--t2); font-weight: 500 }
+.gd-edges { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--b1) }
+.gd-edges h5 { font-size: 10px; font-weight: 600; letter-spacing: .1em; color: var(--t3); text-transform: uppercase; margin-bottom: 8px }
+.gd-erow { display: flex; align-items: flex-start; gap: 7px; padding: 4px 0; font-size: 12px; color: var(--t2) }
+.gd-epip { font-size: 9.5px; padding: 2px 6px; border-radius: 3px; font-weight: 600; flex-shrink: 0; margin-top: 1px }
+.gd-actions { margin-top: 12px; display: flex; flex-direction: column; gap: 5px }
+.gd-btn { width: 100%; height: 31px; border-radius: 8px; font-size: 12px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 120ms }
+.gd-btn.pri { background: var(--search); color: #fff }
+.gd-btn.pri:hover { background: var(--search-d) }
+.gd-btn.sec { background: var(--s2); color: var(--tx); border: 1px solid var(--b1) }
+.gd-btn.sec:hover { background: var(--s3); border-color: var(--b2) }
+
+/* ── Graph steer bar (bottom dock) ────────────────────── */
+.graph-steer {
+  position: absolute; bottom: 16px; left: calc(230px + 50%);
+  transform: translateX(calc(-50% - 150px));
+  width: min(620px, calc(100% - 230px - 300px - 32px));
+  background: var(--s1); border: 1px solid var(--b1); border-radius: 16px;
+  padding: 8px 8px 8px 16px;
+  display: none; align-items: center; gap: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.07);
+  z-index: 15;
+}
+[data-view="graph"] .graph-steer { display: flex }
+.graph-steer input { flex: 1; border: 0; outline: 0; background: transparent; font-family: inherit; font-size: 13px; color: var(--tx); padding: 6px 0 }
+.graph-steer input::placeholder { color: var(--t4) }
+.ctx-badge-g {
+  font-size: 11px; padding: 3px 9px; border-radius: 999px;
+  background: var(--search-bg); border: 1px solid rgba(94,156,111,.25);
+  color: var(--search); font-weight: 500; display: none; align-items: center; gap: 5px;
+  white-space: nowrap;
+}
+.ctx-badge-g.show { display: inline-flex }
+.ctx-badge-g .cx { color: rgba(94,156,111,.6); margin-left: 2px; cursor: pointer }
+.graph-steer .send {
+  height: 32px; padding: 0 14px; border-radius: 999px;
+  background: var(--search); color: #fff; font-size: 12px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.graph-steer .send:hover { background: var(--search-d) }
+.graph-steer .pause {
+  height: 32px; padding: 0 10px; border-radius: 999px;
+  background: var(--s2); border: 1px solid var(--b1); color: var(--t2);
+  font-size: 12px; display: inline-flex; align-items: center; gap: 5px;
+}
+.graph-steer .pause:hover { background: var(--s3) }
+
+/* variant badge */
+.variant-badge {
+  position: fixed; right: 14px; bottom: 14px; z-index: 100;
+  background: rgba(0,0,0,.78); color: #fff;
+  font-size: 11px; padding: 6px 10px; border-radius: 999px;
+  display: flex; align-items: center; gap: 7px; pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+.variant-badge strong { font-weight: 600; letter-spacing: .02em }
+.variant-badge span { color: rgba(255,255,255,.55); font-size: 10.5px }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ════════════════════════════════════════════════════════════
+       LEFT RAIL (56px) — Dashboard refined와 동일한 네비 패턴.
+       Search · Reading · Research · Inbox · Settings 5개 섹션을
+       아이콘만으로 표시. 활성 섹션은 흰색 배경으로 강조.
+  ════════════════════════════════════════════════════════════════ -->
+  <aside class="rail">
+    <div class="rail-brand">A</div>
+
+    <button class="rail-btn active" title="Search">
+      <svg viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
+    <button class="rail-btn" title="Reading">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M3 3h7l3 3v7H3V3z" stroke="currentColor" stroke-width="1.4"/><path d="M10 3v3h3" stroke="currentColor" stroke-width="1.4"/></svg>
+    </button>
+    <button class="rail-btn" title="Research">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M3 12h10 M3 8h10 M3 4h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="3" cy="4" r="1" fill="currentColor"/><circle cx="3" cy="8" r="1" fill="currentColor"/><circle cx="3" cy="12" r="1" fill="currentColor"/></svg>
+    </button>
+    <button class="rail-btn" title="Inbox">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M2 9l2-5h8l2 5v3H2V9z M2 9h4l1 1.5h2L10 9h4" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+    </button>
+
+    <div class="rail-sep"></div>
+
+    <button class="rail-btn" title="Settings">
+      <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v2 M8 13v2 M1 8h2 M13 8h2 M3 3l1.4 1.4 M11.6 11.6L13 13 M3 13l1.4-1.4 M11.6 4.4L13 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    </button>
+    <div class="rail-mode-tag">SEARCH</div>
+  </aside>
+
+  <!-- ════════════════════════════════════════════════════════════
+       MAIN AREA
+  ════════════════════════════════════════════════════════════════ -->
+  <div class="main">
+
+    <!-- ─── TOPBAR (44px) ────────────────────────────────── -->
+    <header class="topbar">
+      <!--
+        crumb는 stage에 따라 스위치된다:
+          home/plan: 진입 흐름 stepper (홈 → 계획 → 실행)
+          running:   기존 Search > Agentic > Run #2451
+      -->
+      <div class="crumb crumb-home">
+        <span>Search</span>
+        <svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>Agentic</span>
+        <svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <button class="stage-step" data-stage-go="home">홈</button>
+        <span class="stage-arr">›</span>
+        <button class="stage-step" data-stage-go="plan">계획</button>
+        <span class="stage-arr">›</span>
+        <button class="stage-step" data-stage-go="running">실행</button>
+      </div>
+      <div class="crumb crumb-running">
+        <span>Search</span>
+        <svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>Agentic</span>
+        <svg viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <b class="run-id">Run #2451</b>
+      </div>
+      <div class="view-toggle">
+        <button class="vt-btn active" id="btn-chat">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v6a2 2 0 01-2 2H6l-3 2V4z" stroke="currentColor" stroke-width="1.3"/></svg>
+          Chat
+        </button>
+        <button class="vt-btn" id="btn-graph">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="3" cy="12" r="1.8" stroke="currentColor" stroke-width="1.3"/><circle cx="13" cy="12" r="1.8" stroke="currentColor" stroke-width="1.3"/><path d="M8 5.8v2.4M5 11l1.5-2.5M11 11l-1.5-2.5" stroke="currentColor" stroke-width="1.3"/></svg>
+          Graph
+        </button>
+      </div>
+      <div class="spacer"></div>
+      <div class="run-badge"><span class="dot"></span> Live · 14/32 · 1m 42s</div>
+      <button class="tb-btn" id="annot-btn">
+        <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 7v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="5" r="1" fill="currentColor"/></svg>
+        주석
+      </button>
+      <button class="tb-btn" id="spec-btn">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M3 4h10 M3 8h10 M3 12h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        설계 명세
+      </button>
+      <button class="iconbtn" title="More">
+        <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>
+      </button>
+      <div class="avatar">MJ</div>
+    </header>
+
+    <!-- ════════════════════════════════════════════════════════
+         STAGE 1: HOME
+         Dashboard refined.html 의 hero pill 영역을 그대로 재현하되,
+         사용자가 입력에 포커스를 잠시라도 두면 아래에 자동으로
+         "예상 실행 계획 프리뷰" 가 슬라이드 다운 한다.
+         이 화면이 Dashboard 와 자연스럽게 이어지는 이유:
+           - 동일한 .hero / .scope-row 구조와 토큰을 공유한다
+           - 검색 모드 토글(Agent/Keyword) 위치·동작이 동일하다
+           - 새로 추가되는 .plan-peek 만 Dashboard 위에 누적되는 것
+    ════════════════════════════════════════════════════════════ -->
+    <section class="stage-home" id="stage-home">
+      <div class="sh-container">
+
+        <div class="stage-intent">
+          <span class="si-tag">진입 흐름 · STAGE 1 / 홈</span>
+          <h2>검색 홈 — Agent 모드를 켠 순간</h2>
+          <p>사용자가 Dashboard 검색 바에서 <b>Agent Search</b>로 토글한 직후의 화면이다. 입력에 포커스가 들어오면 아래로 <b>예상 실행 계획 프리뷰</b>가 자동 펼쳐진다. 실행 전에 무엇이 일어날지 한눈에 보여 신뢰감을 만들고, 사용자가 즉시 <b>"계획 자세히 보기"</b>로 진입해 다듬도록 유도한다 — 이게 자연스러운 진입의 핵심이다.</p>
+        </div>
+
+        <!-- Hero pill — Dashboard refined와 동일 구조 -->
+        <div class="hero-wrap">
+          <form class="hero scout" onsubmit="return false">
+            <span class="lead-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            <input id="home-q" type="text" value="Diffusion 모델의 LoRA fine-tuning에서 catastrophic forgetting을 완화하는 최신 방법론을 비교하고 trade-off를 정리해줘" />
+            <div class="submit" aria-label="Search mode">
+              <button type="button" class="sbtn active" data-mode="scout" title="Agent Search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-3 6-6 3 3-6Z"/></svg>
+                Agent
+              </button>
+              <button type="button" class="sbtn" data-mode="keyword" title="Keyword Search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V4.5A1.5 1.5 0 0 1 5.5 3H20v16H5.5A1.5 1.5 0 0 1 4 17.5Z"/><path d="M8 7h8M8 11h6"/></svg>
+                Keyword
+              </button>
+            </div>
+          </form>
+
+          <div class="scope-row">
+            <span class="scope-label">Target</span>
+            <span class="scope-chip">arXiv · cs.LG<span class="x">×</span></span>
+            <span class="scope-chip">NeurIPS '23–'25<span class="x">×</span></span>
+            <span class="scope-chip">OpenReview<span class="x">×</span></span>
+            <button class="scope-add">+ 출처 추가</button>
+          </div>
+        </div>
+
+        <!--
+          Plan peek: 입력 시 자동 펼침. 4단계를 좌→우 흐름으로 한 줄에 보여
+          "이 질문이 어떻게 풀릴지" 빠르게 가늠하게 한다. 단계 색은 phase divider와
+          graph node 분류 토큰을 공유 (--n-srch / --n-fu / --n-think / --search).
+        -->
+        <div class="plan-peek">
+          <div class="pp-head">
+            <span class="pp-tag">예상 계획 프리뷰</span>
+            <span class="pp-info">질문 분석 결과 <b>4단계 파이프라인</b>으로 실행됩니다 · 예상 4분</span>
+          </div>
+          <div class="pp-phases">
+            <div class="pp-ph reader">
+              <span class="pp-num">1</span>
+              <div class="pp-ph-body">
+                <div class="pp-ph-name">Reader</div>
+                <div class="pp-ph-desc">정의·지표 정렬</div>
+              </div>
+              <span class="pp-time">~38s</span>
+            </div>
+            <span class="pp-arr">→</span>
+            <div class="pp-ph repro">
+              <span class="pp-num">2</span>
+              <div class="pp-ph-body">
+                <div class="pp-ph-name">Reproduction</div>
+                <div class="pp-ph-desc">방법론 재현 검증</div>
+              </div>
+              <span class="pp-time">~1m 20s</span>
+            </div>
+            <span class="pp-arr">→</span>
+            <div class="pp-ph exper">
+              <span class="pp-num">3</span>
+              <div class="pp-ph-body">
+                <div class="pp-ph-name">Experiment</div>
+                <div class="pp-ph-desc">실험 설계 비교</div>
+              </div>
+              <span class="pp-time">~1m 10s</span>
+            </div>
+            <span class="pp-arr">→</span>
+            <div class="pp-ph analyst">
+              <span class="pp-num">4</span>
+              <div class="pp-ph-body">
+                <div class="pp-ph-name">Analyst</div>
+                <div class="pp-ph-desc">trade-off 종합</div>
+              </div>
+              <span class="pp-time">~52s</span>
+            </div>
+          </div>
+          <div class="pp-foot">
+            <span class="pp-foot-info">arXiv · NeurIPS · OpenReview에서 24~32편 검토 · 결과는 Reading 큐에 자동 저장</span>
+            <div class="pp-foot-actions">
+              <button class="pp-edit" id="go-plan">계획 자세히 보기 ▸</button>
+              <button class="pp-launch" id="quick-launch">바로 실행 ▸</button>
+            </div>
+          </div>
+        </div>
+
+        <!--
+          Quick templates: 빈 입력 상태에서 "어떻게 시작해야 할지" 막막한
+          사용자에게 주는 진입점. 최근/조직 평균 패턴을 카드로 노출한다.
+        -->
+        <div class="qt-section">
+          <div class="qt-head">또는 최근 패턴에서 시작</div>
+          <div class="qt-grid">
+            <button class="qt-card">
+              <div class="qt-name">Method survey</div>
+              <div class="qt-desc">분야 X의 최신 방법론을 비교·정리</div>
+              <div class="qt-meta">4단계 · 평균 4분</div>
+            </button>
+            <button class="qt-card">
+              <div class="qt-name">Reproducibility check</div>
+              <div class="qt-desc">N편 논문의 재현성·코드 가용성 점검</div>
+              <div class="qt-meta">3단계 · 평균 3분</div>
+            </button>
+            <button class="qt-card">
+              <div class="qt-name">Conflict scout</div>
+              <div class="qt-desc">상충하는 결론·증거를 추적</div>
+              <div class="qt-meta">5단계 · 평균 6분</div>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         STAGE 2: PLAN
+         사용자가 "계획 자세히 보기"를 누른 직후. pill은 위로 압축되어
+         질문 echo로만 남고, 그 아래 편집 가능한 Run Plan 카드가 펼쳐진다.
+         이 게이트의 존재 이유:
+           - 실행이 시작되면 끼어들기 비용이 커진다 (이미 토큰을 쓰는 중)
+           - 사용자가 단계·출처·깊이를 미리 손볼 수 있어야 한다
+           - 사전 게이트가 있으면 사후 회수(undo)가 줄어든다
+         디자인 의도:
+           - "건너뛰고 바로 실행"이 한 클릭 거리에 있어야 한다 (지금처럼 빠른 워크플로우용)
+           - 단계 카드는 phase divider와 동일한 컬러 분류 (--n-srch/--n-fu/--n-think/--search)
+    ════════════════════════════════════════════════════════════ -->
+    <section class="stage-plan" id="stage-plan">
+      <div class="sp-container">
+
+        <div class="stage-intent">
+          <span class="si-tag">진입 흐름 · STAGE 2 / 계획</span>
+          <h2>실행 계획 검토 — 시작 전 마지막 터치</h2>
+          <p>검색 바가 위로 압축되고, 그 아래 <b>편집 가능한 Run Plan 카드</b>가 펼쳐진다. 단계 추가·제거, 단계별 출처 변경, 깊이(빠름↔깊게) 조절을 할 수 있다. 이 게이트는 <b>"실행 후 끼어들기"의 비용을 미리 막는 사전 단계</b>다 — 한번 토큰이 흐르기 시작하면 회수가 어렵기 때문에, 시작 전에 가볍게 다듬는 흐름을 둔다.</p>
+        </div>
+
+        <!-- Compact pill — 질문 echo로 남는 anchor -->
+        <div class="hero-mini">
+          <span class="hm-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-3 6-6 3 3-6Z"/></svg>
+          </span>
+          <span class="hm-q">Diffusion 모델의 LoRA fine-tuning에서 catastrophic forgetting을 완화하는 최신 방법론을 비교하고 trade-off를 정리해줘</span>
+          <button class="hm-edit" data-stage-go="home">← 질문 수정</button>
+        </div>
+
+        <!-- Editable plan card -->
+        <div class="plan-card">
+          <div class="pc-head">
+            <h3>실행 계획 · 4단계</h3>
+            <div class="pc-controls">
+              <span class="pc-budget">예상 4분 · 5,200 tokens</span>
+              <div class="pc-depth">
+                <span>깊이</span>
+                <div class="pc-depth-group">
+                  <button class="pc-depth-btn">빠름</button>
+                  <button class="pc-depth-btn active">표준</button>
+                  <button class="pc-depth-btn">깊게</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pc-phases">
+            <!-- Phase 1 -->
+            <div class="pc-ph">
+              <span class="pc-drag" title="드래그로 순서 변경">
+                <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r="1"/><circle cx="10" cy="4" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/></svg>
+              </span>
+              <span class="pc-pn reader">1</span>
+              <div class="pc-pb">
+                <div class="pc-pname">Reader · 정의·지표 정렬</div>
+                <div class="pc-psrc">
+                  <span class="pc-src-tag">arXiv abstract<span class="pc-src-x">×</span></span>
+                  <span class="pc-src-tag">SemanticScholar TLDR<span class="pc-src-x">×</span></span>
+                  <button class="pc-src-add">+ 출처</button>
+                </div>
+              </div>
+              <span class="pc-time">~38s</span>
+              <button class="pc-rm" title="단계 제거">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8 M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+
+            <!-- Phase 2 -->
+            <div class="pc-ph">
+              <span class="pc-drag">
+                <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r="1"/><circle cx="10" cy="4" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/></svg>
+              </span>
+              <span class="pc-pn repro">2</span>
+              <div class="pc-pb">
+                <div class="pc-pname">Reproduction · 방법론 재현 검증</div>
+                <div class="pc-psrc">
+                  <span class="pc-src-tag">PapersWithCode<span class="pc-src-x">×</span></span>
+                  <span class="pc-src-tag">GitHub README<span class="pc-src-x">×</span></span>
+                  <span class="pc-src-tag">OpenReview reviews<span class="pc-src-x">×</span></span>
+                  <button class="pc-src-add">+ 출처</button>
+                </div>
+              </div>
+              <span class="pc-time">~1m 20s</span>
+              <button class="pc-rm" title="단계 제거">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8 M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+
+            <!-- Phase 3 -->
+            <div class="pc-ph">
+              <span class="pc-drag">
+                <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r="1"/><circle cx="10" cy="4" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/></svg>
+              </span>
+              <span class="pc-pn exper">3</span>
+              <div class="pc-pb">
+                <div class="pc-pname">Experiment · 실험 설계 비교</div>
+                <div class="pc-psrc">
+                  <span class="pc-src-tag">paper full text<span class="pc-src-x">×</span></span>
+                  <span class="pc-src-tag">supplementary<span class="pc-src-x">×</span></span>
+                  <button class="pc-src-add">+ 출처</button>
+                </div>
+              </div>
+              <span class="pc-time">~1m 10s</span>
+              <button class="pc-rm" title="단계 제거">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8 M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+
+            <!-- Phase 4 -->
+            <div class="pc-ph">
+              <span class="pc-drag">
+                <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="6" cy="4" r="1"/><circle cx="10" cy="4" r="1"/><circle cx="6" cy="8" r="1"/><circle cx="10" cy="8" r="1"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/></svg>
+              </span>
+              <span class="pc-pn analyst">4</span>
+              <div class="pc-pb">
+                <div class="pc-pname">Analyst · trade-off 종합</div>
+                <div class="pc-psrc">
+                  <span class="pc-src-tag">단계 1~3 결과 통합<span class="pc-src-x">×</span></span>
+                  <button class="pc-src-add">+ 출처</button>
+                </div>
+              </div>
+              <span class="pc-time">~52s</span>
+              <button class="pc-rm" title="단계 제거">
+                <svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8 M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+
+            <button class="pc-add-ph">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 3v10 M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              단계 추가
+            </button>
+          </div>
+
+          <div class="pc-foot">
+            <div class="pc-checks">
+              <label><input type="checkbox" checked /> 결과를 Reading 큐에 자동 저장</label>
+              <label><input type="checkbox" checked /> 단계마다 체크포인트 생성</label>
+              <label><input type="checkbox" /> 완료 시 알림</label>
+            </div>
+            <div class="pc-actions">
+              <button class="pc-cancel" data-stage-go="home">취소</button>
+              <button class="pc-launch-btn" data-stage-go="running">
+                실행
+                <svg viewBox="0 0 16 16" fill="none"><path d="M5 3l7 5-7 5z" fill="currentColor"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════
+         CHAT VIEW
+    ════════════════════════════════════════════════════════════ -->
+    <div class="view-chat">
+
+      <!-- ── 메인 chat area ─────────────────────────────── -->
+      <div class="chat-area">
+        <div class="chat-scroll" id="chat-scroll">
+          <div class="chat-inner">
+
+            <!-- Design intent banner: 진입 시 1회 노출, 닫기 가능 -->
+            <div class="intent-banner" id="intent-banner">
+              <button class="ib-close" id="ib-close" title="이 안내 닫기">
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6 M9 3l-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              </button>
+              <h3>
+                <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5 M8 11v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                Agentic Search — 설계 요지
+              </h3>
+              <p>이 화면은 사용자가 에이전트의 <b>탐색 과정</b>을 실시간으로 따라가며, 필요한 순간에 <b>끼어들어 방향을 조정</b>할 수 있는 인터페이스입니다. 두 가지 시각으로 같은 실행을 본다 — <b>Chat</b>은 시간 흐름, <b>Graph</b>는 인과 구조.</p>
+              <p>응답에 채팅 버블을 쓰지 않은 이유는 분석 텍스트가 길고 구조적이기 때문입니다. 카드형 prose가 <em>research workbench</em>의 톤을 유지합니다. 우측의 <b>설계 명세</b> 패널에서 컴포넌트별 구현 의도를 함께 읽을 수 있습니다.</p>
+            </div>
+
+            <!-- Q header -->
+            <div class="q-block">
+              <div class="q-run-line">
+                <span class="badge">Agentic Search</span>
+                <span>Run #2451 · 17:32 · 4단계 계획 (Reader → Reproduction → Experiment → Analyst)</span>
+                <span style="margin-left:auto; display:flex; align-items:center; gap:5px">
+                  <span style="width:5px;height:5px;border-radius:50%;background:var(--search);display:inline-block;animation:pulse 1.4s ease-in-out infinite"></span>
+                  진행 중
+                </span>
+              </div>
+              <h1 class="q-text">Diffusion 모델의 LoRA fine-tuning에서 catastrophic forgetting을 완화하는 최신 방법론을 비교하고, personalization 시나리오에서의 trade-off를 정리해줘</h1>
+              <div class="q-pills">
+                <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v4l2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>예상 4분</span>
+                <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12v9H2z M5 4V2 M11 4V2" stroke="currentColor" stroke-width="1.3"/></svg>arXiv · Scholar · OpenReview</span>
+                <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2v12 M2 8h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Reading에 자동 저장</span>
+                <span class="q-pill"><svg viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 0 1.5-3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M3 4v3.5h3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>중간 결과 자동 체크포인트</span>
+              </div>
+              <a class="q-graph-hint" id="to-graph">→ Graph 뷰로 탐색 체인 보기</a>
+            </div>
+
+            <!-- ── PHASE 1: Reader ────────────────────────── -->
+            <div class="phase-divider" style="animation-delay:80ms">
+              <div class="pd-inner"><span class="pd-tag reader">READER</span> 정의·지표 정렬 · 완료 · 38s</div>
+            </div>
+
+            <div class="agent-turn" style="animation-delay:100ms">
+              <div class="agent-label">
+                <span class="av">A</span>
+                <span class="name">ARES Agent</span>
+                <span class="ts">17:32:38</span>
+              </div>
+              <div class="agent-body">
+                <div class="action-group">
+                  <div class="action-line">
+                    <svg class="act-ic" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                    <code>arxiv.search</code>
+                    <span>"forgetting measurement diffusion PEFT"</span>
+                    <span class="cnt">8 hits</span>
+                    <span class="ok">✓ 2.1s</span>
+                  </div>
+                  <div class="action-line">
+                    <svg class="act-ic" viewBox="0 0 16 16" fill="none"><path d="M2 12V4l5-1 5 2 2-1v8l-2 1-5-2-5 1z" stroke="currentColor" stroke-width="1.3"/></svg>
+                    <code>local.library</code>
+                    <span>tag:#forgetting #diffusion</span>
+                    <span class="cnt">3 hits</span>
+                    <span class="ok">✓ 0.4s</span>
+                  </div>
+                </div>
+                <div class="agent-prose">
+                  <p>비교를 시작하기 전에 <em>측정 지표를 통일</em>하겠습니다. "Catastrophic forgetting"의 정의가 논문마다 다르게 쓰입니다. 가장 많이 쓰이는 두 방식은:</p>
+                  <p><em>(1) KID / FID 변동 폭</em><sup>1</sup> — 기존 task 이미지에 대해 fine-tuning 전후 생성 품질 차이를 측정합니다. <em>(2) CLIP-similarity 감소율</em><sup>2</sup> — reference set에 대한 의미적 정렬 유지 여부를 봅니다.</p>
+                  <p>이번 비교에서는 <em>KID를 1차 지표</em>로, CLIP-sim을 보조로 사용합니다. Personalization 시나리오 기준선은 <em>5-shot</em>으로 잡겠습니다 — DreamBooth<sup>3</sup>, Custom Diffusion<sup>4</sup>, OFT-S<sup>5</sup> 모두가 공통적으로 보고한 설정입니다.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── PHASE 2: Reproduction ──────────────────── -->
+            <div class="phase-divider" style="animation-delay:160ms">
+              <div class="pd-inner"><span class="pd-tag repro">REPRODUCTION</span> 논문 수집 · 진행 중 · 1m 04s</div>
+            </div>
+
+            <div class="agent-turn" style="animation-delay:180ms">
+              <div class="agent-label">
+                <span class="av">A</span>
+                <span class="name">ARES Agent</span>
+                <span class="ts">17:33:16</span>
+              </div>
+              <div class="agent-body">
+                <div class="action-group">
+                  <div class="action-line">
+                    <svg class="act-ic" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                    <code>arxiv.search</code>
+                    <span>"LoRA forgetting diffusion personalization"</span>
+                    <span class="cnt">42 → 12</span>
+                    <span class="ok">✓ 3.2s</span>
+                  </div>
+                  <div class="action-line">
+                    <svg class="act-ic" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                    <code>semantic_scholar</code>
+                    <span>cross-reference + relevance ≥ 0.78</span>
+                    <span class="cnt">12 retained</span>
+                    <span class="ok">✓ 1.6s</span>
+                  </div>
+                  <div class="action-line">
+                    <svg class="act-ic" viewBox="0 0 16 16" fill="none"><path d="M3 5a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" stroke="currentColor" stroke-width="1.3"/></svg>
+                    <code>openreview.fetch_discussion</code>
+                    <span>forum_id="2024-orth-finetune-ld"</span>
+                    <span class="cnt">3 reviews</span>
+                    <span class="ok">✓ 2.1s</span>
+                  </div>
+                  <div class="action-line" style="opacity:.7">
+                    <svg class="act-ic" viewBox="0 0 16 16" fill="none"><path d="M3 5a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" stroke="currentColor" stroke-width="1.3"/></svg>
+                    <code>openreview.fetch_discussion</code>
+                    <span>forum_id="2024-dora-iclr"</span>
+                    <span class="run">가져오는 중…</span>
+                  </div>
+                </div>
+
+                <div class="agent-prose">
+                  <p>12편의 후보를 모았고 이 중 5편이 ICLR/NeurIPS 채택본입니다. OpenReview에서 reviewer들의 forgetting 관련 지적을 함께 가져오고 있습니다.</p>
+                  <p>현재까지 가장 관련성 높은 논문들입니다 — 카드를 클릭하면 <em>다음 질문의 컨텍스트</em>로 포함됩니다.</p>
+                </div>
+
+                <div class="snippet-row" id="snippet-row">
+                  <div class="snippet-card selected" data-sid="s1">
+                    <div class="s-tag">Paper</div>
+                    <div class="s-ttl">OFT-S: Orthogonal Fine-Tuning with Subspace Constraint</div>
+                    <div class="s-meta"><span class="vn">ICLR'25</span> 137 cites <span class="s-sel">✓</span></div>
+                  </div>
+                  <div class="snippet-card" data-sid="s2">
+                    <div class="s-tag">Paper</div>
+                    <div class="s-ttl">DoRA: Weight-Decomposed Low-Rank Adaptation</div>
+                    <div class="s-meta"><span class="vn">ICLR'24</span> 412 cites</div>
+                  </div>
+                  <div class="snippet-card" data-sid="s3">
+                    <div class="s-tag">Paper</div>
+                    <div class="s-ttl">Selective LoRA Re-init for Diffusion Personalization</div>
+                    <div class="s-meta"><span class="vn">arXiv 2501</span></div>
+                  </div>
+                  <div class="snippet-card" data-sid="s4">
+                    <div class="s-tag">Paper</div>
+                    <div class="s-ttl">EWC-Lite: per-rank Fisher for PEFT</div>
+                    <div class="s-meta"><span class="vn">NeurIPS'24</span> workshop</div>
+                  </div>
+                  <div class="snippet-card" data-sid="s5">
+                    <div class="s-tag">Paper</div>
+                    <div class="s-ttl">DreamBooth: Subject-Driven Generation</div>
+                    <div class="s-meta"><span class="vn">CVPR'23</span> 📌 저장됨</div>
+                  </div>
+                </div>
+
+                <div class="claim-card">
+                  <div class="cl-lbl">핵심 발견 — OFT-S rebuttal (OpenReview)</div>
+                  <div class="cl-text">OFT-S는 5-shot personalization에서 LoRA 대비 forgetting을 <strong>78% 감소</strong>시키지만, target fidelity가 <strong>1.4 FID 하락</strong>한다 — 이것이 다음 단계 trade-off 비교의 중심축이 됩니다.</div>
+                  <div class="cl-meta">출처: reviewer R3 + author rebuttal Table 7 · 신뢰도 0.82</div>
+                </div>
+
+                <div class="conflict-card">
+                  <svg class="cf-ic" width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2L2 13h12L8 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 7v3 M8 11.5v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                  <div class="cf-text"><b>측정 충돌:</b> OFT-S는 KID로, DoRA는 ΔFID로 forgetting을 측정 — 직접 비교 전 지표 정렬이 필요합니다. Experiment 단계에서 자동 정규화합니다.</div>
+                </div>
+
+                <div class="working-line">
+                  <span class="spin-ic"></span>
+                  <span><b>Reproduction</b> 계속 — OpenReview DoRA 토론 스크랩 중 (paper 2/5)</span>
+                </div>
+                <div class="agent-prose live">
+                  <p>DoRA의 reviewer들도 forgetting에 대한 우려를</p>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /chat-inner -->
+        </div><!-- /chat-scroll -->
+
+        <!-- context chips bar -->
+        <div class="ctx-bar show" id="ctx-bar">
+          <span class="lbl">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8h12 M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            컨텍스트
+          </span>
+          <div class="chips" id="chat-chips">
+            <span class="ctx-chip">OFT-S (ICLR'25) <span class="rm" data-cid="s1">×</span></span>
+          </div>
+          <span class="clear-all" id="chat-clear-all">전체 지우기</span>
+        </div>
+
+        <!-- input -->
+        <div class="chat-input-wrap">
+          <div class="chat-input-inner">
+            <div class="chat-input-box">
+              <textarea rows="1" placeholder="끼어들기 — 범위를 좁히거나 후속 질문을 던지세요 (선택한 카드가 컨텍스트로 포함됨)"></textarea>
+              <div class="input-actions">
+                <button class="stop-btn">
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor"><rect x="2.5" y="2" width="2.5" height="8" rx=".5"/><rect x="7" y="2" width="2.5" height="8" rx=".5"/></svg>
+                  Pause
+                </button>
+                <button class="send-btn">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="input-hint">
+              <kbd>↵</kbd> 보내기 &nbsp;·&nbsp; <kbd>Shift ↵</kbd> 줄바꿈 &nbsp;·&nbsp; 카드를 클릭하면 컨텍스트로 추가됩니다
+            </div>
+          </div>
+        </div>
+      </div><!-- /chat-area -->
+
+      <!-- ────────────────────────────────────────────────────
+           SPEC PANEL (320px, right side)
+           목적: 화면을 보는 동시에 구현 의도를 읽는 reference dock.
+           내부 탭: Chat 의도 / 컴포넌트 / 데이터 모델
+      ──────────────────────────────────────────────────── -->
+      <aside class="spec-panel" id="spec-panel">
+        <div class="spec-panel-inner">
+
+          <div class="spec-page-tabs">
+            <button class="spec-page-tab active" data-spp="intent">의도</button>
+            <button class="spec-page-tab" data-spp="components">컴포넌트</button>
+            <button class="spec-page-tab" data-spp="data">데이터</button>
+          </div>
+
+          <!-- ── Page: 의도 ──────────────────────────────── -->
+          <div class="spec-page active" data-spp-page="intent">
+            <div class="spec-h">왜 Chat 뷰인가</div>
+            <div class="spec-block">
+              에이전트는 한 질문에 대해 <b>여러 분 동안 여러 단계</b>를 거칩니다. 결과 카드 스트림으로는 "지금 어디까지 왔는지"를 직관적으로 알기 어렵습니다.
+              <ul>
+                <li><b>시간 흐름</b>이 자연스럽게 표현됨</li>
+                <li>사용자가 <b>언제든 끼어들 수</b> 있는 채널이 항상 열려있음</li>
+                <li>긴 분석 텍스트를 prose로 자연스럽게 흐르게 함</li>
+              </ul>
+            </div>
+
+            <div class="spec-h">버블이 없는 이유</div>
+            <div class="spec-block">
+              버블은 짧고 감정적인 메시지에 최적화된 패턴입니다. 연구 분석 텍스트는 길고 구조적이므로 <b>버블에 가두지 않습니다</b>. 흰 배경 위 prose가 <em>research workbench</em> 톤을 유지합니다.
+              <div class="spec-callout"><b>구분 원칙:</b> 사용자 입력은 다크 버블 (consumer chat 메타포 유지) / 에이전트 응답은 prose (도구 메타포).</div>
+            </div>
+
+            <div class="spec-h">사용자 개입 모델</div>
+            <div class="spec-block">
+              에이전트가 작업 중이어도 입력창은 항상 활성. 메시지를 보내면 <b>현재 phase 컨텍스트</b> + <b>선택된 카드</b>가 함께 전달돼 에이전트가 계획을 즉시 갱신합니다.
+              <ul>
+                <li><code>Pause</code>: 현재 도구 호출 완료 후 정지</li>
+                <li>카드 클릭: 다음 turn의 컨텍스트로 추가</li>
+                <li><code>Shift ↵</code>: 줄바꿈, <code>↵</code>: 보내기</li>
+              </ul>
+            </div>
+
+            <div class="spec-h">Phase 구분</div>
+            <div class="spec-block">
+              4-에이전트 architecture (<b>Reader · Reproduction · Experiment · Analyst</b>) 에 맞춰 phase divider로 분할. 각 phase는 자체 도구 화이트리스트를 가지며, divider tag 색이 ARES 시스템 토큰을 따른다.
+            </div>
+          </div>
+
+          <!-- ── Page: 컴포넌트 ─────────────────────────── -->
+          <div class="spec-page" data-spp-page="components">
+            <div class="spec-h">Action line</div>
+            <div class="spec-block">
+              에이전트의 모든 <code>tool_use</code>를 1줄짜리 칩으로 노출. 사용자가 "무슨 검색을 했는지" 즉각 파악.
+              <ul>
+                <li>구조: <code>[icon] tool_name "args" [count] [status]</code></li>
+                <li>status: <code>✓ ok</code> / <code>run</code>(pulse) / <code>err</code></li>
+                <li>실패 시 클릭 → 재시도 다이얼로그</li>
+              </ul>
+            </div>
+
+            <div class="spec-h">Snippet card</div>
+            <div class="spec-block">
+              검색 결과 후보. <b>클릭 = "다음 질문에 컨텍스트로 포함"</b>. 선택 상태는 녹색 보더 + ✓.
+              <div class="spec-callout"><b>의도:</b> 사용자가 에이전트의 컨텍스트 윈도우를 직접 편집하는 경험. ctx-bar에 chip으로 누적되어 항상 가시화.</div>
+            </div>
+
+            <div class="spec-h">Claim card / Conflict card</div>
+            <div class="spec-block">
+              에이전트가 <b>중요한 발견·충돌을 명시적으로 보고</b>하는 체크포인트.
+              <ul>
+                <li><b>Claim</b> (녹색): 합성된 핵심 주장 — 신뢰도와 출처를 함께 표시</li>
+                <li><b>Conflict</b> (앰버): 소스 간 측정·정의 충돌 — 다음 단계에서 어떻게 해소할지 명시</li>
+              </ul>
+              두 카드는 사용자가 "이 발견이 맞는지" 직접 검증할 수 있게 돕는 신뢰 장치입니다.
+            </div>
+
+            <div class="spec-h">Live streaming</div>
+            <div class="spec-block">
+              에이전트가 token streaming 중이면 마지막 <code>&lt;p&gt;</code> 끝에 깜빡이는 cursor (<code>▍</code>). working-line은 spinner + 현재 작업 요약.
+            </div>
+          </div>
+
+          <!-- ── Page: 데이터 ────────────────────────────── -->
+          <div class="spec-page" data-spp-page="data">
+            <div class="spec-h">메시지 모델</div>
+            <div class="spec-block">
+              <code>Message</code>는 <code>role</code>(user/agent/system) + <code>blocks[]</code>로 구성. block 종류:
+              <ul>
+                <li><code>prose</code> — 마크다운 텍스트</li>
+                <li><code>action</code> — tool_use 단일</li>
+                <li><code>snippet_row</code> — Source 후보 N개</li>
+                <li><code>claim</code>, <code>conflict</code> — 합성 카드</li>
+                <li><code>working</code> — 현재 진행 상태</li>
+              </ul>
+            </div>
+
+            <div class="spec-h">스트리밍 프로토콜</div>
+            <div class="spec-block">
+              SSE / WebSocket: <code>{ type, msgId, blockId, delta }</code> 이벤트 시퀀스. 클라이언트는 blockId 단위로 lookup 후 textNode append. tool_use의 status는 <code>start</code> → <code>complete</code> 또는 <code>error</code>로 갱신.
+            </div>
+
+            <div class="spec-h">컨텍스트 선택</div>
+            <div class="spec-block">
+              카드 선택 = <code>selectedSourceIds: Set&lt;string&gt;</code> 상태. 다음 사용자 메시지 전송 시 payload에 포함:
+              <ul>
+                <li><code>selectedSources: [{id, title, snippet}]</code></li>
+                <li><code>currentPhase</code>, <code>runId</code></li>
+              </ul>
+              에이전트는 이를 system prompt 프리픽스에 주입하여 다음 plan을 갱신합니다.
+            </div>
+
+            <div class="spec-h">Phase 라이프사이클</div>
+            <div class="spec-block">
+              phase 전환 시 클라이언트는 새 <code>phase_divider</code> block을 받음. phase_completed 이벤트는 시간 stats(<code>1m 04s</code>) 포함.
+            </div>
+          </div>
+
+        </div>
+      </aside>
+
+    </div><!-- /view-chat -->
+
+    <!-- ════════════════════════════════════════════════════════
+         GRAPH VIEW
+    ════════════════════════════════════════════════════════════ -->
+    <div class="view-graph">
+
+      <!-- ── Legend rail (왼쪽 230px) ─────────────────── -->
+      <aside class="graph-rail">
+        <div class="gr-h">개요</div>
+        <div class="gr-intro">
+          이 그래프는 에이전트의 탐색 체인을 인과 그래프로 시각화합니다. 채팅이 <b style="color:var(--tx)">시간 스트림</b>이라면, 그래프는 <b style="color:var(--tx)">공간 구조</b>를 봅니다. 좌→우 방향이 인과 흐름.
+        </div>
+
+        <div class="gr-h">노드 종류</div>
+        <div class="ntype-row">
+          <span class="nt-swatch" style="background:rgba(24,24,27,.08)">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="#18181b" stroke-width="1.6"/></svg>
+          </span>
+          <div class="nt-info">
+            <div class="nm">Question</div>
+            <div class="ds">사용자 질의 = 그래프의 root.</div>
+            <div class="trig">트리거: 검색 제출 즉시</div>
+          </div>
+        </div>
+        <div class="ntype-row">
+          <span class="nt-swatch" style="background:var(--n-think-bg)">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="var(--n-think)" stroke-width="1.6"/></svg>
+          </span>
+          <div class="nt-info">
+            <div class="nm">Thinking</div>
+            <div class="ds">에이전트의 내부 추론. "무엇을 왜 검색할지" 결정.</div>
+            <div class="trig">트리거: tool_use 직전 thinking 블록</div>
+          </div>
+        </div>
+        <div class="ntype-row">
+          <span class="nt-swatch" style="background:var(--n-srch-bg)">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" stroke="var(--n-srch)" stroke-width="1.6"/></svg>
+          </span>
+          <div class="nt-info">
+            <div class="nm">Search</div>
+            <div class="ds">검색 행동. tool_name + 쿼리 표시. Source의 허브.</div>
+            <div class="trig">트리거: 도구 호출 (search_papers, fetch_pdf 등)</div>
+          </div>
+        </div>
+        <div class="ntype-row">
+          <span class="nt-swatch" style="background:var(--n-src-bg)">
+            <svg width="10" height="10" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" stroke="var(--n-src)" stroke-width="1.5"/></svg>
+          </span>
+          <div class="nt-info">
+            <div class="nm">Source</div>
+            <div class="ds">검색 결과 논문·문서. Search를 중심으로 방사 배치. 5개 초과 시 그룹 노드로 축약.</div>
+            <div class="trig">트리거: 도구 결과의 각 row</div>
+          </div>
+        </div>
+        <div class="ntype-row">
+          <span class="nt-swatch" style="background:var(--n-ans-bg)">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="var(--search)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <div class="nt-info">
+            <div class="nm">Answer</div>
+            <div class="ds">sub-question에 대한 합성 답변. 여러 Source에서 도출.</div>
+            <div class="trig">트리거: 에이전트가 합성 단락을 finalize</div>
+          </div>
+        </div>
+
+        <div class="gr-h">엣지 종류</div>
+        <div class="edge-row"><span class="el solid"></span><div class="info"><b>leads-to</b><div class="ds">인과 흐름. Q→T, T→S 체인의 뼈대.</div></div></div>
+        <div class="edge-row"><span class="el dashed"></span><div class="info"><b>in-progress</b><div class="ds">실행 중인 흐름. 파란 점선 + ring-out.</div></div></div>
+        <div class="edge-row"><span class="el dotted"></span><div class="info"><b>found</b><div class="ds">Search → Source. 결과 발견 관계.</div></div></div>
+        <div class="edge-row"><span class="el supp"></span><div class="info"><b>supports</b><div class="ds">Source → Answer. 합성 근거 관계.</div></div></div>
+        <div class="edge-row"><span class="el ctx"></span><div class="info"><b>context</b><div class="ds">사용자 선택 노드 ↔ Question. 다음 turn에 포함될 컨텍스트.</div></div></div>
+
+        <div class="gr-h">통계</div>
+        <div class="stat-box">
+          <div class="stat-row"><span>Question</span><b>1</b></div>
+          <div class="stat-row"><span>Thinking</span><b>2</b></div>
+          <div class="stat-row"><span>Search</span><b>3</b></div>
+          <div class="stat-row"><span>Source</span><b>7</b></div>
+          <div class="stat-row"><span>Answer</span><b>1 (partial)</b></div>
+          <div class="stat-row"><span>Selected</span><b id="g-sel-cnt">1</b></div>
+        </div>
+
+        <div class="interact-guide">
+          <b>인터랙션</b><br>
+          <span class="kd">Click</span> 노드 상세 토글<br>
+          <span class="kd">Shift+Click</span> 다중 선택 (컨텍스트에 누적)<br>
+          <span class="kd">Drag</span> 새 연결선 그리기 (rerouting)<br>
+          선택된 노드 → 하단 입력에 컨텍스트로 전달
+        </div>
+      </aside>
+
+      <!-- ── Graph stage ──────────────────────────────── -->
+      <section class="graph-stage" id="gstage">
+        <div class="graph-grid"></div>
+        <div class="graph-progress"><div class="graph-progress-fill" id="g-progress"></div></div>
+        <div class="anim-step-label" id="anim-step-label"></div>
+
+        <div class="stage-top">
+          <div class="agent-now">
+            <span class="dot"></span>
+            <b>Reproduction</b>&nbsp;·&nbsp;
+            <span style="color:var(--t3)">OpenReview 토론 스크랩 (2/5)</span>
+          </div>
+          <div class="sel-hint show" id="g-sel-hint">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8h12 M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="g-sel-text">1 node selected</span>
+            <span class="clr" id="g-clear-sel">지우기</span>
+          </div>
+          <button class="replay-btn" id="replay-btn" disabled>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3 8A5 5 0 1 0 5.5 3.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 1v3.2H2.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Replay
+          </button>
+          <div class="graph-tools">
+            <button class="gt active" title="Select">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 3l5.5 13 2-5.5 5.5-2L3 3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="gt" title="Connect">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="12" r="2" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.4"/><path d="M5.4 10.6L10.6 5.4" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 1.5"/></svg>
+            </button>
+            <span class="gt-sep"></span>
+            <button class="gt" title="Fit">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 6V3h3 M13 6V3h-3 M3 10v3h3 M13 10v3h-3" stroke="currentColor" stroke-width="1.4"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="graph-canvas">
+          <svg id="edge-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible">
+            <defs>
+              <marker id="arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+                <path d="M1 1L6 3.5L1 6" stroke="#b0b0ae" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </marker>
+              <marker id="arr-srch" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+                <path d="M1 1L6 3.5L1 6" stroke="rgba(59,130,196,.7)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </marker>
+              <marker id="arr-ans" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+                <path d="M1 1L6 3.5L1 6" stroke="rgba(94,156,111,.75)" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </marker>
+              <marker id="arr-ctx" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+                <path d="M1 1L6 3.5L1 6" stroke="rgba(94,156,111,.9)" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </marker>
+            </defs>
+          </svg>
+
+          <!-- ══ NODES ════════════════════════════════════ -->
+          <div class="node node-q" style="left:11%; top:50%" id="gn-q">
+            <div class="n-tag"><span class="pip"></span>Question</div>
+            <div class="n-text">Diffusion LoRA에서 catastrophic forgetting 완화 방법론 비교 + personalization trade-off</div>
+            <div class="n-meta">Run #2451 · 17:32</div>
+          </div>
+
+          <div class="node node-think" style="left:36%; top:28%" id="gn-t1">
+            <div class="n-tag"><span class="pip"></span>Thinking 1</div>
+            <div class="n-text">측정 지표 KID vs CLIP-sim 정리, 5-shot 기준선 설정 후 검색</div>
+            <div class="n-meta">Reader · 38s</div>
+          </div>
+
+          <div class="node node-think" style="left:36%; top:72%" id="gn-t2">
+            <div class="n-tag"><span class="pip"></span>Thinking 2</div>
+            <div class="n-text">ICLR'25 OFT-S rebuttal에 KID 직접 비교표가 있을 것 → OpenReview 스크랩</div>
+            <div class="n-meta">Reproduction · 1m 02s</div>
+          </div>
+
+          <div class="node node-srch" style="left:62%; top:21%" id="gn-s1">
+            <div class="n-tag"><span class="pip"></span>Search 1</div>
+            <div class="n-text">arXiv + Semantic Scholar</div>
+            <div class="n-meta"><span class="q">"LoRA forgetting diffusion"</span><br>42 → 12</div>
+          </div>
+
+          <div class="node node-srch" style="left:62%; top:44%" id="gn-s2">
+            <div class="n-tag"><span class="pip"></span>Search 2</div>
+            <div class="n-text">Local Library</div>
+            <div class="n-meta"><span class="q">tag:#diffusion #forgetting</span><br>3 hits</div>
+          </div>
+
+          <div class="node node-srch running" style="left:62%; top:72%; opacity:.85" id="gn-s3">
+            <div class="n-tag"><span class="pip"></span>Search 3 · <span style="color:var(--n-srch); animation:pulse 1.4s ease-in-out infinite; display:inline-block">진행 중</span></div>
+            <div class="n-text">OpenReview</div>
+            <div class="n-meta"><span class="q">"OFT-S DoRA rebuttal forgetting"</span></div>
+          </div>
+
+          <div class="node node-src selected" style="left:80%; top:11%" id="gn-src1">
+            <div class="n-tag"><span class="pip"></span>Source</div>
+            <div class="n-text">OFT-S: Orthogonal Fine-Tuning with Subspace Constraint</div>
+            <div class="n-meta"><span class="vn">ICLR'25</span> 137 cites</div>
+          </div>
+          <div class="node node-src" style="left:84%; top:19%" id="gn-src2">
+            <div class="n-tag"><span class="pip"></span>Source</div>
+            <div class="n-text">DoRA: Weight-Decomposed Low-Rank Adaptation</div>
+            <div class="n-meta"><span class="vn">ICLR'24</span> 412 cites</div>
+          </div>
+          <div class="node node-src" style="left:80%; top:28%" id="gn-src3">
+            <div class="n-tag"><span class="pip"></span>Source</div>
+            <div class="n-text">Selective LoRA Re-init for Diffusion</div>
+            <div class="n-meta"><span class="vn">arXiv 2501</span></div>
+          </div>
+
+          <div class="node node-src" style="left:80%; top:36%" id="gn-src4">
+            <div class="n-tag"><span class="pip"></span>Source</div>
+            <div class="n-text">DreamBooth: Subject-Driven Generation</div>
+            <div class="n-meta"><span class="vn">CVPR'23</span> 📌</div>
+          </div>
+          <div class="node node-src" style="left:85%; top:44%" id="gn-src5">
+            <div class="n-tag"><span class="pip"></span>Source</div>
+            <div class="n-text">Custom Diffusion: Multi-Concept</div>
+            <div class="n-meta"><span class="vn">CVPR'23</span></div>
+          </div>
+          <div class="node node-src" style="left:80%; top:52%" id="gn-src6">
+            <div class="n-tag"><span class="pip"></span>Source</div>
+            <div class="n-text">EWC-Lite: per-rank Fisher estimation</div>
+            <div class="n-meta"><span class="vn">NeurIPS'24 WS</span></div>
+          </div>
+
+          <div class="node node-src fresh" style="left:80%; top:65%; opacity:.85" id="gn-src7">
+            <div class="n-tag"><span class="pip"></span>Source · <span style="color:var(--search)">새 발견</span></div>
+            <div class="n-text">OFT-S rebuttal Table 7 (KID forgetting)</div>
+            <div class="n-meta"><span class="vn">OpenReview</span></div>
+          </div>
+
+          <div class="node node-ans" style="left:84%; top:61%" id="gn-ans">
+            <div class="n-tag"><span class="pip"></span>Answer · partial</div>
+            <div class="n-text">OFT-S ↓78% forgetting, ↓1.4 FID fidelity vs LoRA — trade-off 정렬 중</div>
+            <div class="n-meta">신뢰도 0.82 · Analyst 대기</div>
+          </div>
+
+          <!-- ══ ANNOTATIONS (toggle data-annot) ══════════ -->
+          <div class="annot" style="left:5%; top:18%">
+            <div class="an-dot" style="left:0;top:0">①</div>
+            <div class="an-pill" style="margin-top:22px; width:215px">
+              <b>질문 = 그래프 root</b><br>
+              사용자가 Enter를 누르는 즉시 검은 노드가 생성됩니다. 모든 후속 노드의 인과 출발점이며, 화면 가장 좌측에 고정.
+              <br><em>구현:</em> Q 노드는 1개만 존재, runId와 1:1.
+            </div>
+          </div>
+          <div class="annot" style="left:25%; top:14%">
+            <div class="an-dot" style="left:0;top:0">②</div>
+            <div class="an-pill" style="margin-top:22px; width:225px">
+              <b>Thinking → Search 쌍</b><br>
+              에이전트가 "무엇을 검색할지" 결정하면 Thinking 노드가 생기고, 도구를 실행하면 Search 노드가 이어집니다. 굵은 실선이 인과 흐름을 표시합니다.
+              <br><em>트리거:</em> <code style="background:#2a2e3e;padding:0 4px;border-radius:3px">&lt;thinking&gt;</code> block → <code style="background:#2a2e3e;padding:0 4px;border-radius:3px">tool_use</code>
+            </div>
+          </div>
+          <div class="annot" style="left:55%; top:6%">
+            <div class="an-dot" style="left:0;top:0">③</div>
+            <div class="an-pill" style="margin-top:22px; width:225px">
+              <b>Search 중심 방사 클러스터</b><br>
+              Search 노드를 허브로 결과 논문들이 주위에 배치됩니다. 결과가 많으면 그룹으로 묶여 <em>"▶ 8 sources"</em> 축약 노드로 표시 → 클릭 시 펼쳐짐.
+            </div>
+          </div>
+          <div class="annot" style="left:55%; top:80%">
+            <div class="an-dot" style="left:0;top:0">④</div>
+            <div class="an-pill" style="margin-top:22px; width:215px">
+              <b>진행 중 = ring-out 애니메이션</b><br>
+              Search 3은 아직 실행 중. 파란 ring이 1.8s 주기로 퍼지며 "지금 여기"를 표시합니다. 완료 시 ring 제거.
+            </div>
+          </div>
+          <div class="annot" style="left:67%; top:74%">
+            <div class="an-dot" style="left:0;top:0">⑤</div>
+            <div class="an-pill" style="margin-top:22px; width:215px">
+              <b>새 발견 = green flash ring</b><br>
+              방금 도착한 Source는 초록 ring이 한 번 번쩍이며 등장. 사용자 시선을 자연스럽게 끌어 실시간 발견을 인지시킵니다.
+            </div>
+          </div>
+          <div class="annot" style="left:5%; top:5%">
+            <div class="an-dot" style="left:0;top:0">⑥</div>
+            <div class="an-pill" style="margin-top:22px; width:225px">
+              <b>녹색 점선 = 컨텍스트 연결</b><br>
+              OFT-S가 선택되어 Question에 굵은 녹색 호로 연결. 다음 Ask 시 이 노드의 내용이 컨텍스트로 전달됩니다.
+              <br><em>인터랙션:</em> Shift+Click으로 다중 선택.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Detail panel (오른쪽 300px, with tabs) ─────── -->
+      <aside class="graph-detail">
+        <div class="gd-tabs">
+          <button class="gd-tab" data-gdt="detail" id="tab-detail">노드 상세</button>
+          <button class="gd-tab active" data-gdt="spec" id="tab-spec">구현 명세</button>
+        </div>
+
+        <!-- ── Detail pane ──────────────────────────────── -->
+        <div class="gd-pane" data-gdp="detail">
+          <div class="gd-empty" id="gd-empty" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4"/><path d="M8 12h8 M14 9l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            노드를 클릭하면<br>상세 정보와 액션이<br>나타납니다
+          </div>
+
+          <div class="gd-card vis" id="gd-src1">
+            <span class="gd-badge" style="background:rgba(74,74,80,.08); color:var(--n-src)">SOURCE</span>
+            <div class="gd-title">OFT-S: Orthogonal Fine-Tuning with Subspace Constraint for Personalization</div>
+            <div class="gd-sub">Liu et al. · ICLR 2025 · 137 citations</div>
+            <div class="gd-body">Orthogonal constraint를 LoRA의 rank subspace에 적용해 기존 task의 representation을 보존. 5-shot personalization에서 LoRA 대비 forgetting 78% 감소, fidelity 1.4 FID 하락.</div>
+            <div class="gd-sep"></div>
+            <div class="gd-kv"><span class="k">발견 경로</span><span class="v">Search 1 (arXiv)</span></div>
+            <div class="gd-kv"><span class="k">관련도</span><span class="v">0.94</span></div>
+            <div class="gd-kv"><span class="k">재현 가능</span><span class="v">✓ GitHub</span></div>
+            <div class="gd-kv"><span class="k">컨텍스트 선택</span><span class="v" style="color:var(--search)">✓ 선택됨</span></div>
+            <div class="gd-edges">
+              <h5>연결 관계</h5>
+              <div class="gd-erow"><span class="gd-epip" style="background:rgba(94,156,111,.12);color:var(--search)">supports</span><span>Answer "forgetting 78% 감소"</span></div>
+              <div class="gd-erow"><span class="gd-epip" style="background:rgba(214,138,60,.12);color:var(--n-fu)">conflicts</span><span>DoRA "PEFT forgetting 영향 미미"</span></div>
+              <div class="gd-erow"><span class="gd-epip" style="background:rgba(59,130,196,.12);color:var(--n-srch)">found by</span><span>Search 1</span></div>
+            </div>
+            <div class="gd-actions">
+              <button class="gd-btn pri">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8h8M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                컨텍스트로 사용
+              </button>
+              <button class="gd-btn sec">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v12 M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                이 노드에서 새 검색
+              </button>
+              <button class="gd-btn sec">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 12V4l4-1.5L12 4v8" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+                Reading에 저장
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Spec pane (구현 명세) ───────────────────── -->
+        <div class="gd-pane active" data-gdp="spec">
+          <div class="spec-h">노드 생성 트리거</div>
+          <div class="spec-block">
+            <ul>
+              <li><b>Question</b> — 사용자가 검색을 제출하는 즉시. runId와 1:1.</li>
+              <li><b>Thinking</b> — 에이전트가 <code>&lt;thinking&gt;</code> 블록을 방출. 하나 이상의 Search로 분기 가능.</li>
+              <li><b>Search</b> — <code>tool_use</code> 발화 시. tool_name과 args를 노드 메타에 저장.</li>
+              <li><b>Source</b> — tool_result의 각 row. Search 노드 주변에 방사 배치.</li>
+              <li><b>Answer</b> — 에이전트가 sub-question 합성을 finalize. supporting Source들이 녹색 점선으로 연결.</li>
+            </ul>
+          </div>
+
+          <div class="spec-h">엣지 의미</div>
+          <div class="spec-block">
+            <ul>
+              <li><b>leads-to</b> — Q→T, T→S 인과 체인의 뼈대.</li>
+              <li><b>in-progress</b> — 파란 점선. 실행 중일 때만, 완료 시 leads-to로 전환.</li>
+              <li><b>found</b> — Search→Source. 회색 점선.</li>
+              <li><b>supports</b> — Source→Answer. 합성 근거. 신뢰도 0.7+ 만 그림.</li>
+              <li><b>context</b> — 사용자가 선택한 노드 ↔ Question. 굵은 녹색 호로 상단을 가로지름.</li>
+            </ul>
+            <div class="spec-callout"><b>주의:</b> conflict edge는 별도 표시하지 않고, conflict-card가 있는 Source 노드는 앰버 보더로 강조.</div>
+          </div>
+
+          <div class="spec-h">레이아웃 규칙</div>
+          <div class="spec-block">
+            좌→우 = 시간축 (인과 순서). y축은 분기 분산.
+            <ul>
+              <li>Question: <code>left:11%, top:50%</code> 고정</li>
+              <li>Thinking N: 같은 layer는 y축 분산 (28%, 72%)</li>
+              <li>Search: Thinking에서 ~25% 우측, y는 Thinking 근처</li>
+              <li>Source: Search 중심 반경 ~120px 방사. 5개 초과 시 그룹화.</li>
+              <li>Answer: 가장 우측, 연결된 Source 평균 y</li>
+            </ul>
+          </div>
+
+          <div class="spec-h">애니메이션 시퀀스</div>
+          <div class="spec-block">
+            진입 시 자동 재생 (총 ~7s):
+            <ul>
+              <li>0ms: Q 등장</li>
+              <li>700ms: T1 (Reader)</li>
+              <li>1300–1800ms: S1, S2 등장</li>
+              <li>2300–3800ms: Source 1~6 (300ms 간격)</li>
+              <li>4300ms: T2 (Reproduction)</li>
+              <li>5000ms: S3 (running ring)</li>
+              <li>5700ms: Source 7 (fresh ring)</li>
+              <li>6400ms: Answer (partial)</li>
+            </ul>
+            각 단계마다 <code>drawEdges()</code> 재실행 → 새 엣지만 fade-in.
+          </div>
+
+          <div class="spec-h">선택 모델</div>
+          <div class="spec-block">
+            <ul>
+              <li><code>Click</code>: 단일 선택 토글 + 우측 상세 표시</li>
+              <li><code>Shift+Click</code>: 다중 선택 (Set에 add/remove)</li>
+              <li>선택된 노드 → 하단 ctx-badge에 카운트 표시 → 다음 Ask payload에 포함</li>
+            </ul>
+            <div class="spec-callout"><b>구현:</b> <code>gSelected: Set&lt;nodeId&gt;</code> + <code>updateGraphSel()</code> 가 ctx-badge / sel-hint를 동기화.</div>
+          </div>
+
+          <div class="spec-h">스케일 한계</div>
+          <div class="spec-block">
+            노드 50개 초과 시:
+            <ul>
+              <li>Source는 동일 Search 하위로 자동 그룹 (<code>"▶ N sources"</code>)</li>
+              <li>완료된 phase는 fold (heading 클릭으로 expand)</li>
+              <li>500개 초과 시 force-directed → tree layout 강제</li>
+            </ul>
+          </div>
+
+          <div class="spec-h">Replay & Resize</div>
+          <div class="spec-block">
+            <ul>
+              <li><code>Replay</code> 버튼은 시퀀스 완료 후 활성화. 클릭 시 <code>playGraphAnimation()</code> 재실행.</li>
+              <li>resize는 애니메이션 완료 후에만 <code>drawEdges({anim:false})</code>로 재계산.</li>
+              <li>애니메이션 중 resize는 무시 (시각 깜빡임 방지).</li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+    </div><!-- /view-graph -->
+
+    <!-- ── Graph steer bar (graph 뷰 활성 시 노출) ─── -->
+    <div class="graph-steer">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8h10 M8 3v10" stroke="var(--t3)" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <input placeholder="이 그래프에서 새 질문 — 선택된 노드가 컨텍스트로 포함됩니다…">
+      <span class="ctx-badge-g show" id="g-ctx-badge">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M2 8h12 M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        OFT-S 포함
+        <span class="cx" id="g-badge-clr">×</span>
+      </span>
+      <button class="pause">
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="1.5" width="3" height="9" rx=".5"/><rect x="7" y="1.5" width="3" height="9" rx=".5"/></svg>
+        Pause
+      </button>
+      <button class="send">
+        Ask
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 6h6 M6 3l3 3-3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<div class="variant-badge">
+  <strong>v3 · Final</strong>
+  <span>aligned with Dashboard refined</span>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   EDGE DRAWING (visibility-aware)
+   - 가시 노드들 사이의 엣지만 그린다.
+   - drawEdges({anim:true}) 호출 시 새 엣지에 edge-fade 애니메이션.
+══════════════════════════════════════════════════════════════════ */
+function drawEdges({ anim = false } = {}) {
+  const stage = document.getElementById('gstage');
+  const svg   = document.getElementById('edge-svg');
+  if (!stage || !svg) return;
+
+  svg.querySelectorAll('path.e').forEach(p => p.remove());
+
+  const sr = stage.getBoundingClientRect();
+
+  function isVis(id) {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('node-hidden');
+  }
+
+  function box(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      cx: r.left - sr.left + r.width  / 2,
+      cy: r.top  - sr.top  + r.height / 2,
+      l:  r.left  - sr.left,
+      r:  r.right - sr.left,
+      t:  r.top   - sr.top,
+      b:  r.bottom - sr.top,
+      w:  r.width, h: r.height,
+    };
+  }
+
+  function addPath(d, stroke, width, dash, marker) {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', stroke);
+    p.setAttribute('stroke-width', String(width));
+    p.classList.add('e');
+    if (dash)   p.setAttribute('stroke-dasharray', dash);
+    if (marker) p.setAttribute('marker-end', `url(#${marker})`);
+    if (anim)   p.style.animation = 'edge-fade 300ms ease-out both';
+    svg.appendChild(p);
+  }
+
+  function hcurve(x1, y1, x2, y2) {
+    const dx = (x2 - x1) * 0.55;
+    return `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`;
+  }
+
+  function backbone(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    addPath(hcurve(f.r, f.cy, t.l, t.cy), '#bdbdbb', 1.5, null, 'arr');
+  }
+  function inProgress(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    addPath(hcurve(f.r, f.cy, t.l, t.cy), 'rgba(59,130,196,.55)', 1.5, '5 3', 'arr-srch');
+  }
+  function spoke(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    const ex = f.r, ey = f.cy + (t.cy - f.cy) * 0.4;
+    addPath(hcurve(ex, ey, t.l, t.cy), '#c4c4c2', 1.2, '3 2.5');
+  }
+  function support(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    addPath(hcurve(f.r, f.cy, t.l, t.cy), 'rgba(94,156,111,.5)', 1.3, '4 2.5', 'arr-ans');
+  }
+  function ctxArc(fid, tid) {
+    if (!isVis(fid) || !isVis(tid)) return;
+    const f = box(fid), t = box(tid);
+    if (!f || !t) return;
+    const fx = f.cx, fy = f.t;
+    const tx = t.r,  ty = t.cy;
+    const cpx = (fx + tx) / 2, cpy = Math.min(fy, ty) - 70;
+    addPath(`M ${fx} ${fy} Q ${cpx} ${cpy}, ${tx} ${ty}`,
+            'rgba(94,156,111,.75)', 2, '6 3', 'arr-ctx');
+  }
+
+  backbone('gn-q',  'gn-t1');
+  backbone('gn-q',  'gn-t2');
+  backbone('gn-t1', 'gn-s1');
+  backbone('gn-t1', 'gn-s2');
+  inProgress('gn-t2', 'gn-s3');
+  spoke('gn-s1', 'gn-src1');
+  spoke('gn-s1', 'gn-src2');
+  spoke('gn-s1', 'gn-src3');
+  spoke('gn-s2', 'gn-src4');
+  spoke('gn-s2', 'gn-src5');
+  spoke('gn-s2', 'gn-src6');
+  spoke('gn-s3', 'gn-src7');
+  support('gn-src1', 'gn-ans');
+  support('gn-src4', 'gn-ans');
+  ctxArc('gn-src1', 'gn-q');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SEQUENTIAL GRAPH ANIMATION
+══════════════════════════════════════════════════════════════════ */
+const ANIM_SEQ = [
+  { id:'gn-q',    ms:0,    label:'질문 접수 → 그래프 root 생성',         pct:4  },
+  { id:'gn-t1',   ms:750,  label:'Thinking 1 — 측정 지표 · 기준선 계획',  pct:13 },
+  { id:'gn-s1',   ms:1400, label:'Search 1 — arXiv · Semantic Scholar',  pct:24 },
+  { id:'gn-s2',   ms:1850, label:'Search 2 — Local Library 검색',         pct:33 },
+  { id:'gn-src1', ms:2300, label:'Source — OFT-S (ICLR\'25)',             pct:41 },
+  { id:'gn-src2', ms:2600, label:'Source — DoRA (ICLR\'24)',              pct:48 },
+  { id:'gn-src3', ms:2900, label:'Source — Selective LoRA Re-init',       pct:54 },
+  { id:'gn-src4', ms:3200, label:'Source — DreamBooth (CVPR\'23)',        pct:59 },
+  { id:'gn-src5', ms:3500, label:'Source — Custom Diffusion',             pct:64 },
+  { id:'gn-src6', ms:3800, label:'Source — EWC-Lite (NeurIPS\'24 WS)',    pct:68 },
+  { id:'gn-t2',   ms:4300, label:'Thinking 2 — OpenReview rebuttal 탐색', pct:76 },
+  { id:'gn-s3',   ms:5000, label:'Search 3 — OpenReview (진행 중)',       pct:84 },
+  { id:'gn-src7', ms:5700, label:'새 Source — OFT-S rebuttal Table 7',    pct:91 },
+  { id:'gn-ans',  ms:6400, label:'Answer 합성 시작 (partial)',            pct:98 },
+];
+
+let _animTimers = [];
+let _animDone = false;
+
+function _hideAllNodes() {
+  ANIM_SEQ.forEach(({id}) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('node-hidden');
+  });
+  document.getElementById('edge-svg')?.querySelectorAll('path.e').forEach(p => p.remove());
+  const bar = document.getElementById('g-progress');
+  if (bar) bar.style.width = '0%';
+  const lbl = document.getElementById('anim-step-label');
+  if (lbl) { lbl.textContent = ''; lbl.classList.remove('show'); }
+}
+
+function _revealNode(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('node-hidden');
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+}
+
+function _setStepLabel(text) {
+  const lbl = document.getElementById('anim-step-label');
+  if (!lbl) return;
+  lbl.textContent = text;
+  lbl.classList.add('show');
+}
+
+function playGraphAnimation() {
+  _animTimers.forEach(t => clearTimeout(t));
+  _animTimers = [];
+  _animDone = false;
+
+  const replayBtn = document.getElementById('replay-btn');
+  if (replayBtn) replayBtn.disabled = true;
+
+  _hideAllNodes();
+
+  ANIM_SEQ.forEach(({id, ms, label, pct}) => {
+    const t = setTimeout(() => {
+      _revealNode(id);
+      _setStepLabel(label);
+      const bar = document.getElementById('g-progress');
+      if (bar) bar.style.width = pct + '%';
+      requestAnimationFrame(() => drawEdges({ anim: true }));
+    }, ms);
+    _animTimers.push(t);
+  });
+
+  const lastMs = ANIM_SEQ[ANIM_SEQ.length - 1].ms + 700;
+  _animTimers.push(setTimeout(() => {
+    _animDone = true;
+    if (replayBtn) replayBtn.disabled = false;
+    const bar = document.getElementById('g-progress');
+    if (bar) bar.style.width = '100%';
+    const lbl = document.getElementById('anim-step-label');
+    if (lbl) {
+      lbl.textContent = '탐색 완료 — 노드 클릭으로 상세 보기';
+      setTimeout(() => lbl.classList.remove('show'), 2500);
+    }
+  }, lastMs));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   VIEW & PANEL TOGGLES
+══════════════════════════════════════════════════════════════════ */
+const root = document.documentElement;
+
+/* ── Stage transitions: home → plan → running ────────────
+   진입 흐름 stepper. data-stage 가 바뀔 때마다 CSS가
+   stage-home / stage-plan / view-chat 의 가시성을 전환.
+   running 진입 시에만 spec 패널을 자동으로 열어준다. */
+function setStage(s) {
+  root.setAttribute('data-stage', s);
+  document.querySelectorAll('.stage-step').forEach(b => {
+    b.classList.toggle('active', b.dataset.stageGo === s);
+  });
+  if (s === 'running') {
+    /* running 으로 들어오면 spec 패널을 펼쳐 reference 동선을 안내 */
+    root.setAttribute('data-spec', 'open');
+    /* 그래프 뷰가 활성이면 다시 애니메이션 재생 */
+    if (root.getAttribute('data-view') === 'graph') {
+      setTimeout(() => playGraphAnimation(), 80);
+    }
+  }
+}
+/* 모든 stage-step / data-stage-go 버튼을 단일 핸들러로 처리 */
+document.querySelectorAll('[data-stage-go]').forEach(b => {
+  b.addEventListener('click', () => setStage(b.dataset.stageGo));
+});
+/* 초기 stepper 상태 동기화 */
+setStage(root.getAttribute('data-stage') || 'home');
+
+function setView(v) {
+  root.setAttribute('data-view', v);
+  document.getElementById('btn-chat').classList.toggle('active', v === 'chat');
+  document.getElementById('btn-graph').classList.toggle('active', v === 'graph');
+  if (v === 'graph') {
+    setTimeout(() => playGraphAnimation(), 60);
+  }
+}
+document.getElementById('btn-chat').addEventListener('click', () => setView('chat'));
+document.getElementById('btn-graph').addEventListener('click', () => setView('graph'));
+document.getElementById('to-graph')?.addEventListener('click', () => setView('graph'));
+
+window.addEventListener('resize', () => { if (_animDone) drawEdges({ anim: false }); });
+document.getElementById('replay-btn')?.addEventListener('click', () => {
+  if (_animDone) playGraphAnimation();
+});
+
+/* annotations toggle */
+document.getElementById('annot-btn').addEventListener('click', () => {
+  const cur = root.getAttribute('data-annot') === 'true';
+  root.setAttribute('data-annot', cur ? 'false' : 'true');
+});
+
+/* spec panel toggle (chat view) */
+document.getElementById('spec-btn').addEventListener('click', () => {
+  const cur = root.getAttribute('data-spec');
+  root.setAttribute('data-spec', cur === 'open' ? 'closed' : 'open');
+});
+
+/* spec panel inner tabs */
+document.querySelectorAll('.spec-page-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.spp;
+    document.querySelectorAll('.spec-page-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.spec-page').forEach(p => p.classList.toggle('active', p.dataset.sppPage === target));
+  });
+});
+
+/* graph detail tabs */
+document.querySelectorAll('.gd-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.gdt;
+    document.querySelectorAll('.gd-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.gd-pane').forEach(p => p.classList.toggle('active', p.dataset.gdp === target));
+    root.setAttribute('data-tab', target);
+  });
+});
+
+/* intent banner dismiss */
+document.getElementById('ib-close')?.addEventListener('click', () => {
+  document.getElementById('intent-banner')?.classList.add('dismissed');
+});
+
+/* ════════════════════════════════════════════════════════════════
+   CHAT SNIPPET CARD SELECTION
+══════════════════════════════════════════════════════════════════ */
+const selectedCards = new Set(['s1']);
+document.querySelectorAll('.snippet-card').forEach(card => {
+  card.addEventListener('click', () => {
+    const sid = card.dataset.sid;
+    if (selectedCards.has(sid)) {
+      selectedCards.delete(sid);
+      card.classList.remove('selected');
+      card.querySelector('.s-sel')?.remove();
+    } else {
+      selectedCards.add(sid);
+      card.classList.add('selected');
+      if (!card.querySelector('.s-sel')) {
+        const sp = document.createElement('span');
+        sp.className = 's-sel'; sp.textContent = '✓';
+        card.querySelector('.s-meta').appendChild(sp);
+      }
+    }
+    updateChatCtx();
+  });
+});
+function updateChatCtx() {
+  const bar = document.getElementById('ctx-bar');
+  const chips = document.getElementById('chat-chips');
+  const labels = { s1:'OFT-S (ICLR\'25)', s2:'DoRA (ICLR\'24)', s3:'Selective LoRA Re-init', s4:'EWC-Lite', s5:'DreamBooth' };
+  if (selectedCards.size === 0) { bar.classList.remove('show'); return; }
+  bar.classList.add('show');
+  chips.innerHTML = [...selectedCards].map(sid =>
+    `<span class="ctx-chip">${labels[sid]||sid}<span class="rm" data-cid="${sid}">×</span></span>`
+  ).join('');
+  chips.querySelectorAll('.rm').forEach(r => r.addEventListener('click', e => {
+    e.stopPropagation();
+    const cid = r.dataset.cid;
+    selectedCards.delete(cid);
+    document.querySelector(`.snippet-card[data-sid="${cid}"]`)?.classList.remove('selected');
+    document.querySelector(`.snippet-card[data-sid="${cid}"] .s-sel`)?.remove();
+    updateChatCtx();
+  }));
+}
+document.getElementById('chat-clear-all')?.addEventListener('click', () => {
+  selectedCards.clear();
+  document.querySelectorAll('.snippet-card.selected').forEach(c => {
+    c.classList.remove('selected');
+    c.querySelector('.s-sel')?.remove();
+  });
+  updateChatCtx();
+});
+
+/* ════════════════════════════════════════════════════════════════
+   GRAPH NODE SELECTION
+══════════════════════════════════════════════════════════════════ */
+const gSelected = new Set(['gn-src1']);
+function updateGraphSel() {
+  const cnt = gSelected.size;
+  document.getElementById('g-sel-cnt').textContent = cnt;
+  const hint = document.getElementById('g-sel-hint');
+  const badge = document.getElementById('g-ctx-badge');
+  if (cnt > 0) {
+    hint.classList.add('show');
+    document.getElementById('g-sel-text').textContent = `${cnt} node${cnt>1?'s':''} selected`;
+    badge.classList.add('show');
+  } else {
+    hint.classList.remove('show');
+    badge.classList.remove('show');
+  }
+}
+document.querySelectorAll('.node').forEach(node => {
+  node.addEventListener('click', e => {
+    if (!node.id) return;
+    if (e.shiftKey) {
+      node.classList.toggle('selected');
+      if (node.classList.contains('selected')) gSelected.add(node.id);
+      else gSelected.delete(node.id);
+    } else {
+      const wasSelected = node.classList.contains('selected');
+      node.classList.toggle('selected');
+      if (!wasSelected) gSelected.add(node.id);
+      else gSelected.delete(node.id);
+    }
+    updateGraphSel();
+    requestAnimationFrame(() => drawEdges({ anim: false }));
+  });
+});
+document.getElementById('g-clear-sel')?.addEventListener('click', () => {
+  gSelected.clear();
+  document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
+  updateGraphSel();
+  drawEdges({ anim: false });
+});
+document.getElementById('g-badge-clr')?.addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('g-ctx-badge').classList.remove('show');
+});
+</script>
+</body>
+</html>

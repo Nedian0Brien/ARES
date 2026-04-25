@@ -294,6 +294,121 @@ export function createSearchFeature({
       </button>
     `;
   }
+
+  function activeSearchAgentRun() {
+    return state.searchAgentRun && typeof state.searchAgentRun === "object" ? state.searchAgentRun : null;
+  }
+
+  function agenticRunQuery(run) {
+    return String(run?.input?.query || run?.query || state.searchInput || "").trim();
+  }
+
+  function agenticRunScopes(run) {
+    const source = Array.isArray(run?.input?.scopes) && run.input.scopes.length ? run.input.scopes : state.searchScopes;
+    return source.filter(Boolean);
+  }
+
+  function agenticRunIdLabel(run) {
+    const raw = String(run?.id || "").trim();
+    if (!raw) {
+      return "Run 준비 중";
+    }
+
+    const compact = raw.replace(/^run[-_]?/i, "");
+    return `Run #${compact.slice(-4).toUpperCase()}`;
+  }
+
+  function agenticRunElapsed(run) {
+    const started = Date.parse(run?.startedAt || run?.createdAt || "");
+    if (!Number.isFinite(started)) {
+      return "1s";
+    }
+
+    const elapsedSeconds = Math.max(1, Math.round((Date.now() - started) / 1000));
+    if (elapsedSeconds < 60) {
+      return `${elapsedSeconds}s`;
+    }
+
+    return `${Math.floor(elapsedSeconds / 60)}m ${String(elapsedSeconds % 60).padStart(2, "0")}s`;
+  }
+
+  function agenticRunStatusLabel(run) {
+    if (run?.status === "done") {
+      return "32/32";
+    }
+
+    if (run?.status === "queue") {
+      return "0/32";
+    }
+
+    return "1/32";
+  }
+
+  function renderAgenticRunBadge(run) {
+    const statusLabel = run?.status === "done" ? "Done" : run?.status === "queue" ? "Queued" : "Live";
+    return `
+      <div class="run-badge" aria-live="off">
+        <span class="dot"></span>
+        ${escapeHtml(statusLabel)} · ${escapeHtml(agenticRunStatusLabel(run))} · ${escapeHtml(agenticRunElapsed(run))}
+      </div>
+    `;
+  }
+
+  function renderAgenticRunStage(project) {
+    const run = activeSearchAgentRun();
+    const query = agenticRunQuery(run) || project?.defaultQuery || "Agentic Search query";
+    const scopes = agenticRunScopes(run);
+    const scopeLabel = scopes.length ? scopes.map((scope) => scope.label || scope.id).filter(Boolean).join(" · ") : "Project-wide";
+    const stageLine = run?.status === "done" ? "Reader phase complete" : run?.status === "queue" ? "Reader phase queued" : "Reader phase running";
+    const summary = String(run?.outputSummary || "").trim();
+    const warning = String(run?.warning || run?.error || "").trim();
+
+    return `
+      <div class="run-inner">
+        <div class="run-inline-badge">${renderAgenticRunBadge(run)}</div>
+        <div class="q-block">
+          <div class="q-run-line">
+            <span class="badge">Agentic Search</span>
+            <span>${escapeHtml(agenticRunIdLabel(run))} · 4단계 계획 (Reader → Reproduction → Experiment → Analyst)</span>
+            <span class="live-mark"><span class="dot"></span>${run?.status === "done" ? "완료" : "진행 중"}</span>
+          </div>
+          <h1 class="q-text" tabindex="-1">${escapeHtml(query)}</h1>
+          <div class="q-pills">
+            <span class="q-pill">${icon("clock", { size: 11, color: "currentColor" })}<span>예상 4분</span></span>
+            <span class="q-pill">${icon("globe", { size: 11, color: "currentColor" })}<span>${escapeHtml(scopeLabel)}</span></span>
+            <span class="q-pill">${icon("book", { size: 11, color: "currentColor" })}<span>Reading 큐에 자동 저장</span></span>
+            <span class="q-pill">${icon("history", { size: 11, color: "currentColor" })}<span>중간 결과 자동 체크포인트</span></span>
+          </div>
+        </div>
+
+        <div class="phase-divider">
+          <div class="pd-inner"><span class="pd-tag">READER</span> 정의·지표 정렬 · ${escapeHtml(stageLine)}</div>
+        </div>
+
+        <div class="phase-card">
+          <div class="pc-h">
+            ${icon("search", { size: 12, color: "currentColor" })}
+            핵심 정의 추출
+            <span class="step-cur">${escapeHtml(agenticRunStatusLabel(run))} sources</span>
+          </div>
+          <ul class="pc-bullets">
+            <li><b>Query intent</b> — ${escapeHtml(query)}</li>
+            <li><b>Scope</b> — ${escapeHtml(scopeLabel)}</li>
+            <li>${summary ? escapeHtml(summary) : 'OpenAlex와 프로젝트 라이브러리를 기준으로 후보 논문을 수집하고 있습니다.'}<span class="pc-stream-cursor"></span></li>
+            ${warning ? `<li><b>Runtime note</b> — ${escapeHtml(warning)}</li>` : ""}
+          </ul>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAgenticLiveRegion(run) {
+    if (!run) {
+      return "";
+    }
+
+    return `<div class="search-agentic-live sr-only" aria-live="polite">${escapeHtml(`${agenticRunIdLabel(run)} 시작. Reader 단계 진행 중`)}</div>`;
+  }
   
   function renderSearchDashboard(project) {
     const library = dashboardLibraryItems();
@@ -373,9 +488,12 @@ export function createSearchFeature({
     );
     const worklistRangeLabel =
       totalCollected > 0 ? `1-${worklistRows.length} of ${totalCollected}` : "0 of 0";
+    const agentRun = activeSearchAgentRun();
+    const hasAgentRun = Boolean(agentRun);
   
     return `
-      <div class="search-stage search-stage-dashboard" data-ares-surface="search-stage" data-ares-stage="search" data-search-layout="${escapeHtml(state.searchLayout)}">
+      <div class="search-stage search-stage-dashboard search-agentic-entry" data-ares-surface="search-stage" data-ares-stage="search" data-search-layout="${escapeHtml(state.searchLayout)}" data-agentic-run-active="${hasAgentRun ? "true" : "false"}">
+        <div class="stage-home" ${hasAgentRun ? 'inert aria-hidden="true"' : 'aria-hidden="false"'}>
         <section class="search-dashboard" data-ares-surface="search-dashboard" data-ares-stage="search">
           <section class="dashboard-hero-wrap">
             <div class="search-home-hero">
@@ -590,6 +708,11 @@ export function createSearchFeature({
         </section>
   
         ${renderSearchScopePicker()}
+        </div>
+        <div class="stage-run" aria-hidden="${hasAgentRun ? "false" : "true"}">
+          ${renderAgenticRunStage(project)}
+        </div>
+        ${renderAgenticLiveRegion(agentRun)}
       </div>
     `;
   }
