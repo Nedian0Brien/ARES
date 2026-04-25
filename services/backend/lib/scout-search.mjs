@@ -8,6 +8,13 @@ const DEFAULT_RESULTS_PER_PAGE = 24;
 const DEFAULT_SCOUT_TIMEOUT_MS = 45000;
 const OPENALEX_API_KEY_REQUIRED_MESSAGE =
   'OPENALEX_API_KEY is missing. OpenAlex requires an API key for real traffic as of February 13, 2026.';
+const SCOUT_ENV_STRIP_KEYS = [
+  'ARES_DATABASE_URL',
+  'DATABASE_URL',
+  'OPENALEX_API_KEY',
+  'OPENALEX_MAILTO',
+  'PGPASSWORD',
+];
 
 function uniqueStrings(values) {
   return Array.from(
@@ -32,65 +39,33 @@ function capitalise(value) {
   return `${text.slice(0, 1).toUpperCase()}${text.slice(1)}`;
 }
 
-function buildPaperSchema() {
-  return {
-    type: 'object',
-    additionalProperties: false,
-    required: [
-      'paperId',
-      'title',
-      'authors',
-      'venue',
-      'year',
-      'abstract',
-      'summary',
-      'keyPoints',
-      'keywords',
-      'matchedKeywords',
-      'citedByCount',
-      'openAccess',
-      'paperUrl',
-      'pdfUrl',
-      'sourceName',
-      'sourceProvider',
-      'relevance',
-    ],
-    properties: {
-      paperId: { type: 'string' },
-      title: { type: 'string' },
-      authors: { type: 'array', items: { type: 'string' } },
-      venue: { type: 'string' },
-      year: { type: ['integer', 'null'] },
-      abstract: { type: 'string' },
-      summary: { type: 'string' },
-      keyPoints: { type: 'array', items: { type: 'string' } },
-      keywords: { type: 'array', items: { type: 'string' } },
-      matchedKeywords: { type: 'array', items: { type: 'string' } },
-      citedByCount: { type: 'number' },
-      openAccess: { type: 'boolean' },
-      paperUrl: { type: ['string', 'null'] },
-      pdfUrl: { type: ['string', 'null'] },
-      sourceName: { type: 'string' },
-      sourceProvider: { type: 'string' },
-      relevance: { type: 'number' },
-    },
-  };
+export function buildScoutRuntimeEnv(sourceEnv = process.env) {
+  const env = { ...sourceEnv };
+  for (const key of SCOUT_ENV_STRIP_KEYS) {
+    delete env[key];
+  }
+  return env;
 }
 
 export function buildScoutOutputSchema() {
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['results'],
+    required: ['rankedPaperIds', 'warning'],
     properties: {
-      results: {
+      rankedPaperIds: {
         type: 'array',
-        items: buildPaperSchema(),
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['paperId', 'rationale'],
+          properties: {
+            paperId: { type: 'string' },
+            rationale: { type: 'string' },
+          },
+        },
       },
-      total: { type: 'number' },
-      query: { type: 'string' },
       warning: { type: 'string' },
-      live: { type: 'boolean' },
     },
   };
 }
@@ -103,45 +78,52 @@ function buildScopeLines(scopes) {
   return scopes.map((scope) => `- ${scope.type}: ${scope.label}`);
 }
 
-function buildHelperCommandExample(helperPath, { project, query, scopes }) {
-  const args = [
-    'node',
-    helperPath,
-    '--query',
-    JSON.stringify(query),
-    '--project-id',
-    JSON.stringify(project.id),
-    '--project-focus',
-    JSON.stringify(project.focus || ''),
-  ];
-
-  for (const keyword of project.keywords || []) {
-    args.push('--project-keyword', JSON.stringify(keyword));
+function truncateText(value, maxLength = 520) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLength) {
+    return text;
   }
 
-  for (const scope of scopes) {
-    args.push('--scope', JSON.stringify(`${scope.type}::${scope.label}`));
-  }
-
-  return args.join(' ');
+  return `${text.slice(0, maxLength - 3).trim()}...`;
 }
 
-function buildScoutPrompt({ helperPath, project, query, scopes, page, perPage }) {
+function candidateForPrompt(paper, index) {
+  return {
+    index: index + 1,
+    paperId: paper.paperId,
+    title: paper.title,
+    authors: paper.authors.slice(0, 4),
+    venue: paper.venue,
+    year: paper.year,
+    summary: truncateText(paper.summary || paper.abstract),
+    keyPoints: paper.keyPoints.slice(0, 3).map((point) => truncateText(point, 160)),
+    keywords: paper.keywords.slice(0, 6),
+    matchedKeywords: paper.matchedKeywords.slice(0, 6),
+    citedByCount: paper.citedByCount,
+    openAccess: paper.openAccess,
+    sourceProvider: paper.sourceProvider,
+    relevance: paper.relevance,
+  };
+}
+
+function buildScoutRankPrompt({ candidates = [], project, query, scopes, page, perPage }) {
   const scopeLines = buildScopeLines(scopes).join('\n');
   const keywords = (project.keywords || []).length ? project.keywords.map((keyword) => `- ${keyword}`).join('\n') : '- none';
+  const candidateJson = JSON.stringify(candidates.map((paper, index) => candidateForPrompt(paper, index)), null, 2);
 
   return `
 You are the Scout search runtime for ARES.
 
 Goal:
-- Find up to ${perPage} papers that best match the user's research intent.
+- Rank and select up to ${perPage} papers that best match the user's research intent.
 - Respect the active scopes as hard search guidance.
-- Use the local OpenAlex helper command multiple times if needed, then deduplicate and rank the final list.
+- ARES already executed the backend OpenAlex tool call and supplied candidate papers below.
 
 Rules:
-- Only use this helper command for retrieval work: node ${helperPath}
+- Do not run shell commands.
 - Do not edit files.
-- Do not use web search.
+- Do not use web search or any external network.
+- Only choose paperId values that appear in the candidate list.
 - Return only JSON matching the schema.
 
 Project:
@@ -158,24 +140,79 @@ Active scopes:
 ${scopeLines}
 
 Execution hints:
-- You may issue multiple helper calls with different query phrasings, but stay faithful to the user intent.
 - Prefer recent, high-signal, scope-matching papers.
 - Dedupe by paperId.
-- Sort the final results by overall usefulness for the query.
-- Keep the final result set at ${perPage} papers or fewer.
+- Sort selected papers by overall usefulness for the query.
+- Keep the selected set at ${perPage} papers or fewer.
 
-Helpful command template:
-${buildHelperCommandExample(helperPath, { project, query, scopes })}
+Candidate papers from the OpenAlex tool:
+${candidateJson}
 
 Page:
 - ${page}
+
+Return shape:
+{
+  "rankedPaperIds": [
+    { "paperId": "exact candidate paperId", "rationale": "short reason" }
+  ],
+  "warning": ""
+}
 `.trim();
+}
+
+function normaliseRankEntries(payload, perPage) {
+  const rankedPaperIds = Array.isArray(payload?.rankedPaperIds) ? payload.rankedPaperIds : [];
+  const paperIds = Array.isArray(payload?.paperIds) ? payload.paperIds : [];
+  const resultIds = Array.isArray(payload?.results) ? payload.results.map((paper) => paper?.paperId) : [];
+  const rawEntries = rankedPaperIds.length
+    ? rankedPaperIds
+    : paperIds.length
+      ? paperIds.map((paperId) => ({ paperId }))
+      : resultIds.map((paperId) => ({ paperId }));
+  const seen = new Set();
+  const entries = [];
+
+  for (const entry of rawEntries) {
+    const paperId = String(entry?.paperId || entry || '').trim();
+    if (!paperId || seen.has(paperId)) {
+      continue;
+    }
+
+    seen.add(paperId);
+    entries.push({
+      paperId,
+      rationale: String(entry?.rationale || '').trim(),
+    });
+  }
+
+  return entries.slice(0, perPage);
+}
+
+function selectRankedCandidates(candidates, rankPayload, perPage) {
+  if (!candidates.length) {
+    return [];
+  }
+
+  const entries = normaliseRankEntries(rankPayload, perPage);
+  if (!entries.length) {
+    throw new Error('Scout runtime did not rank any OpenAlex candidates.');
+  }
+
+  const candidateById = new Map(candidates.map((paper) => [paper.paperId, paper]));
+  const ranked = entries.map((entry) => candidateById.get(entry.paperId)).filter(Boolean);
+
+  if (!ranked.length) {
+    throw new Error('Scout runtime ranked no known OpenAlex candidates.');
+  }
+
+  return ranked.slice(0, perPage);
 }
 
 export function createScoutRuntimeAdapter({
   runtime = 'codex',
   rootDir,
-  helperPath = path.join(rootDir, 'services', 'backend', 'bin', 'openalex-helper.mjs'),
+  rankSchemaPath = path.join(rootDir, 'services', 'backend', 'schemas', 'scout-rank-output.schema.json'),
   timeoutMs = DEFAULT_SCOUT_TIMEOUT_MS,
   spawnImpl,
 } = {}) {
@@ -191,6 +228,7 @@ export function createScoutRuntimeAdapter({
 
   const runtimeAdapter = createAgentRuntime({
     cwd: rootDir,
+    env: buildScoutRuntimeEnv(process.env),
     runtimeName,
     spawnImpl,
   });
@@ -198,9 +236,9 @@ export function createScoutRuntimeAdapter({
   return {
     name: runtimeName,
 
-    async search({ project, query, scopes = [], page = 1, perPage = DEFAULT_RESULTS_PER_PAGE }) {
-      const prompt = buildScoutPrompt({
-        helperPath,
+    async search({ candidates = [], project, query, scopes = [], page = 1, perPage = DEFAULT_RESULTS_PER_PAGE }) {
+      const prompt = buildScoutRankPrompt({
+        candidates,
         page,
         perPage,
         project,
@@ -209,6 +247,7 @@ export function createScoutRuntimeAdapter({
       });
 
       const execution = await runtimeAdapter.runJsonTask({
+        outputSchemaPath: rankSchemaPath,
         prompt,
         timeoutMs,
         sandbox: 'read-only',
@@ -221,7 +260,10 @@ export function createScoutRuntimeAdapter({
         throw new Error(`Scout runtime returned invalid JSON: ${error.message}`);
       }
 
-      const payload = sanitiseSearchResultsPayload(parsed);
+      const payload = {
+        rankedPaperIds: normaliseRankEntries(parsed, perPage),
+        warning: parsed?.warning ? String(parsed.warning) : '',
+      };
       if (execution.rawStderr) {
         payload.warning = combineWarnings(payload.warning, execution.rawStderr);
       }
@@ -305,16 +347,52 @@ export function createScoutSearchService({
           });
         }
 
+        let toolPayload;
         try {
-          const runtimePayload = await runtimeAdapter.search({
+          ensureOpenAlexConfigured(apiKey);
+          toolPayload = sanitiseSearchResultsPayload(
+            await searchOpenAlexImpl({
+              apiKey,
+              mailto,
+              page,
+              perPage,
+              project,
+              query,
+              scopes,
+            }),
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (searchRun) {
+            await runStore.updateAgentRun(searchRun.id, {
+              error: `Scout OpenAlex tool failed: ${message}`,
+              finishedAt: new Date().toISOString(),
+              outputSummary: `Scout OpenAlex tool failed: ${message}`,
+              status: 'error',
+              warning: '',
+            });
+          }
+
+          throw new Error(`Scout OpenAlex tool failed: ${message}`);
+        }
+
+        try {
+          const rankPayload = await runtimeAdapter.search({
+            candidates: toolPayload.results,
             project,
             query,
             scopes,
             page,
             perPage,
           });
+          const rankedResults = selectRankedCandidates(toolPayload.results, rankPayload, perPage);
 
-          const payload = withSearchMeta(runtimePayload, {
+          const payload = withSearchMeta({
+            ...toolPayload,
+            results: rankedResults,
+            total: rankedResults.length,
+            warning: combineWarnings(toolPayload.warning, rankPayload.warning),
+          }, {
             provider: 'scout-agent',
             query,
             searchMode: mode,

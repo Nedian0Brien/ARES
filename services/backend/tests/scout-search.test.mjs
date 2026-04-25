@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildCodexExecArgs,
+  buildScoutRuntimeEnv,
   createScoutSearchService,
 } from '../lib/scout-search.mjs';
 
@@ -49,25 +50,59 @@ test('buildCodexExecArgs pins required non-interactive Scout flags', () => {
   assert.equal(args.at(-1), 'search prompt');
 });
 
-test('Scout search returns agent payload without falling back when runtime succeeds', async () => {
-  let directCalls = 0;
+test('buildCodexExecArgs can pin a JSON output schema', () => {
+  const args = buildCodexExecArgs({
+    cwd: '/workspace',
+    outputSchemaPath: '/workspace/schema.json',
+    prompt: 'search prompt',
+  });
+
+  assert.ok(args.includes('--output-schema'));
+  assert.equal(args[args.indexOf('--output-schema') + 1], '/workspace/schema.json');
+  assert.equal(args.at(-1), 'search prompt');
+});
+
+test('buildScoutRuntimeEnv strips backend retrieval secrets from the Codex process env', () => {
+  const env = buildScoutRuntimeEnv({
+    ARES_DATABASE_URL: 'postgres://secret',
+    DATABASE_URL: 'postgres://secret',
+    HOME: '/home/demo',
+    OPENALEX_API_KEY: 'openalex-secret',
+    OPENALEX_MAILTO: 'person@example.com',
+    OPENAI_API_KEY: 'codex-runtime-key',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.OPENALEX_API_KEY, undefined);
+  assert.equal(env.OPENALEX_MAILTO, undefined);
+  assert.equal(env.ARES_DATABASE_URL, undefined);
+  assert.equal(env.DATABASE_URL, undefined);
+  assert.equal(env.OPENAI_API_KEY, 'codex-runtime-key');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('Scout search uses OpenAlex as a backend tool call before agent ranking', async () => {
+  const directCalls = [];
+  const runtimeCalls = [];
   const service = createScoutSearchService({
     agentRuntime: 'codex',
     rootDir: '/workspace',
     apiKey: 'demo-key',
     scoutRuntimeAdapter: {
       name: 'codex',
-      async search() {
+      async search(input) {
+        runtimeCalls.push(input);
         return {
-          results: [demoPaper('agent-1')],
-          total: 1,
-          live: true,
+          rankedPaperIds: [
+            { paperId: 'direct-2', rationale: 'More directly about deployment.' },
+            { paperId: 'direct-1', rationale: 'Useful background.' },
+          ],
         };
       },
     },
-    async searchOpenAlexImpl() {
-      directCalls += 1;
-      return { results: [demoPaper('direct-1')], total: 1, live: true, provider: 'openalex' };
+    async searchOpenAlexImpl(input) {
+      directCalls.push(input);
+      return { results: [demoPaper('direct-1'), demoPaper('direct-2')], total: 2, live: true, provider: 'openalex' };
     },
   });
 
@@ -79,14 +114,53 @@ test('Scout search returns agent payload without falling back when runtime succe
     page: 1,
   });
 
-  assert.equal(directCalls, 0);
+  assert.equal(directCalls.length, 1);
+  assert.equal(runtimeCalls.length, 1);
+  assert.equal(runtimeCalls[0].candidates.length, 2);
   assert.equal(payload.provider, 'scout-agent');
   assert.equal(payload.agentRuntime, 'codex');
   assert.equal(payload.searchMode, 'scout');
-  assert.equal(payload.results[0].paperId, 'agent-1');
+  assert.deepEqual(
+    payload.results.map((paper) => paper.paperId),
+    ['direct-2', 'direct-1'],
+  );
+  assert.equal(payload.results[0].sourceProvider, 'openalex');
 });
 
-test('Scout search reports runtime failure without direct OpenAlex fallback', async () => {
+test('Scout search reports OpenAlex tool failure without starting the agent', async () => {
+  let runtimeCalls = 0;
+  const service = createScoutSearchService({
+    agentRuntime: 'codex',
+    rootDir: '/workspace',
+    apiKey: 'demo-key',
+    scoutRuntimeAdapter: {
+      name: 'codex',
+      async search() {
+        runtimeCalls += 1;
+        return { rankedPaperIds: [] };
+      },
+    },
+    async searchOpenAlexImpl() {
+      throw new Error('OpenAlex unavailable');
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      service.search({
+        project: demoProject(),
+        query: 'adaptive reranker',
+        mode: 'scout',
+        scopes: [{ id: 'acl24', type: 'conference', label: 'ACL 2024', meta: { venue: 'ACL' } }],
+        page: 1,
+      }),
+    /Scout OpenAlex tool failed: OpenAlex unavailable/,
+  );
+
+  assert.equal(runtimeCalls, 0);
+});
+
+test('Scout search reports runtime failure after successful tool retrieval', async () => {
   let directCalls = 0;
   const service = createScoutSearchService({
     agentRuntime: 'codex',
@@ -121,7 +195,7 @@ test('Scout search reports runtime failure without direct OpenAlex fallback', as
     /Scout agent failed: runtime timeout/,
   );
 
-  assert.equal(directCalls, 0);
+  assert.equal(directCalls, 1);
 });
 
 test('Keyword search still falls back to seed when OpenAlex is unavailable', async () => {

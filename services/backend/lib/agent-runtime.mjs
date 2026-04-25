@@ -140,12 +140,21 @@ function parseJsonFromText(text) {
   throw new Error('Agent response did not contain valid JSON.');
 }
 
+export function normaliseAgentRuntimeStderr(stderr) {
+  return String(stderr || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && line !== 'Reading additional input from stdin...')
+    .join('\n');
+}
+
 export function buildCodexExecArgs({
   cwd,
+  outputSchemaPath = '',
   prompt,
   sandbox = 'read-only',
 } = {}) {
-  return [
+  const args = [
     'exec',
     '--json',
     '--ephemeral',
@@ -154,14 +163,19 @@ export function buildCodexExecArgs({
     sandbox,
     '-C',
     cwd,
-    '--color',
-    'never',
-    prompt,
   ];
+
+  if (outputSchemaPath) {
+    args.push('--output-schema', outputSchemaPath);
+  }
+
+  args.push('--color', 'never', prompt);
+  return args;
 }
 
 export function createAgentRuntime({
   cwd,
+  env = process.env,
   runtimeName = DEFAULT_CODEX_RUNTIME,
   spawnImpl = spawn,
 } = {}) {
@@ -170,6 +184,7 @@ export function createAgentRuntime({
   }
 
   function startJsonTask({
+    outputSchemaPath = '',
     prompt,
     sandbox = 'read-only',
     taskCwd = cwd,
@@ -177,11 +192,13 @@ export function createAgentRuntime({
   } = {}) {
     const args = buildCodexExecArgs({
       cwd: taskCwd,
+      outputSchemaPath,
       prompt,
       sandbox,
     });
     const child = spawnImpl(runtimeName, args, {
       cwd: taskCwd,
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -243,7 +260,7 @@ export function createAgentRuntime({
         flushBuffer(true);
 
         summary.rawStdout = stdout;
-        summary.rawStderr = stderr.trim();
+        summary.rawStderr = normaliseAgentRuntimeStderr(stderr);
 
         if (timedOut) {
           reject(new Error(`Agent runtime timed out after ${timeoutMs}ms.`));
@@ -280,6 +297,7 @@ export function createAgentRuntime({
     async checkAvailability() {
       const probe = spawnImpl(runtimeName, ['--version'], {
         cwd,
+        env,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 

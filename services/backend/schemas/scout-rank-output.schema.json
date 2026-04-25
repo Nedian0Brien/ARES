@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rankedPaperIds", "warning"],
+  "properties": {
+    "rankedPaperIds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["paperId", "rationale"],
+        "properties": {
+          "paperId": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "warning": {
+      "type": "string"
+    }
+  }
+}
