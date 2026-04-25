@@ -521,6 +521,7 @@ function statusColor(status) {
     running: TOKENS.result,
     todo: TOKENS.t3,
     queue: TOKENS.t4,
+    error: TOKENS.insight,
   }[status] || TOKENS.t3;
 }
 
@@ -1021,6 +1022,10 @@ function uniqueValues(values = []) {
 }
 
 function searchRunProgressLabel(run) {
+  if (run?.status === "error" || run?.error) {
+    return "error";
+  }
+
   const output = run?.outputPayload && typeof run.outputPayload === "object" ? run.outputPayload : {};
   const total = Math.max(1, Number(output.total) || (Array.isArray(output.results) ? output.results.length : 0) || 32);
 
@@ -1033,6 +1038,10 @@ function searchRunProgressLabel(run) {
   }
 
   return `${Math.min(1, total)}/${total}`;
+}
+
+function isTerminalAgentRunStatus(status) {
+  return status === "done" || status === "error";
 }
 
 function readingProgress(session) {
@@ -1837,14 +1846,17 @@ async function pollAgentRun(runId) {
     if (run.stage === "search") {
       state.searchAgentRun = normaliseSearchAgentRun(run, state.searchAgentRun || {});
       applyAgenticSearchOutput(run.outputPayload, { preserveSelection: true });
-      state.loading = run.status !== "done";
+      state.loading = !isTerminalAgentRunStatus(run.status);
+      if (run.status === "error") {
+        state.error = run.error || run.outputSummary || "Agentic Search failed.";
+      }
     }
 
-    if (run.stage !== "reading" && run.status === "done") {
+    if (run.stage !== "reading" && isTerminalAgentRunStatus(run.status)) {
       await loadProjects();
     }
 
-    if (run.status !== "done") {
+    if (!isTerminalAgentRunStatus(run.status)) {
       activeRunPollTimer = window.setTimeout(() => {
         void pollAgentRun(runId);
       }, 1200);
@@ -2448,7 +2460,7 @@ function renderTopbar() {
     ? `
         <div class="run-badge" aria-live="off">
           <span class="dot"></span>
-          ${escapeHtml(searchRun.status === "done" ? "Done" : searchRun.status === "queue" ? "Queued" : "Live")} · ${escapeHtml(searchRunProgressLabel(searchRun))}
+          ${escapeHtml(searchRun.status === "error" || searchRun.error ? "Failed" : searchRun.status === "done" ? "Done" : searchRun.status === "queue" ? "Queued" : "Live")} · ${escapeHtml(searchRunProgressLabel(searchRun))}
         </div>
       `
     : "";

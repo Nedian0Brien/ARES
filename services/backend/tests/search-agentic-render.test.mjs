@@ -128,3 +128,22 @@ test('search dashboard renders stacked agentic home and run stages', () => {
   assert.match(html, /READER/);
   assert.match(html, /aria-live="polite"/);
 });
+
+test('search dashboard renders failed agentic run as an explicit error', () => {
+  const feature = createFeature({
+    searchAgentRun: {
+      error: 'Scout agent failed: runtime timeout',
+      id: 'run-failed',
+      outputSummary: 'Agentic search failed: Scout agent failed: runtime timeout',
+      status: 'error',
+    },
+  });
+
+  const html = feature.renderSearchStage({ id: 'demo', libraryCount: 0, queueCount: 0 });
+
+  assert.match(html, /Failed/);
+  assert.match(html, /오류/);
+  assert.match(html, /Scout agent failed: runtime timeout/);
+  assert.doesNotMatch(html, /Reader phase complete/);
+  assert.doesNotMatch(html, /Reading 큐에 자동 저장/);
+});

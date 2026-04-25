@@ -332,7 +332,18 @@ export function createScoutSearchService({
 
           return payload;
         } catch (error) {
-          warnings.push(`Scout agent fallback: ${error instanceof Error ? error.message : String(error)}`);
+          const message = error instanceof Error ? error.message : String(error);
+          if (searchRun) {
+            await runStore.updateAgentRun(searchRun.id, {
+              error: `Scout agent failed: ${message}`,
+              finishedAt: new Date().toISOString(),
+              outputSummary: `Scout agent failed: ${message}`,
+              status: 'error',
+              warning: '',
+            });
+          }
+
+          throw new Error(`Scout agent failed: ${message}`);
         }
       }
 

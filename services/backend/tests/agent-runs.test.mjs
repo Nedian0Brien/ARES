@@ -103,7 +103,7 @@ async function waitForRun(store, runId, timeoutMs = 1000) {
 
   while (Date.now() - startedAt < timeoutMs) {
     const run = store.getAgentRun(runId);
-    if (run?.status === 'done') {
+    if (run?.status === 'done' || run?.status === 'error') {
       return run;
     }
 
@@ -157,7 +157,7 @@ test('reading agent run falls back locally and creates a reading session', async
   assert.ok(sessions[0].sections.length > 0);
 });
 
-test('search agent run falls back locally without requiring a paper reference', async () => {
+test('search agent run reports an error when Scout service is unavailable', async () => {
   const store = await createDemoStore();
   const service = createAgentRunService({
     rootDir: '/workspace',
@@ -179,9 +179,48 @@ test('search agent run falls back locally without requiring a paper reference', 
   const finalRun = await waitForRun(store, run.id);
 
   assert.equal(finalRun.stage, 'search');
-  assert.equal(finalRun.status, 'done');
-  assert.match(finalRun.outputSummary, /LoRA forgetting diffusion personalization/);
+  assert.equal(finalRun.status, 'error');
+  assert.match(finalRun.error, /Search service is not configured/);
+  assert.match(finalRun.outputSummary, /Agentic search failed/);
+  assert.equal(finalRun.outputPayload, undefined);
+  assert.equal(store.getProject('demo').queueCount, 0);
   assert.equal(store.getReadingSessions('demo').length, 0);
+});
+
+test('search agent run reports Scout failure without queueing fallback results', async () => {
+  const store = await createDemoStore();
+  const calls = [];
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    searchService: {
+      async search(input) {
+        calls.push(input);
+        throw new Error('runtime timeout');
+      },
+    },
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      query: '"local inference" llm quantization serving',
+      scopes: [{ id: 'project', label: 'Project-wide', type: 'institution' }],
+    },
+    projectId: 'demo',
+    stage: 'search',
+  });
+
+  const finalRun = await waitForRun(store, run.id);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].mode, 'scout');
+  assert.equal(finalRun.stage, 'search');
+  assert.equal(finalRun.status, 'error');
+  assert.match(finalRun.error, /runtime timeout/);
+  assert.match(finalRun.outputSummary, /Agentic search failed/);
+  assert.equal(finalRun.outputPayload, undefined);
+  assert.equal(store.getProject('demo').queueCount, 0);
 });
 
 test('search agent run executes scout search and checkpoints results into reading queue', async () => {

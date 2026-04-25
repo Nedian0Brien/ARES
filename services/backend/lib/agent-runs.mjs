@@ -1050,7 +1050,7 @@ export function createAgentRunService({
         await definition.bootstrap({ context, run, store });
       }
 
-      if (definition.stage === 'search' && searchService) {
+      if (definition.stage === 'search') {
         await executeSearchRun({ context, run, searchService, store });
         return;
       }
@@ -1089,7 +1089,19 @@ export function createAgentRunService({
         await store.updateAgentRun(runId, {
           error: 'Aborted by user.',
           finishedAt: nowIso(),
-          status: 'done',
+          status: definition.stage === 'search' ? 'error' : 'done',
+        });
+        return;
+      }
+
+      if (definition.stage === 'search') {
+        await store.updateAgentRun(runId, {
+          error: message,
+          finishedAt: nowIso(),
+          outputRef: [],
+          outputSummary: `Agentic search failed: ${message}`,
+          status: 'error',
+          warning: '',
         });
         return;
       }

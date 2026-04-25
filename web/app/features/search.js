@@ -332,7 +332,15 @@ export function createSearchFeature({
     return `${Math.floor(elapsedSeconds / 60)}m ${String(elapsedSeconds % 60).padStart(2, "0")}s`;
   }
 
+  function agenticRunFailed(run) {
+    return run?.status === "error" || Boolean(run?.error);
+  }
+
   function agenticRunStatusLabel(run) {
+    if (agenticRunFailed(run)) {
+      return "error";
+    }
+
     const output = run?.outputPayload && typeof run.outputPayload === "object" ? run.outputPayload : {};
     const total = Math.max(1, Number(output.total) || (Array.isArray(output.results) ? output.results.length : 0) || 32);
 
@@ -348,7 +356,7 @@ export function createSearchFeature({
   }
 
   function renderAgenticRunBadge(run) {
-    const statusLabel = run?.status === "done" ? "Done" : run?.status === "queue" ? "Queued" : "Live";
+    const statusLabel = agenticRunFailed(run) ? "Failed" : run?.status === "done" ? "Done" : run?.status === "queue" ? "Queued" : "Live";
     return `
       <div class="run-badge" aria-live="off">
         <span class="dot"></span>
@@ -362,7 +370,8 @@ export function createSearchFeature({
     const query = agenticRunQuery(run) || project?.defaultQuery || "Agentic Search query";
     const scopes = agenticRunScopes(run);
     const scopeLabel = scopes.length ? scopes.map((scope) => scope.label || scope.id).filter(Boolean).join(" · ") : "Project-wide";
-    const stageLine = run?.status === "done" ? "Reader phase complete" : run?.status === "queue" ? "Reader phase queued" : "Reader phase running";
+    const failed = agenticRunFailed(run);
+    const stageLine = failed ? "Scout failed" : run?.status === "done" ? "Reader phase complete" : run?.status === "queue" ? "Reader phase queued" : "Reader phase running";
     const summary = String(run?.outputSummary || "").trim();
     const warning = String(run?.warning || run?.error || "").trim();
 
@@ -373,25 +382,25 @@ export function createSearchFeature({
           <div class="q-run-line">
             <span class="badge">Agentic Search</span>
             <span>${escapeHtml(agenticRunIdLabel(run))} · 4단계 계획 (Reader → Reproduction → Experiment → Analyst)</span>
-            <span class="live-mark"><span class="dot"></span>${run?.status === "done" ? "완료" : "진행 중"}</span>
+            <span class="live-mark"><span class="dot"></span>${failed ? "오류" : run?.status === "done" ? "완료" : "진행 중"}</span>
           </div>
           <h1 class="q-text" tabindex="-1">${escapeHtml(query)}</h1>
           <div class="q-pills">
             <span class="q-pill">${icon("clock", { size: 11, color: "currentColor" })}<span>예상 4분</span></span>
             <span class="q-pill">${icon("globe", { size: 11, color: "currentColor" })}<span>${escapeHtml(scopeLabel)}</span></span>
-            <span class="q-pill">${icon("book", { size: 11, color: "currentColor" })}<span>Reading 큐에 자동 저장</span></span>
-            <span class="q-pill">${icon("history", { size: 11, color: "currentColor" })}<span>중간 결과 자동 체크포인트</span></span>
+            <span class="q-pill">${icon("book", { size: 11, color: "currentColor" })}<span>${failed ? "결과 저장 안 됨" : "Reading 큐에 자동 저장"}</span></span>
+            <span class="q-pill">${icon("history", { size: 11, color: "currentColor" })}<span>${failed ? "실패 상태 체크포인트" : "중간 결과 자동 체크포인트"}</span></span>
           </div>
         </div>
 
         <div class="phase-divider">
-          <div class="pd-inner"><span class="pd-tag">READER</span> 정의·지표 정렬 · ${escapeHtml(stageLine)}</div>
+          <div class="pd-inner"><span class="pd-tag">${failed ? "SCOUT" : "READER"}</span> 정의·지표 정렬 · ${escapeHtml(stageLine)}</div>
         </div>
 
         <div class="phase-card">
           <div class="pc-h">
             ${icon("search", { size: 12, color: "currentColor" })}
-            핵심 정의 추출
+            ${failed ? "Agentic search failed" : "핵심 정의 추출"}
             <span class="step-cur">${escapeHtml(agenticRunStatusLabel(run))} sources</span>
           </div>
           <ul class="pc-bullets">
@@ -410,7 +419,7 @@ export function createSearchFeature({
       return "";
     }
 
-    return `<div class="search-agentic-live sr-only" aria-live="polite">${escapeHtml(`${agenticRunIdLabel(run)} 시작. Reader 단계 진행 중`)}</div>`;
+    return `<div class="search-agentic-live sr-only" aria-live="polite">${escapeHtml(agenticRunFailed(run) ? `${agenticRunIdLabel(run)} 실패. ${run.error || run.outputSummary || "Agentic Search 오류"}` : `${agenticRunIdLabel(run)} 시작. Reader 단계 진행 중`)}</div>`;
   }
   
   function renderSearchDashboard(project) {

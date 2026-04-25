@@ -17,7 +17,7 @@ const ASSET_COLLECTIONS = [
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
-const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done']);
+const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error']);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));

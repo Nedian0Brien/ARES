@@ -86,7 +86,8 @@ test('Scout search returns agent payload without falling back when runtime succe
   assert.equal(payload.results[0].paperId, 'agent-1');
 });
 
-test('Scout search falls back to direct OpenAlex when runtime fails', async () => {
+test('Scout search reports runtime failure without direct OpenAlex fallback', async () => {
+  let directCalls = 0;
   const service = createScoutSearchService({
     agentRuntime: 'codex',
     rootDir: '/workspace',
@@ -98,6 +99,7 @@ test('Scout search falls back to direct OpenAlex when runtime fails', async () =
       },
     },
     async searchOpenAlexImpl() {
+      directCalls += 1;
       return {
         provider: 'openalex',
         live: true,
@@ -107,22 +109,22 @@ test('Scout search falls back to direct OpenAlex when runtime fails', async () =
     },
   });
 
-  const payload = await service.search({
-    project: demoProject(),
-    query: 'adaptive reranker',
-    mode: 'scout',
-    scopes: [{ id: 'acl24', type: 'conference', label: 'ACL 2024', meta: { venue: 'ACL' } }],
-    page: 1,
-  });
+  await assert.rejects(
+    () =>
+      service.search({
+        project: demoProject(),
+        query: 'adaptive reranker',
+        mode: 'scout',
+        scopes: [{ id: 'acl24', type: 'conference', label: 'ACL 2024', meta: { venue: 'ACL' } }],
+        page: 1,
+      }),
+    /Scout agent failed: runtime timeout/,
+  );
 
-  assert.equal(payload.provider, 'openalex');
-  assert.equal(payload.agentRuntime, 'codex');
-  assert.equal(payload.searchMode, 'scout');
-  assert.match(payload.warning, /Scout agent fallback: runtime timeout/);
-  assert.equal(payload.results[0].paperId, 'direct-1');
+  assert.equal(directCalls, 0);
 });
 
-test('Search falls back to seed when OpenAlex is unavailable', async () => {
+test('Keyword search still falls back to seed when OpenAlex is unavailable', async () => {
   let seedCalls = 0;
   const service = createScoutSearchService({
     rootDir: '/workspace',
@@ -148,7 +150,7 @@ test('Search falls back to seed when OpenAlex is unavailable', async () => {
   const payload = await service.search({
     project: demoProject(),
     query: 'adaptive reranker',
-    mode: 'scout',
+    mode: 'keyword',
     scopes: [{ id: 'manning', type: 'author', label: 'Christopher Manning', meta: {} }],
     page: 1,
   });
