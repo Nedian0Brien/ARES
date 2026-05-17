@@ -802,9 +802,73 @@ a {
 
 .stage-wrap {
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.workflow-mode-nav {
+  align-items: center;
+  background: color-mix(in srgb, var(--s1) 88%, var(--bg));
+  border-bottom: 1px solid var(--b1);
+  display: flex;
+  flex: 0 0 auto;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 8px 18px;
+}
+
+.workflow-mode-context {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workflow-mode-kicker {
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.workflow-mode-title {
+  color: var(--tx);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workflow-mode-list {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.workflow-mode-btn {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--t2);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 9px;
+}
+
+.workflow-mode-btn small {
+  color: var(--t3);
+  font-size: 10.5px;
+}
+
+.workflow-mode-btn.is-active {
+  background: var(--mode-tint);
+  border-color: color-mix(in srgb, var(--mode-color) 26%, transparent);
+  color: var(--mode-color);
 }
 
 .search-stage,

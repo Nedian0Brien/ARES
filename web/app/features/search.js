@@ -568,9 +568,9 @@ export function createSearchFeature({
         <section class="search-dashboard" data-ares-surface="search-dashboard" data-ares-stage="search">
           <section class="dashboard-hero-wrap">
             <div class="search-home-hero">
-              <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Search Workflow</span></div>
-              <h1 class="search-home-title">Search</h1>
-              <p class="search-home-copy">대상 학회와 키워드를 기준으로 논문을 수집하고 Reading으로 넘깁니다.</p>
+              <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Search + Reading</span></div>
+              <h1 class="search-home-title">Discover</h1>
+              <p class="search-home-copy">대상 학회와 키워드를 기준으로 논문을 수집하고 Reading Library로 넘깁니다.</p>
             </div>
   
             <form class="dashboard-hero ${escapeHtml(state.searchMode)}" data-action="submit-search">

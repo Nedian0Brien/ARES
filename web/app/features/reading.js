@@ -530,8 +530,8 @@ export function createReadingFeature({
           <section class="reading-home reading-home--loading">
             <div class="reading-home-inner">
               <div class="reading-home-hero">
-                <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Reading Workflow</span></div>
-                <h1 class="reading-home-title">Library</h1>
+                <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Search + Reading</span></div>
+                <h1 class="reading-home-title">Reading Library</h1>
                 <p class="reading-home-copy">Syncing saved papers and reading sessions.</p>
               </div>
             </div>
@@ -546,9 +546,9 @@ export function createReadingFeature({
           <section class="reading-home">
             <div class="reading-home-inner">
               <section class="reading-home-hero">
-                <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Reading Workflow</span></div>
-                <h1 class="reading-home-title">Library</h1>
-                <p class="reading-home-copy">Search에서 저장한 논문이 여기에 쌓입니다.</p>
+                <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Search + Reading</span></div>
+                <h1 class="reading-home-title">Reading Library</h1>
+                <p class="reading-home-copy">Discover에서 저장한 논문이 여기에 쌓입니다.</p>
               </section>
   
               <section class="reading-home-metrics">
@@ -561,11 +561,11 @@ export function createReadingFeature({
               <section class="reading-home-empty">
                 <div class="reading-home-empty-icon">${icon("bookmark", { size: 28, color: TOKENS.read })}</div>
                 <div class="reading-home-empty-title">Nothing saved yet</div>
-                <div class="reading-home-empty-copy">Search에서 Save를 누르면 여기에 논문이 나타난다.</div>
+                <div class="reading-home-empty-copy">Discover에서 Save를 누르면 여기에 논문이 나타납니다.</div>
                 <div style="margin-top:18px">
                   <button type="button" class="btn-p" data-action="select-stage" data-stage-id="search">
                     ${icon("search", { size: 13, color: "#ffffff" })}
-                    <span>Go to Search</span>
+                    <span>Back to Discover</span>
                   </button>
                 </div>
               </section>
@@ -586,8 +586,8 @@ export function createReadingFeature({
         <section class="reading-home">
           <div class="reading-home-inner">
             <section class="reading-home-hero">
-              <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Reading Workflow</span></div>
-              <h1 class="reading-home-title">Library</h1>
+              <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Search + Reading</span></div>
+              <h1 class="reading-home-title">Reading Library</h1>
               <p class="reading-home-copy">수집한 논문을 AI 에이전트와 함께 읽고 분석하세요.</p>
             </section>
   
@@ -780,7 +780,7 @@ export function createReadingFeature({
               ${renderTag(`${project.queueCount} queued`, TOKENS.result, true)}
             </div>
             <div style="margin-top:20px">
-              <button type="button" class="btn-p" data-action="select-stage" data-stage-id="search">Back to Search</button>
+              <button type="button" class="btn-p" data-action="select-stage" data-stage-id="search">Back to Discover</button>
             </div>
           </section>
         </div>
@@ -1328,7 +1328,7 @@ export function createReadingFeature({
               </button>
               <button type="button" class="btn-s" data-action="select-stage" data-stage-id="search">
                 ${icon("search", { size: 13, color: "currentColor" })}
-                <span>Back to Search</span>
+                <span>Back to Discover</span>
               </button>
             </div>
           </div>
@@ -1598,7 +1598,7 @@ export function createReadingFeature({
         <div class="reading-notes-toolbar">
           <span class="reading-mini-label">All notes</span>
           <button type="button" class="btn-s" style="padding:3px 8px;font-size:11.5px" data-action="create-reading-note" ${noteBusy ? "disabled" : ""}>${icon("plus", { size: 11, color: "currentColor" })}<span>New note</span></button>
-          <button type="button" class="btn-s reading-notes-research-btn" data-action="handoff-reading-to-research">${icon("flask", { size: 11, color: "currentColor" })}<span>Send to Research</span></button>
+          <button type="button" class="btn-s reading-notes-research-btn" data-action="handoff-reading-to-research">${icon("flask", { size: 11, color: "currentColor" })}<span>Send to Lab</span></button>
         </div>
 
         ${

@@ -2637,6 +2637,68 @@ function renderTopbar() {
   `;
 }
 
+function workflowModeLabel(stage) {
+  if (stage.id === "reading") {
+    return state.readingView === "detail" ? "Reader" : "Library";
+  }
+
+  return stage.modeLabel || stage.label;
+}
+
+function workflowModeHint(stage) {
+  if (stage.id === "search") {
+    return "Discover";
+  }
+
+  if (stage.id === "reading") {
+    return state.readingView === "detail" ? "Library available" : "Reader opens selected paper";
+  }
+
+  return stage.label;
+}
+
+function renderWorkflowModeNav() {
+  const tab = activeWorkflowTab();
+  const stages = WORKFLOW_STAGES.filter((stage) => stage.tabId === tab.id);
+  if (stages.length < 2) {
+    return "";
+  }
+
+  return `
+    <nav
+      class="workflow-mode-nav"
+      aria-label="${escapeHtml(tab.label)} modes"
+      data-ares-role="workflow-mode-nav"
+      data-tab-id="${escapeHtml(tab.id)}"
+    >
+      <div class="workflow-mode-context">
+        <span class="workflow-mode-kicker">${escapeHtml(tab.shortLabel)}</span>
+        <span class="workflow-mode-title">${escapeHtml(tab.label)}</span>
+      </div>
+      <div class="workflow-mode-list">
+        ${stages
+          .map((stage) => {
+            const active = stage.id === state.activeStage;
+            return `
+              <button
+                type="button"
+                class="workflow-mode-btn ${active ? "is-active" : ""}"
+                data-action="select-stage"
+                data-stage-id="${escapeHtml(stage.id)}"
+                style="--mode-color:${stage.color};--mode-tint:${stage.color}12"
+              >
+                ${icon(stage.icon, { size: 13, color: "currentColor" })}
+                <span>${escapeHtml(workflowModeLabel(stage))}</span>
+                <small>${escapeHtml(workflowModeHint(stage))}</small>
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+    </nav>
+  `;
+}
+
 // Feature renderers live in dedicated modules so this entry stays focused on state, IO, and DOM events.
 const searchFeature = createSearchFeature({
   state,
@@ -2855,7 +2917,10 @@ function render() {
       ${renderSidebar()}
       <main class="workspace" data-ares-surface="workspace" data-ares-stage="${escapeHtml(state.activeStage)}">
         ${renderTopbar()}
-        <div class="stage-wrap" data-ares-surface="stage-wrap" data-ares-stage="${escapeHtml(state.activeStage)}">${stageContent}</div>
+        <div class="stage-wrap" data-ares-surface="stage-wrap" data-ares-stage="${escapeHtml(state.activeStage)}">
+          ${renderWorkflowModeNav()}
+          ${stageContent}
+        </div>
       </main>
       ${renderBottomNav()}
     </div>
