@@ -86,7 +86,18 @@ test('mobile bottom nav wires ARIS scroll auto-hide lifecycle without omitted ev
   assert.match(appJs, /window\.addEventListener\("focus",\s*onBottomNavResume\)/);
   assert.match(appJs, /window\.addEventListener\("pageshow",\s*onBottomNavResume\)/);
   assert.match(appJs, /document\.addEventListener\("visibilitychange",\s*onBottomNavResume\)/);
+  assert.match(appJs, /document\.addEventListener\("scroll",\s*onBottomNavScroll,\s*\{\s*passive:\s*true,\s*capture:\s*true\s*\}\)/);
   assert.match(appJs, /window\.addEventListener\("orientationchange",\s*syncBottomNavIndicator\)/);
+});
+
+test('mobile bottom nav observes ARES nested scroll containers used by Discover', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /BOTTOM_NAV_SCROLL_SOURCE_SELECTORS/);
+  assert.match(appJs, /"\.results-list"/);
+  assert.match(appJs, /"\.stage-wrap"/);
+  assert.match(appJs, /querySelectorAll\(BOTTOM_NAV_SCROLL_SOURCE_SELECTORS\.join\(","\)\)/);
+  assert.match(appJs, /Math\.max\(\s*getWindowScrollY\(\),\s*\.\.\.getBottomNavScrollContainers\(\)\.map/);
 });
 
 test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens', async () => {
@@ -96,10 +107,12 @@ test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens'
   ]);
 
   assert.match(styles, /--bottom-nav-bg:\s*rgba\(255,\s*255,\s*255,\s*0\.78\)/);
+  assert.match(styles, /--mobile-bottom-nav-height:\s*calc\(104px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
   assert.match(styles, /\.bottom-nav-hidden[\s\S]*pointer-events:\s*none/);
   assert.match(styles, /\.bottom-nav-indicator[\s\S]*cubic-bezier\(0\.175,\s*0\.885,\s*0\.32,\s*1\.275\)/);
   assert.match(styles, /width:\s*min\(400px,\s*calc\(100vw - 2\.5rem\)\)/);
   assert.match(styles, /bottom:\s*calc\(1\.25rem \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+  assert.match(styles, /\.bottom-nav[\s\S]*overflow:\s*visible/);
   assert.match(styles, /\.nav-item[\s\S]*min-height:\s*54px/);
   assert.match(styles, /@media\s*\(max-width:\s*900px\)[\s\S]*\.bottom-nav/);
   assert.match(designSystem, /ARIS-style floating bottom-nav/);

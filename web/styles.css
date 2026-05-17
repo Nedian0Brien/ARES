@@ -5050,7 +5050,7 @@ body.reading-home-resize-active {
 
 @media (max-width: 900px) {
   :root {
-    --mobile-bottom-nav-height: calc(72px + env(safe-area-inset-bottom, 0px));
+    --mobile-bottom-nav-height: calc(104px + env(safe-area-inset-bottom, 0px));
   }
 
   body {
@@ -5277,7 +5277,7 @@ body.reading-home-resize-active {
     justify-content: space-around;
     left: 50%;
     max-width: 400px;
-    overflow: hidden;
+    overflow: visible;
     padding: 4px;
     position: fixed;
     transform: translateX(-50%);
@@ -7605,7 +7605,7 @@ body.is-run .stage-run .phase-card {
 
 @media (max-width: 900px) {
   :root {
-    --mobile-bottom-nav-height: calc(72px + env(safe-area-inset-bottom, 0px));
+    --mobile-bottom-nav-height: calc(104px + env(safe-area-inset-bottom, 0px));
   }
 
   body {

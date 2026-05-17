@@ -225,6 +225,16 @@ const BOTTOM_NAV_AUTO_HIDE_THRESHOLDS = {
   hideDeltaThreshold: 8,
   revealDeltaThreshold: 8,
 };
+const BOTTOM_NAV_SCROLL_SOURCE_SELECTORS = [
+  ".workspace",
+  ".stage-wrap",
+  ".results-list",
+  ".search-dashboard",
+  ".reading-home-table",
+  ".reading-home-preview-scroll",
+  ".search-preview-body",
+  ".reading-pane .pane-body",
+];
 const SEARCH_LAYOUT_BREAKPOINTS = {
   mobileMax: 900,
   tabletMax: 1279,
@@ -3244,8 +3254,21 @@ function renderBottomNav() {
   `;
 }
 
-function getBottomNavScrollY() {
+function getWindowScrollY() {
   return Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0);
+}
+
+function getBottomNavScrollContainers() {
+  return Array.from(document.querySelectorAll(BOTTOM_NAV_SCROLL_SOURCE_SELECTORS.join(","))).filter(
+    (element) => element.scrollHeight > element.clientHeight,
+  );
+}
+
+function getBottomNavScrollY() {
+  return Math.max(
+    getWindowScrollY(),
+    ...getBottomNavScrollContainers().map((element) => element.scrollTop || 0),
+  );
 }
 
 function isBottomNavMobile() {
@@ -3351,6 +3374,7 @@ function bindBottomNavLifecycle() {
   bottomNavLifecycleBound = true;
   primeBottomNavAutoHideState();
   window.addEventListener("scroll", onBottomNavScroll, { passive: true });
+  document.addEventListener("scroll", onBottomNavScroll, { passive: true, capture: true });
   window.addEventListener("resize", onBottomNavResize);
   window.addEventListener("focus", onBottomNavResume);
   window.addEventListener("pageshow", onBottomNavResume);
