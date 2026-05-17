@@ -171,7 +171,9 @@ a {
 .dashboard-f-chip:focus-visible,
 .dashboard-tool-btn:focus-visible,
 .scope-add:focus-visible,
-.dashboard-scope-add:focus-visible {
+.dashboard-scope-add:focus-visible,
+.workflow-mode-btn:focus-visible,
+.writing-section-row:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--read) 38%, transparent);
   outline-offset: 2px;
 }
