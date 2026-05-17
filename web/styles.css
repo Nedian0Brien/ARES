@@ -1411,6 +1411,206 @@ a {
   width: 100%;
 }
 
+.lab-stage {
+  background: var(--bg);
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.lab-main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 28px 32px;
+}
+
+.lab-hero {
+  align-items: stretch;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  margin-bottom: 18px;
+}
+
+.lab-hero-copy h1 {
+  color: var(--tx);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 6px 0 10px;
+}
+
+.lab-hero-copy p {
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 1.7;
+  max-width: 68ch;
+}
+
+.lab-kicker,
+.lab-source-meta,
+.lab-section-head,
+.lab-run-head {
+  align-items: center;
+  display: flex;
+}
+
+.lab-kicker {
+  color: var(--research);
+  font-size: 12px;
+  font-weight: 650;
+  gap: 7px;
+}
+
+.lab-source-card,
+.lab-mode-card,
+.lab-run-card {
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: 8px;
+}
+
+.lab-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  justify-content: center;
+  padding: 16px 18px;
+}
+
+.lab-source-card strong {
+  color: var(--tx);
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-card-label {
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lab-source-meta {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lab-mode-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.lab-mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.lab-mode-card.is-active {
+  border-color: color-mix(in srgb, var(--research) 34%, var(--b1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--research) 18%, transparent);
+}
+
+.lab-mode-card h2,
+.lab-section-head h2 {
+  color: var(--tx);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.lab-mode-card p,
+.lab-mode-card li {
+  color: var(--t2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.lab-mode-card ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.lab-mode-card .btn-s {
+  justify-content: center;
+  margin-top: auto;
+}
+
+.lab-run-list {
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+
+.lab-section-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.lab-run-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lab-run-card {
+  padding: 14px 16px;
+}
+
+.lab-run-head {
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.lab-run-card strong {
+  color: var(--tx);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lab-run-card dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.lab-run-card dt {
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.lab-run-card dd {
+  color: var(--t2);
+  font-size: 12px;
+  margin: 0;
+}
+
+.lab-agent-panel {
+  background: var(--s1);
+  border-left: 1px solid var(--b1);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 320px;
+}
+
 .reading-stage {
   background: var(--bg);
   display: flex;
@@ -4515,6 +4715,7 @@ body.reading-home-resize-active {
 
   .search-stage,
   .placeholder-stage,
+  .lab-stage,
   .reading-stage {
     flex-direction: column;
     min-height: auto;
@@ -4523,6 +4724,7 @@ body.reading-home-resize-active {
   .search-filters,
   .search-preview,
   .agent-panel,
+  .lab-agent-panel,
   .reading-rail,
   .reader-agent-panel {
     border-left: none;
@@ -4536,8 +4738,24 @@ body.reading-home-resize-active {
 
   .search-preview,
   .agent-panel,
+  .lab-agent-panel,
   .reader-agent-panel {
     border-top: 1px solid var(--b1);
+  }
+
+  .lab-main {
+    overflow: visible;
+    padding: 18px;
+  }
+
+  .lab-hero,
+  .lab-mode-grid,
+  .lab-run-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lab-run-card dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .reading-main {

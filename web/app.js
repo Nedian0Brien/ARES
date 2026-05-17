@@ -2834,6 +2834,140 @@ function renderPlaceholderStage(project) {
   `;
 }
 
+function renderLabStage(project) {
+  const stage = stageById(state.activeStage);
+  const session = selectedReadingSession();
+  const library = dashboardLibraryItems();
+  const sourcePaper = session || library[0] || null;
+  const paperTitle = sourcePaper?.title || "Reading Packet 대기 중";
+  const paperVenue = sourcePaper?.venue || "No venue";
+  const progress = session ? readingProgress(session) : 0;
+  const status = session?.status || (project.queueCount ? "queue" : "todo");
+  const compareActive = stage.id === "result";
+  const labMode = compareActive ? "Compare" : "Plan";
+  const runs = [
+    {
+      name: "Baseline reproduction",
+      metric: "primary score",
+      paper: "paper",
+      ours: "pending",
+      delta: "setup required",
+      status: status === "done" ? "queue" : "todo",
+    },
+    {
+      name: "Ablation candidate",
+      metric: "sensitivity",
+      paper: "n/a",
+      ours: "pending",
+      delta: "setup required",
+      status: "todo",
+    },
+  ];
+
+  return `
+    <div class="lab-stage" data-ares-surface="lab-stage" data-ares-stage="${escapeHtml(stage.id)}" data-lab-mode="${escapeHtml(labMode.toLowerCase())}">
+      <section class="lab-main">
+        <div class="lab-hero">
+          <div class="lab-hero-copy">
+            <div class="lab-kicker">${icon("flask", { size: 14, color: TOKENS.research })}<span>Research + Result</span></div>
+            <h1>${escapeHtml(compareActive ? "Compare result dossier" : "Plan reproduction run")}</h1>
+            <p>Reading Packet을 재현 계획, 실행 큐, 결과 비교로 연결합니다. 실행 인프라가 연결되기 전까지 Lab 액션은 setup required 상태로 유지됩니다.</p>
+          </div>
+          <div class="lab-source-card">
+            <span class="lab-card-label">Reading Packet</span>
+            <strong title="${escapeHtml(paperTitle)}">${escapeHtml(paperTitle)}</strong>
+            <div class="lab-source-meta">
+              ${renderTag(paperVenue)}
+              ${renderTag(`${progress}% read`, TOKENS.read, progress > 0)}
+              ${renderTag("setup required", TOKENS.result, true)}
+            </div>
+          </div>
+        </div>
+
+        <section class="lab-mode-grid" aria-label="Lab modes">
+          <article class="lab-mode-card ${compareActive ? "" : "is-active"}">
+            <span class="lab-card-label">Plan</span>
+            <h2>Reproduction plan</h2>
+            <p>논문에서 추출한 dataset, model, metric, 환경 조건을 체크리스트로 정리합니다.</p>
+            <ul>
+              <li>${project.libraryCount || 0} saved papers available</li>
+              <li>${project.queueCount || 0} reading queue items</li>
+              <li>${session?.sections?.length || 0} parsed sections</li>
+            </ul>
+          </article>
+
+          <article class="lab-mode-card">
+            <span class="lab-card-label">Runs</span>
+            <h2>Experiment runs</h2>
+            <p>baseline과 ablation 후보를 실행 대기 카드로 관리합니다.</p>
+            <button type="button" class="btn-s" disabled>Run experiment</button>
+          </article>
+
+          <article class="lab-mode-card ${compareActive ? "is-active" : ""}">
+            <span class="lab-card-label">Compare</span>
+            <h2>Result Dossier</h2>
+            <p>논문 수치와 재현 수치의 delta를 기록하고 Analyst 설명을 Insight 후보로 승격합니다.</p>
+            <button type="button" class="btn-s" data-action="select-stage" data-stage-id="result">Open Compare</button>
+          </article>
+        </section>
+
+        <section class="lab-run-list" aria-label="Experiment run cards">
+          <div class="lab-section-head">
+            <div>
+              <span class="lab-card-label">Runs</span>
+              <h2>Current run queue</h2>
+            </div>
+            <button type="button" class="btn-s" disabled>Attach result</button>
+          </div>
+          <div class="lab-run-grid">
+            ${runs
+              .map(
+                (run) => `
+                  <article class="lab-run-card">
+                    <div class="lab-run-head">
+                      <strong>${escapeHtml(run.name)}</strong>
+                      ${renderTag(run.status, statusColor(run.status), run.status === "done")}
+                    </div>
+                    <dl>
+                      <div><dt>Metric</dt><dd>${escapeHtml(run.metric)}</dd></div>
+                      <div><dt>Paper</dt><dd>${escapeHtml(run.paper)}</dd></div>
+                      <div><dt>Ours</dt><dd>${escapeHtml(run.ours)}</dd></div>
+                      <div><dt>Delta</dt><dd>${escapeHtml(run.delta)}</dd></div>
+                    </dl>
+                  </article>
+                `,
+              )
+              .join("")}
+          </div>
+        </section>
+      </section>
+
+      <aside class="lab-agent-panel">
+        <div class="agent-panel-header">
+          <div class="agent-panel-status">
+            ${statusIcon("todo")}
+            <span>Analyst agent</span>
+          </div>
+          ${renderTag("setup required", TOKENS.result, true)}
+        </div>
+        <div class="agent-panel-body">
+          <section class="agent-panel-section" style="border-left-color:${TOKENS.research}">
+            <div class="agent-panel-eyebrow" style="color:${TOKENS.research};margin-bottom:4px">Plan</div>
+            <p>Reading Packet의 method와 result notes를 재현 체크리스트의 seed로 사용합니다.</p>
+          </section>
+          <section class="agent-panel-section" style="border-left-color:${TOKENS.result}">
+            <div class="agent-panel-eyebrow" style="color:${TOKENS.result};margin-bottom:4px">Compare</div>
+            <p>결과 입력이 연결되면 Result Dossier를 만들고 delta 설명을 Insight로 보낼 수 있습니다.</p>
+          </section>
+        </div>
+        <div class="agent-panel-footer">
+          <button type="button" class="btn-p" data-action="select-stage" data-stage-id="insight">Extract insight</button>
+        </div>
+      </aside>
+    </div>
+  `;
+}
+
 function renderBottomNav() {
   const activeTab = activeWorkflowTab();
   return `
@@ -2901,7 +3035,9 @@ function render() {
       ? renderSearchStage(project)
       : state.activeStage === "reading"
         ? renderReadingStage(project)
-        : renderPlaceholderStage(project);
+        : state.activeStage === "research" || state.activeStage === "result"
+          ? renderLabStage(project)
+          : renderPlaceholderStage(project);
 
   app.innerHTML = `
     <div
