@@ -2968,6 +2968,133 @@ function renderLabStage(project) {
   `;
 }
 
+function renderInsightStage(project) {
+  const session = selectedReadingSession();
+  const notes = Array.isArray(session?.notes) ? session.notes : [];
+  const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
+  const evidenceItems = [...notes, ...highlights].slice(0, 4);
+  const fallbackEvidence = [
+    {
+      cat: "Reading Packet",
+      text: session?.summary || project?.focus || "아직 연결된 evidence가 없습니다. Reading 또는 Lab에서 근거를 승격하세요.",
+    },
+    {
+      cat: "Result Dossier",
+      text: "실험 결과가 연결되면 metric delta와 analyst explanation이 여기에 쌓입니다.",
+    },
+  ];
+  const evidence = evidenceItems.length
+    ? evidenceItems.map((entry) => ({
+        cat: entry.cat || entry.type || entry.kind || "Evidence",
+        page: entry.page || "",
+        text: entry.quote || entry.text || entry.body || entry.memo || "Evidence text pending",
+      }))
+    : fallbackEvidence;
+  const primaryClaim = evidence[0]?.text || "Evidence를 기반으로 claim을 작성하세요.";
+  const focus = project?.focus || session?.title || "current research direction";
+  const hypotheses = [
+    `If ${focus} is sensitive to preprocessing, rerun the baseline with controlled data variants.`,
+    "A smaller ablation may explain the observed result gap before expanding the full experiment.",
+  ];
+
+  return `
+    <div class="insight-stage" data-ares-surface="insight-stage" data-ares-stage="insight">
+      <section class="insight-main">
+        <div class="insight-hero">
+          <div>
+            <div class="insight-kicker">${icon("sparkles", { size: 14, color: TOKENS.insight })}<span>Insight</span></div>
+            <h1>Evidence to decisions</h1>
+            <p>Reading Packet과 Result Dossier를 claim, hypothesis, decision으로 승격합니다. 각 Insight Card는 linked evidence, confidence, next action을 함께 가져야 합니다.</p>
+          </div>
+          <div class="insight-hero-actions">
+            <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
+            <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
+          </div>
+        </div>
+
+        <div class="insight-grid">
+          <aside class="insight-panel">
+            <div class="insight-panel-head">
+              <span class="insight-card-label">Evidence</span>
+              ${renderTag(`${evidence.length} items`, TOKENS.read, true)}
+            </div>
+            <div class="insight-evidence-list">
+              ${evidence
+                .map(
+                  (item, index) => `
+                    <article class="insight-evidence-card">
+                      <div class="insight-evidence-meta">
+                        ${renderTag(item.cat, index % 2 === 0 ? TOKENS.read : TOKENS.result, true)}
+                        ${item.page ? `<span class="mono">p.${escapeHtml(String(item.page))}</span>` : ""}
+                      </div>
+                      <p>${escapeHtml(String(item.text).slice(0, 220))}</p>
+                    </article>
+                  `,
+                )
+                .join("")}
+            </div>
+          </aside>
+
+          <section class="insight-panel insight-panel--cards">
+            <div class="insight-panel-head">
+              <span class="insight-card-label">Claims</span>
+              ${renderTag("Insight Card", TOKENS.insight, true)}
+            </div>
+            <article class="insight-card is-primary">
+              <div class="insight-card-top">
+                <span class="insight-card-label">Insight Card</span>
+                ${renderTag("confidence 0.72", TOKENS.insight, true)}
+              </div>
+              <h2>${escapeHtml(String(primaryClaim).replace(/\s+/g, " ").slice(0, 96))}</h2>
+              <dl>
+                <div>
+                  <dt>linked evidence</dt>
+                  <dd>${escapeHtml(evidence[0]?.cat || "Evidence")}</dd>
+                </div>
+                <div>
+                  <dt>confidence</dt>
+                  <dd>medium</dd>
+                </div>
+                <div>
+                  <dt>next action</dt>
+                  <dd>Use in draft or create a focused follow-up run.</dd>
+                </div>
+              </dl>
+              <div class="insight-card-actions">
+                <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
+                <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
+              </div>
+            </article>
+          </section>
+
+          <aside class="insight-panel">
+            <div class="insight-panel-head">
+              <span class="insight-card-label">Hypotheses</span>
+              ${renderTag("Decisions", TOKENS.research, true)}
+            </div>
+            <div class="insight-hypothesis-list">
+              ${hypotheses
+                .map(
+                  (hypothesis, index) => `
+                    <article class="insight-hypothesis-card">
+                      <span class="mono">H${index + 1}</span>
+                      <p>${escapeHtml(hypothesis)}</p>
+                    </article>
+                  `,
+                )
+                .join("")}
+            </div>
+            <div class="insight-decision-box">
+              <span class="insight-card-label">Decisions</span>
+              <p>채택한 claim은 Writing으로 보내고, 검증이 부족한 claim은 Lab follow-up으로 되돌립니다.</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function renderBottomNav() {
   const activeTab = activeWorkflowTab();
   return `
@@ -3037,7 +3164,9 @@ function render() {
         ? renderReadingStage(project)
         : state.activeStage === "research" || state.activeStage === "result"
           ? renderLabStage(project)
-          : renderPlaceholderStage(project);
+          : state.activeStage === "insight"
+            ? renderInsightStage(project)
+            : renderPlaceholderStage(project);
 
   app.innerHTML = `
     <div
