@@ -88,16 +88,121 @@ const SEARCH_TARGET_CATALOG = {
   },
 };
 
+const WORKFLOW_TABS = [
+  {
+    id: "papers",
+    label: "Search + Reading",
+    shortLabel: "Read",
+    sub: "논문 수집과 이해",
+    color: TOKENS.read,
+    icon: "book",
+    kbd: "1",
+    defaultStage: "reading",
+  },
+  {
+    id: "lab",
+    label: "Research + Result",
+    shortLabel: "Lab",
+    sub: "재현 설계와 결과 비교",
+    color: TOKENS.research,
+    icon: "flask",
+    kbd: "2",
+    defaultStage: "research",
+  },
+  {
+    id: "insight",
+    label: "Insight",
+    shortLabel: "Insight",
+    sub: "해석, 가설, 결정",
+    color: TOKENS.insight,
+    icon: "sparkles",
+    kbd: "3",
+    defaultStage: "insight",
+  },
+  {
+    id: "writing",
+    label: "Writing",
+    shortLabel: "Write",
+    sub: "문서 조립과 초안화",
+    color: TOKENS.writing,
+    icon: "pen",
+    kbd: "4",
+    defaultStage: "writing",
+  },
+];
+
 const WORKFLOW_STAGES = [
-  { id: "search", label: "Search", sub: "논문 서치 및 수집", color: TOKENS.search, icon: "search", kbd: "1" },
-  { id: "reading", label: "Reading", sub: "AI 논문 리딩", color: TOKENS.read, icon: "book", kbd: "2" },
-  { id: "research", label: "Research", sub: "재현연구 및 실험", color: TOKENS.research, icon: "flask", kbd: "3" },
-  { id: "result", label: "Result", sub: "결과 도출 및 정리", color: TOKENS.result, icon: "chart", kbd: "4" },
-  { id: "insight", label: "Insight", sub: "인사이트 취합", color: TOKENS.insight, icon: "sparkles", kbd: "5" },
-  { id: "writing", label: "Writing", sub: "논문 작성 보조", color: TOKENS.writing, icon: "pen", kbd: "6" },
+  {
+    id: "search",
+    tabId: "papers",
+    modeLabel: "Discover",
+    label: "Search",
+    sub: "논문 서치 및 수집",
+    color: TOKENS.search,
+    icon: "search",
+    kbd: "1",
+  },
+  {
+    id: "reading",
+    tabId: "papers",
+    modeLabel: "Library",
+    label: "Reading",
+    sub: "AI 논문 리딩",
+    color: TOKENS.read,
+    icon: "book",
+    kbd: "2",
+  },
+  {
+    id: "research",
+    tabId: "lab",
+    modeLabel: "Plan",
+    label: "Research",
+    sub: "재현연구 및 실험",
+    color: TOKENS.research,
+    icon: "flask",
+    kbd: "3",
+  },
+  {
+    id: "result",
+    tabId: "lab",
+    modeLabel: "Compare",
+    label: "Result",
+    sub: "결과 도출 및 정리",
+    color: TOKENS.result,
+    icon: "chart",
+    kbd: "4",
+  },
+  {
+    id: "insight",
+    tabId: "insight",
+    modeLabel: "Claims",
+    label: "Insight",
+    sub: "인사이트 취합",
+    color: TOKENS.insight,
+    icon: "sparkles",
+    kbd: "5",
+  },
+  {
+    id: "writing",
+    tabId: "writing",
+    modeLabel: "Draft",
+    label: "Writing",
+    sub: "논문 작성 보조",
+    color: TOKENS.writing,
+    icon: "pen",
+    kbd: "6",
+  },
 ];
 
 const STAGE_ALIASES = {
+  papers: "reading",
+  lab: "research",
+  search: "search",
+  reading: "reading",
+  research: "research",
+  result: "result",
+  insight: "insight",
+  writing: "writing",
   read: "reading",
   results: "result",
   insights: "insight",
@@ -361,6 +466,43 @@ function parseAresRoute(locationLike = window.location) {
 
 function stageById(stageId) {
   return WORKFLOW_STAGES.find((stage) => stage.id === stageId) || WORKFLOW_STAGES[0];
+}
+
+function workflowTabById(tabId) {
+  return WORKFLOW_TABS.find((tab) => tab.id === tabId) || WORKFLOW_TABS[0];
+}
+
+function workflowTabByStageId(stageId) {
+  const stage = stageById(normalizeStage(stageId));
+  return workflowTabById(stage.tabId);
+}
+
+function activeWorkflowTab() {
+  return workflowTabByStageId(state.activeStage);
+}
+
+async function selectStage(stageId, { transition = true } = {}) {
+  state.activeStage = normalizeStage(stageId);
+  state.scopePicker = null;
+  saveStorage(STORAGE_KEYS.stage, state.activeStage);
+  if (state.activeStage === "reading") {
+    state.readingView = "home";
+    state.readingHomePreviewOpen = false;
+    await loadReadingSessions({ preserveSelection: true });
+    syncReadingHomeSelection();
+  }
+
+  if (transition) {
+    renderWithViewTransition();
+    return;
+  }
+
+  render();
+}
+
+async function selectWorkflowTab(tabId, options = {}) {
+  const tab = workflowTabById(tabId);
+  await selectStage(tab.defaultStage, options);
 }
 
 function detectSearchLayout(width = window.innerWidth) {
@@ -2296,29 +2438,39 @@ function renderSidebar() {
   const collapsed = state.sidebarCollapsed;
   const workflowExpanded = collapsed || state.workflowOpen;
   const workflowRows = workflowExpanded
-    ? WORKFLOW_STAGES.map((stage) => {
-        const active = stage.id === state.activeStage;
-        const menuOpen = state.openWorkflowMenu === stage.id;
-        const iconBackground = active ? stage.color : `${stage.color}1a`;
-        const iconColor = active ? "#ffffff" : stage.color;
+    ? WORKFLOW_TABS.map((tab) => {
+        const active = tab.id === activeWorkflowTab().id;
+        const menuOpen = state.openWorkflowMenu === tab.id;
+        const iconBackground = active ? tab.color : `${tab.color}1a`;
+        const iconColor = active ? "#ffffff" : tab.color;
 
         return `
-          <div class="workflow-item ${active ? "is-active" : ""} ${menuOpen ? "menu-open" : ""}" data-ares-role="workflow-row" data-ares-stage="${escapeHtml(stage.id)}">
-            <button type="button" class="workflow-stage-btn hov" data-action="select-stage" data-stage-id="${escapeHtml(stage.id)}" data-ares-role="workflow-stage" data-ares-stage="${escapeHtml(stage.id)}" title="${escapeHtml(stage.label)}">
+          <div class="workflow-item ${active ? "is-active" : ""} ${menuOpen ? "menu-open" : ""}" data-ares-role="workflow-row" data-ares-tab="${escapeHtml(tab.id)}">
+            <button
+              type="button"
+              class="workflow-stage-btn hov"
+              aria-label="${escapeHtml(tab.label)}"
+              data-action="select-workflow-tab"
+              data-tab-id="${escapeHtml(tab.id)}"
+              data-ares-role="workflow-stage"
+              data-ares-tab="${escapeHtml(tab.id)}"
+              data-ares-stage="${escapeHtml(tab.defaultStage)}"
+              title="${escapeHtml(tab.label)}"
+            >
               <span class="workflow-stage-icon" style="background:${iconBackground};color:${iconColor}">
-                ${icon(stage.icon, { size: 13 })}
+                ${icon(tab.icon, { size: 13 })}
               </span>
               <span class="workflow-stage-copy">
-                <span class="workflow-stage-label">${escapeHtml(stage.label)}</span>
+                <span class="workflow-stage-label">${escapeHtml(tab.label)}</span>
               </span>
             </button>
             <div class="workflow-side-actions">
               <button
                 type="button"
                 class="sidebar-icon-btn"
-                aria-label="${escapeHtml(stage.label)} context menu"
+                aria-label="${escapeHtml(tab.label)} context menu"
                 data-action="toggle-workflow-menu"
-                data-stage-id="${escapeHtml(stage.id)}"
+                data-stage-id="${escapeHtml(tab.id)}"
               >
                 ${icon("moreH", { size: 14 })}
               </button>
@@ -2326,8 +2478,8 @@ function renderSidebar() {
                 menuOpen
                   ? `
                     <div class="sidebar-menu">
-                      <button type="button" class="sidebar-menu-item" data-action="select-stage" data-stage-id="${escapeHtml(stage.id)}">Open stage</button>
-                      <button type="button" class="sidebar-menu-item" data-action="copy-stage-link" data-stage-id="${escapeHtml(stage.id)}">Copy deep link</button>
+                      <button type="button" class="sidebar-menu-item" data-action="select-workflow-tab" data-tab-id="${escapeHtml(tab.id)}">Open tab</button>
+                      <button type="button" class="sidebar-menu-item" data-action="copy-stage-link" data-stage-id="${escapeHtml(tab.defaultStage)}">Copy deep link</button>
                       <div class="sidebar-menu-divider"></div>
                       <button type="button" class="sidebar-menu-item" data-action="dismiss-workflow-menu">Add note</button>
                     </div>
@@ -2432,6 +2584,7 @@ function renderSidebar() {
 
 function renderTopbar() {
   const stage = stageById(state.activeStage);
+  const tab = activeWorkflowTab();
   const readingSession = stage.id === "reading" && state.readingView === "detail" ? selectedReadingSession() : null;
   const searchRun = stage.id === "search" ? state.searchAgentRun : null;
   const readingBreadcrumb = readingSession
@@ -2465,12 +2618,13 @@ function renderTopbar() {
       `
     : "";
   return `
-    <header class="main-topbar" data-ares-surface="topbar" data-ares-stage="${escapeHtml(stage.id)}">
+    <header class="main-topbar" data-ares-surface="topbar" data-ares-stage="${escapeHtml(stage.id)}" data-ares-tab="${escapeHtml(tab.id)}">
       <div class="topbar-stage">
-        <span class="topbar-stage-badge" style="background:${stage.color}">
-          ${icon(stage.icon, { size: 13, color: "#ffffff" })}
+        <span class="topbar-stage-badge" style="background:${tab.color}">
+          ${icon(tab.icon, { size: 13, color: "#ffffff" })}
         </span>
-        <span class="topbar-stage-label">${escapeHtml(stage.label)}</span>
+        <span class="topbar-stage-label">${escapeHtml(tab.label)}</span>
+        ${stage.tabId === tab.id && stage.label !== tab.label ? `<span class="topbar-separator">/</span><span class="topbar-stage-mode">${escapeHtml(stage.modeLabel || stage.label)}</span>` : ""}
         ${readingBreadcrumb}
         ${searchBreadcrumb}
       </div>
@@ -2619,22 +2773,26 @@ function renderPlaceholderStage(project) {
 }
 
 function renderBottomNav() {
+  const activeTab = activeWorkflowTab();
   return `
     <nav class="bottom-nav" aria-label="Workflow tabs" data-ares-surface="bottom-nav" data-ares-role="navigation">
-      ${WORKFLOW_STAGES.map((stage) => {
-        const active = stage.id === state.activeStage;
+      ${WORKFLOW_TABS.map((tab) => {
+        const active = tab.id === activeTab.id;
         return `
           <button
             type="button"
             class="${active ? "is-active" : ""}"
-            data-action="select-stage"
-            data-stage-id="${escapeHtml(stage.id)}"
-            style="--stage-color:${stage.color};--stage-tint:${stage.color}12"
+            aria-label="${escapeHtml(tab.label)}"
+            data-action="select-workflow-tab"
+            data-tab-id="${escapeHtml(tab.id)}"
+            data-stage-id="${escapeHtml(tab.defaultStage)}"
+            style="--stage-color:${tab.color};--stage-tint:${tab.color}12"
             data-ares-role="bottom-stage"
-            data-ares-stage="${escapeHtml(stage.id)}"
+            data-ares-tab="${escapeHtml(tab.id)}"
+            data-ares-stage="${escapeHtml(tab.defaultStage)}"
           >
-            ${icon(stage.icon, { size: 17, color: active ? stage.color : TOKENS.t3 })}
-            <span>${escapeHtml(stage.label)}</span>
+            ${icon(tab.icon, { size: 17, color: active ? tab.color : TOKENS.t3 })}
+            <span>${escapeHtml(tab.shortLabel)}</span>
           </button>
         `;
       }).join("")}
@@ -2688,6 +2846,7 @@ function render() {
       class="app-shell"
       data-ares-app="true"
       data-active-stage="${escapeHtml(state.activeStage)}"
+      data-active-tab="${escapeHtml(activeWorkflowTab().id)}"
       data-active-project-id="${escapeHtml(project.id)}"
       data-active-project-name="${escapeHtml(project.name)}"
       data-active-paper-id="${escapeHtml(selected?.paperId || "")}"
@@ -3594,16 +3753,12 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "select-stage") {
-    state.activeStage = normalizeStage(trigger.dataset.stageId);
-    state.scopePicker = null;
-    saveStorage(STORAGE_KEYS.stage, state.activeStage);
-    if (state.activeStage === "reading") {
-      state.readingView = "home";
-      state.readingHomePreviewOpen = false;
-      await loadReadingSessions({ preserveSelection: true });
-      syncReadingHomeSelection();
-    }
-    renderWithViewTransition();
+    await selectStage(trigger.dataset.stageId);
+    return;
+  }
+
+  if (action === "select-workflow-tab") {
+    await selectWorkflowTab(trigger.dataset.tabId);
     return;
   }
 
@@ -4696,18 +4851,11 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("keydown", async (event) => {
-  if ((event.metaKey || event.ctrlKey) && /^[1-6]$/.test(event.key)) {
+  if ((event.metaKey || event.ctrlKey) && /^[1-4]$/.test(event.key)) {
     event.preventDefault();
-    const stage = WORKFLOW_STAGES[Number(event.key) - 1];
-    if (stage) {
-      state.activeStage = stage.id;
-      if (stage.id === "reading") {
-        state.readingView = "home";
-        state.readingHomePreviewOpen = false;
-        syncReadingHomeSelection();
-      }
-      saveStorage(STORAGE_KEYS.stage, state.activeStage);
-      render();
+    const tab = WORKFLOW_TABS[Number(event.key) - 1];
+    if (tab) {
+      await selectWorkflowTab(tab.id);
     }
     return;
   }

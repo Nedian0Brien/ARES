@@ -736,6 +736,13 @@ a {
   font-size: 11.5px;
 }
 
+.topbar-stage-mode {
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 0;
+}
+
 .topbar-breadcrumb {
   align-items: center;
   display: flex;
@@ -4524,7 +4531,7 @@ body.reading-home-resize-active {
     bottom: 0;
     display: grid;
     gap: 0.25rem;
-    grid-template-columns: repeat(6, minmax(44px, 1fr));
+    grid-template-columns: repeat(4, minmax(44px, 1fr));
     left: 0;
     min-height: var(--mobile-bottom-nav-height);
     padding: 0.45rem 0.55rem calc(0.45rem + env(safe-area-inset-bottom, 0px));

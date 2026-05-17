@@ -257,7 +257,7 @@ function FoundationColors() {
   );
   return (
     <Section id="colors" eyebrow="Foundation" title="Color"
-      sub="ARES의 팔레트는 Linear/Notion 스타일의 따뜻한 오프화이트를 기반으로 하고, 6단계 워크플로우를 고유의 desaturated 액센트로 구분한다. 각 stage 색은 bg(12%), border(30%) opacity 규칙으로 파생된다.">
+      sub="ARES의 팔레트는 Linear/Notion 스타일의 따뜻한 오프화이트를 기반으로 하고, 4개 상위 탭과 하위 워크플로우 모드를 고유의 desaturated 액센트로 구분한다. 각 stage 색은 bg(12%), border(30%) opacity 규칙으로 파생된다.">
       <Sub label="Surface">{chipRow(surface)}</Sub>
       <Sub label="Border">{chipRow(border)}</Sub>
       <Sub label="Text">{chipRow(text)}</Sub>
@@ -751,7 +751,7 @@ function PatternsLayout() {
       </Sub>
       <Sub label="Responsive">
         <div className="ds-card" style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.75 }}>
-          <div>• <span className="ds-inline-code">≤ 900px</span> — 데스크톱 사이드바 숨김, safe-area aware 하단 <span className="ds-inline-code">bottom-nav</span> 표시 (6 stage icons, 활성 색 tint).</div>
+          <div>• <span className="ds-inline-code">≤ 900px</span> — 데스크톱 사이드바 숨김, safe-area aware 하단 <span className="ds-inline-code">bottom-nav</span> 표시 (4 workflow tabs, 활성 색 tint).</div>
           <div>• 보조 패널(필터/프리뷰)은 모바일에서 inline 또는 bottom-sheet 순서로 stacking.</div>
           <div>• 모바일 상태에서도 topbar / kbd hint는 유지하되, 핵심 컨트롤은 44px 터치 타깃을 기준으로 조정.</div>
         </div>
@@ -855,7 +855,7 @@ function Accessibility() {
       <Sub label="Keyboard">
         <div className="ds-card" style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10, rowGap: 8 }}>
           {[
-            ['⌘1–⌘6', 'Workflow stage 이동 (Search → Writing)'],
+            ['⌘1–⌘4', '상위 workflow tab 이동 (Read → Write)'],
             ['⌘K',    '전역 서치 팔레트'],
             ['C',     'New paper'],
             ['N',     'New experiment'],
@@ -937,7 +937,7 @@ function App() {
           </p>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
             <Tag label="Inter + JetBrains Mono" />
-            <Tag label="6 stages" color={T.read} />
+            <Tag label="4 tabs" color={T.read} />
             <Tag label="light-only" color={T.search} />
             <Tag label="Linear-adjacent" color={T.research} dot />
           </div>
