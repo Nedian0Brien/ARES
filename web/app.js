@@ -1,5 +1,6 @@
 import { createSearchFeature } from "./app/features/search.js";
 import { createReadingFeature } from "./app/features/reading.js";
+import { primeAutoHideScrollState, reduceAutoHideScrollState } from "./app/lib/mobile-scroll-auto-hide.js";
 import { hydrateReadingPdfSurface, resetReadingPdfSurface, scrollReadingPdfToPage } from "./app/lib/pdf-viewer.js";
 
 const TOKENS = {
@@ -217,6 +218,13 @@ const STORAGE_KEYS = {
 const SEARCH_MODE_TRANSITION_MS = 280;
 const AGENTIC_SEARCH_PRESS_MS = 780;
 const AGENTIC_SEARCH_FOCUS_DELAY_MS = 460;
+const AUTO_HIDE_RESUME_GUARD_MS = 240;
+const BOTTOM_NAV_AUTO_HIDE_THRESHOLDS = {
+  nearTopThreshold: 32,
+  hideAfterScrollY: 72,
+  hideDeltaThreshold: 8,
+  revealDeltaThreshold: 8,
+};
 const SEARCH_LAYOUT_BREAKPOINTS = {
   mobileMax: 900,
   tabletMax: 1279,
@@ -370,6 +378,10 @@ let applyingBrowserRoute = false;
 let browserRouteSyncReady = false;
 let lastBrowserRouteHash = "";
 let browserRouteApplyTimer = 0;
+let bottomNavAutoHideState = null;
+let bottomNavHidden = false;
+let bottomNavScrollFrame = 0;
+let bottomNavLifecycleBound = false;
 
 function loadStorage(key, fallback) {
   try {
@@ -3204,14 +3216,16 @@ function renderWritingStage(project) {
 function renderBottomNav() {
   const activeTab = activeWorkflowTab();
   return `
-    <nav class="bottom-nav" aria-label="Workflow tabs" data-ares-surface="bottom-nav" data-ares-role="navigation">
+    <nav class="bottom-nav${bottomNavHidden ? " bottom-nav-hidden" : ""}" aria-label="Workflow tabs" data-ares-surface="bottom-nav" data-ares-role="navigation">
+      <span class="bottom-nav-indicator" aria-hidden="true"></span>
       ${WORKFLOW_TABS.map((tab) => {
         const active = tab.id === activeTab.id;
         return `
           <button
             type="button"
-            class="${active ? "is-active" : ""}"
+            class="nav-item ${active ? "active" : ""}"
             aria-label="${escapeHtml(tab.label)}"
+            aria-current="${active ? "page" : "false"}"
             data-action="select-workflow-tab"
             data-tab-id="${escapeHtml(tab.id)}"
             data-stage-id="${escapeHtml(tab.defaultStage)}"
@@ -3219,14 +3233,138 @@ function renderBottomNav() {
             data-ares-role="bottom-stage"
             data-ares-tab="${escapeHtml(tab.id)}"
             data-ares-stage="${escapeHtml(tab.defaultStage)}"
+            data-bottom-nav-tab="${escapeHtml(tab.id)}"
           >
-            ${icon(tab.icon, { size: 17, color: active ? tab.color : TOKENS.t3 })}
+            ${icon(tab.icon, { size: 20 })}
             <span>${escapeHtml(tab.shortLabel)}</span>
           </button>
         `;
       }).join("")}
     </nav>
   `;
+}
+
+function getBottomNavScrollY() {
+  return Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0);
+}
+
+function isBottomNavMobile() {
+  return window.innerWidth <= SEARCH_LAYOUT_BREAKPOINTS.mobileMax;
+}
+
+function setBottomNavHidden(nextHidden) {
+  if (bottomNavHidden === nextHidden) {
+    return;
+  }
+
+  bottomNavHidden = nextHidden;
+  const nav = document.querySelector('[data-ares-surface="bottom-nav"]');
+  if (nav) {
+    nav.classList.toggle("bottom-nav-hidden", nextHidden);
+  }
+}
+
+function primeBottomNavAutoHideState() {
+  bottomNavAutoHideState = primeAutoHideScrollState({
+    currentY: getBottomNavScrollY(),
+    now: Date.now(),
+    resumeGuardMs: AUTO_HIDE_RESUME_GUARD_MS,
+  });
+  setBottomNavHidden(bottomNavAutoHideState.hidden);
+}
+
+function updateBottomNavVisibility() {
+  bottomNavScrollFrame = 0;
+  if (!bottomNavAutoHideState) {
+    primeBottomNavAutoHideState();
+  }
+
+  bottomNavAutoHideState = reduceAutoHideScrollState({
+    state: bottomNavAutoHideState,
+    currentY: getBottomNavScrollY(),
+    now: Date.now(),
+    isMobile: isBottomNavMobile(),
+    thresholds: BOTTOM_NAV_AUTO_HIDE_THRESHOLDS,
+  });
+  setBottomNavHidden(bottomNavAutoHideState.hidden);
+}
+
+function onBottomNavScroll() {
+  if (bottomNavScrollFrame) {
+    return;
+  }
+  bottomNavScrollFrame = window.requestAnimationFrame(updateBottomNavVisibility);
+}
+
+function onBottomNavResize() {
+  if (bottomNavScrollFrame) {
+    window.cancelAnimationFrame(bottomNavScrollFrame);
+    bottomNavScrollFrame = 0;
+  }
+
+  bottomNavAutoHideState = {
+    ...(bottomNavAutoHideState || { hidden: false, resumeGuardUntil: 0 }),
+    hidden: isBottomNavMobile() ? bottomNavHidden : false,
+    lastScrollY: getBottomNavScrollY(),
+    resumeGuardUntil: 0,
+  };
+  setBottomNavHidden(bottomNavAutoHideState.hidden);
+  window.requestAnimationFrame(syncBottomNavIndicator);
+}
+
+function onBottomNavResume() {
+  if (document.visibilityState === "hidden") {
+    return;
+  }
+
+  if (bottomNavScrollFrame) {
+    window.cancelAnimationFrame(bottomNavScrollFrame);
+    bottomNavScrollFrame = 0;
+  }
+  primeBottomNavAutoHideState();
+  window.requestAnimationFrame(syncBottomNavIndicator);
+}
+
+function syncBottomNavIndicator() {
+  const nav = document.querySelector('[data-ares-surface="bottom-nav"]');
+  const indicator = nav?.querySelector(".bottom-nav-indicator");
+  const activeButton = nav?.querySelector(".nav-item.active");
+  if (!nav || !indicator || !activeButton) {
+    return;
+  }
+
+  const navRect = nav.getBoundingClientRect();
+  const buttonRect = activeButton.getBoundingClientRect();
+  const width = Math.round(buttonRect.width);
+  const x = Math.round(buttonRect.left - navRect.left - 4);
+
+  indicator.style.width = `${width}px`;
+  indicator.style.transform = `translateX(${x}px)`;
+  indicator.style.opacity = "1";
+}
+
+function bindBottomNavLifecycle() {
+  if (bottomNavLifecycleBound) {
+    return;
+  }
+
+  bottomNavLifecycleBound = true;
+  primeBottomNavAutoHideState();
+  window.addEventListener("scroll", onBottomNavScroll, { passive: true });
+  window.addEventListener("resize", onBottomNavResize);
+  window.addEventListener("focus", onBottomNavResume);
+  window.addEventListener("pageshow", onBottomNavResume);
+  window.addEventListener("orientationchange", syncBottomNavIndicator);
+  document.addEventListener("visibilitychange", onBottomNavResume);
+}
+
+function syncBottomNavAfterRender() {
+  bindBottomNavLifecycle();
+  const nav = document.querySelector('[data-ares-surface="bottom-nav"]');
+  if (nav) {
+    nav.classList.toggle("bottom-nav-hidden", bottomNavHidden);
+  }
+  window.requestAnimationFrame(syncBottomNavIndicator);
 }
 
 function renderShell(message) {
@@ -3302,6 +3440,7 @@ function render() {
   restoreStableReadingPdfHost(preservedPdfHost);
   syncBrowserUrlFromState();
   scheduleReadingHydration();
+  syncBottomNavAfterRender();
 }
 
 function focusSearchInput({ forceSearchStage = false, select = false } = {}) {
