@@ -3095,6 +3095,112 @@ function renderInsightStage(project) {
   `;
 }
 
+function renderWritingStage(project) {
+  const session = selectedReadingSession();
+  const sourceTitle = session?.title || dashboardLibraryItems()[0]?.title || project?.name || "Untitled research draft";
+  const sections = [
+    { id: "abstract", label: "Abstract", status: "todo", words: 0 },
+    { id: "intro", label: "Introduction", status: "queue", words: 120 },
+    { id: "related", label: "Related Work", status: "todo", words: 0 },
+    { id: "method", label: "Method", status: "queue", words: 180 },
+    { id: "experiments", label: "Experiments", status: "todo", words: 0 },
+    { id: "conclusion", label: "Conclusion", status: "todo", words: 0 },
+  ];
+  const evidence = [
+    {
+      label: "Insight Card",
+      detail: session?.summary || "Primary claim is waiting for linked evidence.",
+    },
+    {
+      label: "Evidence Bundle",
+      detail: sourceTitle,
+    },
+    {
+      label: "Result Dossier",
+      detail: "unresolved evidence gaps remain until Lab results are attached.",
+    },
+  ];
+
+  return `
+    <div class="writing-stage" data-ares-surface="writing-stage" data-ares-stage="writing">
+      <aside class="writing-outline">
+        <div class="writing-panel-head">
+          <span class="writing-card-label">Outline</span>
+          ${renderTag(`${sections.length} sections`, TOKENS.writing, true)}
+        </div>
+        <div class="writing-section-list">
+          ${sections
+            .map(
+              (section) => `
+                <button type="button" class="writing-section-row ${section.status === "queue" ? "is-active" : ""}">
+                  <span>${escapeHtml(section.label)}</span>
+                  <small class="mono">${escapeHtml(section.status)} · ${escapeHtml(String(section.words))}w</small>
+                </button>
+              `,
+            )
+            .join("")}
+        </div>
+      </aside>
+
+      <main class="writing-editor">
+        <div class="writing-hero">
+          <div>
+            <div class="writing-kicker">${icon("pen", { size: 14, color: TOKENS.writing })}<span>Writing</span></div>
+            <h1>Draft from evidence</h1>
+            <p>Insight와 Result Dossier를 이용해 source-linked draft를 조립합니다. 출처가 비어 있는 문장은 unresolved evidence gaps로 남깁니다.</p>
+          </div>
+          <div class="writing-actions">
+            <button type="button" class="btn-p" disabled>Generate section</button>
+            <button type="button" class="btn-s" disabled>Export</button>
+          </div>
+        </div>
+
+        <section class="writing-draft-card">
+          <div class="writing-draft-toolbar">
+            <span class="writing-card-label">Draft</span>
+            ${renderTag("source-linked draft", TOKENS.writing, true)}
+          </div>
+          <article class="writing-draft-body">
+            <h2>Method</h2>
+            <p>
+              This draft section will use the selected Insight Card and Evidence Bundle from
+              <strong>${escapeHtml(sourceTitle)}</strong>. ARES should keep every generated claim attached to a source, metric, or note before export.
+            </p>
+            <blockquote>AI suggestion: tighten the method summary after Lab adds the baseline result.</blockquote>
+          </article>
+          <div class="writing-suggestion-bar">
+            <button type="button" class="btn-s" data-action="select-stage" data-stage-id="insight">Insert evidence</button>
+            <button type="button" class="btn-s" disabled>Accept suggestion</button>
+          </div>
+        </section>
+      </main>
+
+      <aside class="writing-sources">
+        <div class="writing-panel-head">
+          <span class="writing-card-label">Sources</span>
+          ${renderTag("Evidence Bundle", TOKENS.read, true)}
+        </div>
+        <div class="writing-source-list">
+          ${evidence
+            .map(
+              (item) => `
+                <article class="writing-source-card">
+                  <span class="writing-card-label">${escapeHtml(item.label)}</span>
+                  <p>${escapeHtml(item.detail)}</p>
+                </article>
+              `,
+            )
+            .join("")}
+        </div>
+        <div class="writing-gap-box">
+          <span class="writing-card-label">unresolved evidence gaps</span>
+          <p>Lab 결과, citation 후보, confidence가 비어 있는 문장은 export 전에 다시 Insight 또는 Lab으로 돌려야 합니다.</p>
+        </div>
+      </aside>
+    </div>
+  `;
+}
+
 function renderBottomNav() {
   const activeTab = activeWorkflowTab();
   return `
@@ -3166,7 +3272,9 @@ function render() {
           ? renderLabStage(project)
           : state.activeStage === "insight"
             ? renderInsightStage(project)
-            : renderPlaceholderStage(project);
+            : state.activeStage === "writing"
+              ? renderWritingStage(project)
+              : renderPlaceholderStage(project);
 
   app.innerHTML = `
     <div
