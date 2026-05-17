@@ -751,9 +751,9 @@ function PatternsLayout() {
       </Sub>
       <Sub label="Responsive">
         <div className="ds-card" style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.75 }}>
-          <div>• <span className="ds-inline-code">≤ 768px</span> — 데스크톱 사이드바 숨김, 하단 <span className="ds-inline-code">bottom-nav</span> 표시 (6 stage icons, 활성 색 tint).</div>
-          <div>• 보조 패널(필터/프리뷰)은 모바일에서 inline 순서로 stacking.</div>
-          <div>• 모바일 상태에서도 topbar / kbd hint는 그대로 유지.</div>
+          <div>• <span className="ds-inline-code">≤ 900px</span> — 데스크톱 사이드바 숨김, safe-area aware 하단 <span className="ds-inline-code">bottom-nav</span> 표시 (6 stage icons, 활성 색 tint).</div>
+          <div>• 보조 패널(필터/프리뷰)은 모바일에서 inline 또는 bottom-sheet 순서로 stacking.</div>
+          <div>• 모바일 상태에서도 topbar / kbd hint는 유지하되, 핵심 컨트롤은 44px 터치 타깃을 기준으로 조정.</div>
         </div>
       </Sub>
     </Section>

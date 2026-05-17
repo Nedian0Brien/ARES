@@ -438,8 +438,8 @@ export function createReadingFeature({
               surface === "desktop"
                 ? `
                   <div class="reading-home-preview-icon-row">
-                    <button type="button" class="reading-home-preview-icon">${icon("bookmark", { size: 14, color: TOKENS.t3 })}</button>
-                    <button type="button" class="reading-home-preview-icon">${icon("moreH", { size: 14, color: TOKENS.t3 })}</button>
+                    <button type="button" class="reading-home-preview-icon" aria-label="Add bookmark" title="Add bookmark">${icon("bookmark", { size: 14, color: TOKENS.t3 })}</button>
+                    <button type="button" class="reading-home-preview-icon" aria-label="More preview actions" title="More actions">${icon("moreH", { size: 14, color: TOKENS.t3 })}</button>
                   </div>
                 `
                 : `
@@ -1583,7 +1583,7 @@ export function createReadingFeature({
           ${chatContextChips}
           <div class="reading-chat-input-box">
             <textarea name="readingChatMessage" rows="2" placeholder="${parsed ? "논문에게 질문하기…" : "Parse paper 후 질문할 수 있습니다"}" ${!parsed || chatBusy ? "disabled" : ""}></textarea>
-            <button type="submit" class="reading-chat-send" ${!parsed || chatBusy ? "disabled" : ""}>${icon("send", { size: 13, color: "#fff" })}</button>
+            <button type="submit" class="reading-chat-send" aria-label="Send reading question" ${!parsed || chatBusy ? "disabled" : ""}>${icon("send", { size: 13, color: "#fff" })}</button>
           </div>
           <div class="reading-chat-footer">
             <span>${parsed ? "Context: lexical retrieval top-K chunks" : "Context unavailable until parse completes"}</span>
