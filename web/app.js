@@ -2645,7 +2645,8 @@ function renderTopbar() {
         <span class="topbar-stage-badge" style="background:${tab.color}">
           ${icon(tab.icon, { size: 13, color: "#ffffff" })}
         </span>
-        <span class="topbar-stage-label">${escapeHtml(tab.label)}</span>
+        <span class="topbar-stage-label topbar-stage-label-desktop">${escapeHtml(tab.label)}</span>
+        <span class="topbar-stage-label topbar-stage-label-mobile">${escapeHtml(tab.shortLabel || tab.label)}</span>
         ${stage.tabId === tab.id && stage.label !== tab.label ? `<span class="topbar-separator">/</span><span class="topbar-stage-mode">${escapeHtml(stage.modeLabel || stage.label)}</span>` : ""}
         ${readingBreadcrumb}
         ${searchBreadcrumb}

@@ -757,6 +757,10 @@ a {
   white-space: nowrap;
 }
 
+.topbar-stage-label-mobile {
+  display: none;
+}
+
 .topbar-separator {
   color: var(--t4);
   font-size: 11.5px;
@@ -5132,6 +5136,14 @@ body.reading-home-resize-active {
 
   .topbar-stage-label {
     max-width: 44vw;
+  }
+
+  .topbar-stage-label-desktop {
+    display: none;
+  }
+
+  .topbar-stage-label-mobile {
+    display: inline;
   }
 
   .topbar-stage-mode {
