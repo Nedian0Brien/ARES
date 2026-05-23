@@ -9,6 +9,10 @@ function isDevelopmentLikeRuntime() {
   return LOCAL_GRAB_HOSTS.has(window.location.hostname) || PROXY_DEV_PATH_PATTERN.test(window.location.pathname);
 }
 
+function isMobileViewport() {
+  return window.matchMedia("(max-width: 900px)").matches;
+}
+
 function readGrabPreference() {
   const params = new URLSearchParams(window.location.search);
   const grabParam = params.get(REACT_GRAB_QUERY_KEY);
@@ -19,6 +23,10 @@ function readGrabPreference() {
 
   if (grabParam === "1" || grabParam === "true" || grabParam === "on") {
     return true;
+  }
+
+  if (isMobileViewport()) {
+    return false;
   }
 
   return isDevelopmentLikeRuntime();

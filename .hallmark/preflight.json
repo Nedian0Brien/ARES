@@ -1,0 +1,25 @@
+{
+  "scannedAt": "2026-05-23",
+  "framework": "vanilla Node static app",
+  "entrypoints": [
+    "web/index.html",
+    "web/app.js",
+    "web/styles.css"
+  ],
+  "fontStack": "Inter, JetBrains Mono, Newsreader via web/index.html and design/ARES Design System.html",
+  "palette": "CSS custom properties in web/styles.css and design/ARES Design System.html",
+  "motion": "CSS transitions and keyframes, no motion library",
+  "spacing": "ARES token-driven compact workspace spacing",
+  "preserve": [
+    "ARES design-system colors",
+    "Inter and JetBrains Mono typography",
+    "four workflow tabs with six internal stages",
+    "ARIS-style safe-area floating mobile bottom navigation"
+  ],
+  "hallmarkFocus": [
+    "mobile no-horizontal-scroll contract",
+    "single-line touch labels",
+    "reduced placeholder and explanatory copy",
+    "state-first mobile workspace surfaces"
+  ]
+}

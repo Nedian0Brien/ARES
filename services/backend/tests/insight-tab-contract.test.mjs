@@ -31,6 +31,7 @@ test('Insight surface exposes the four synthesis modes and card anatomy', async 
   assert.match(appJs, /linked evidence/);
   assert.match(appJs, /confidence/);
   assert.match(appJs, /next action/);
+  assert.doesNotMatch(appJs, /confidence 0\.72/);
 });
 
 test('Insight cards can move forward to Writing or back to Lab follow-up work', async () => {

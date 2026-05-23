@@ -158,7 +158,7 @@ React Grab 로컬 개발 지원:
 - 기본적으로 저장소에 vendoring된 `react-grab` 번들을 먼저 로드하고, 로컬 파일을 찾지 못할 때만 CDN fallback을 시도한다.
 - 상단 topbar에 `Grab enabled` 힌트가 보이면 준비된 상태다.
 - 화면 요소에 포인터를 올리고 `Cmd/Ctrl + C`를 누르면 기본 grab 컨텍스트 앞에 현재 ARES `stage / project / surface` 정보가 함께 복사된다.
-- 필요하면 URL에 `?grab=0`을 붙여 비활성화할 수 있고, `?grab=1`로 강제로 켤 수 있다.
+- 모바일 폭(≤ 900px)에서는 하단 workflow nav를 가리지 않도록 기본 비활성화된다. 필요하면 URL에 `?grab=1`을 붙여 강제로 켤 수 있고, 데스크톱에서는 `?grab=0`으로 끌 수 있다.
 
 포트 메모:
 

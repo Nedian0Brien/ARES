@@ -1292,7 +1292,7 @@ function deriveReadingNotes(session) {
       cat: meta.label,
       color: meta.color,
       text: readingExcerpt(note.quote || note.text || note.value, "", 170),
-      memo: readingExcerpt(note.body || note.value || sections[index]?.summary || session?.summary, "추가 메모가 이어질 예정입니다.", 180),
+      memo: readingExcerpt(note.body || note.value || sections[index]?.summary || session?.summary, "No memo.", 180),
       pg: note.page || (sectionIndex >= 0 ? readingSectionPage(sectionIndex + 1) : readingSectionPage(index + 1)),
     });
   });
@@ -2409,46 +2409,46 @@ function placeholderMeta(project, stage) {
     reading: {
       agent: "Reader agent",
       status: project.queueCount ? "queue" : "todo",
-      summary: "Search 단계에서 저장한 논문을 읽기 큐로 넘기면 섹션 단위 리딩과 하이라이트 추출 UI가 이 자리에 연결됩니다.",
+      summary: "Saved papers move into structured reading sessions.",
       notes: [
-        ["Ready input", "저장된 논문 메타데이터, 초록, 키포인트, 외부 링크가 이미 Search 단계에서 확보됩니다."],
-        ["Next UI", "본문/하이라이트/에이전트 요약 3열 레이아웃으로 이어질 준비가 되어 있습니다."],
+        ["Input", "Metadata, abstract, key points"],
+        ["Output", "Sections, highlights, notes"],
       ],
     },
     research: {
       agent: "Reproduction agent",
       status: "todo",
-      summary: "재현 단계에서는 코드 링크, 환경 메모, 체크리스트, 실험 러너 상태를 같은 디자인 시스템 위에서 연결하게 됩니다.",
+      summary: "Turn a reading packet into a reproduction checklist.",
       notes: [
-        ["Ready input", "논문 요약과 key points는 실험 체크리스트의 초기 seed로 활용할 수 있습니다."],
-        ["Next UI", "좌측 체크리스트 패널과 우측 실험 테이블 레이아웃이 이어질 예정입니다."],
+        ["Input", "Method, dataset, metric"],
+        ["Output", "Checklist, run queue"],
       ],
     },
     result: {
       agent: "Experiment agent",
       status: "todo",
-      summary: "결과 비교 단계는 재현 실험과 원 논문의 metric delta를 card + table 패턴으로 정리하는 화면으로 이어집니다.",
+      summary: "Compare paper metrics with reproduction results.",
       notes: [
-        ["Ready input", "저장 논문과 reading queue 정보는 결과 비교 리포트의 출발점으로 사용할 수 있습니다."],
-        ["Next UI", "상단 metric card, 하단 비교 표, 요약 insight 카드가 배치됩니다."],
+        ["Input", "Paper metric, run result"],
+        ["Output", "Delta, explanation"],
       ],
     },
     insight: {
       agent: "Analyst agent",
       status: "todo",
-      summary: "인사이트 단계는 실험 결과를 근거로 후속 연구 가설과 검증 메모를 구조화하는 레이어입니다.",
+      summary: "Collect claims, evidence, and decisions.",
       notes: [
-        ["Ready input", "Search에서 쌓인 주제 키워드와 저장 논문 목록이 insight clustering의 재료가 됩니다."],
-        ["Next UI", "좌측 insight card와 우측 memo panel이 함께 배치될 예정입니다."],
+        ["Input", "Evidence, result delta"],
+        ["Output", "Claim, decision"],
       ],
     },
     writing: {
       agent: "Writing agent",
       status: "todo",
-      summary: "작성 단계는 논문 섹션별 초안을 생성하고 export 액션을 연결하는 편집 화면으로 이어집니다.",
+      summary: "Assemble source-linked sections.",
       notes: [
-        ["Ready input", "Search 결과와 후속 단계의 요약 산출물이 writing prompt의 컨텍스트가 됩니다."],
-        ["Next UI", "좌측 section navigator와 우측 본문 편집 캔버스로 확장됩니다."],
+        ["Input", "Insight, evidence bundle"],
+        ["Output", "Draft sections"],
       ],
     },
   };
@@ -2784,21 +2784,18 @@ function renderPlaceholderStage(project) {
         <div class="placeholder-main-inner">
           <div class="placeholder-eyebrow">${escapeHtml(stage.label)}</div>
           <h1 class="placeholder-title">${escapeHtml(stage.sub)}</h1>
-          <p class="placeholder-copy">
-            Search 탭에서 저장한 논문을 기준으로 다음 단계의 데이터 모델을 연결할 예정입니다.
-            현재 활성 프로젝트는 <strong>${escapeHtml(project.name)}</strong> 입니다.
-          </p>
+          <p class="placeholder-copy">${escapeHtml(meta.summary)}</p>
 
           <div class="placeholder-grid">
             <article class="placeholder-card">
-              <div class="placeholder-card-label">Current foundation</div>
-              <h3>Search data is already working</h3>
-              <p>프로젝트별 논문 검색, 필터링, 스크랩 저장, reading queue 연결이 실제 데이터 흐름으로 동작합니다.</p>
+              <div class="placeholder-card-label">Project</div>
+              <h3>${escapeHtml(project.name)}</h3>
+              <p>${escapeHtml(project.focus || "No active focus")}</p>
             </article>
 
             <article class="placeholder-card">
-              <div class="placeholder-card-label">Next implementation target</div>
-              <h3>${escapeHtml(stage.label)} UI scaffold</h3>
+              <div class="placeholder-card-label">State</div>
+              <h3>${escapeHtml(meta.agent)}</h3>
               <p>${escapeHtml(meta.summary)}</p>
             </article>
           </div>
@@ -2843,7 +2840,7 @@ function renderPlaceholderStage(project) {
             </div>
             <div class="agent-panel-metric-row">
               <span style="color:${TOKENS.t2}">Focus keywords</span>
-              <span class="mono" style="color:${TOKENS.tx}">${escapeHtml((project.keywords || []).slice(0, 2).join(", ") || "n/a")}</span>
+              <span class="mono" style="color:${TOKENS.tx}">${escapeHtml((project.keywords || []).slice(0, 2).join(", ") || "--")}</span>
             </div>
           </section>
         </div>
@@ -2861,27 +2858,28 @@ function renderLabStage(project) {
   const session = selectedReadingSession();
   const library = dashboardLibraryItems();
   const sourcePaper = session || library[0] || null;
-  const paperTitle = sourcePaper?.title || "Reading Packet 대기 중";
+  const paperTitle = sourcePaper?.title || "No reading packet";
   const paperVenue = sourcePaper?.venue || "No venue";
   const progress = session ? readingProgress(session) : 0;
   const status = session?.status || (project.queueCount ? "queue" : "todo");
   const compareActive = stage.id === "result";
   const labMode = compareActive ? "Compare" : "Plan";
+  const labStatusLabel = session ? "Packet linked" : "Not connected";
   const runs = [
     {
       name: "Baseline reproduction",
       metric: "primary score",
-      paper: "paper",
-      ours: "pending",
-      delta: "setup required",
+      paper: session ? "linked" : "none",
+      ours: "—",
+      delta: "—",
       status: status === "done" ? "queue" : "todo",
     },
     {
       name: "Ablation candidate",
       metric: "sensitivity",
-      paper: "n/a",
-      ours: "pending",
-      delta: "setup required",
+      paper: "none",
+      ours: "—",
+      delta: "—",
       status: "todo",
     },
   ];
@@ -2893,7 +2891,7 @@ function renderLabStage(project) {
           <div class="lab-hero-copy">
             <div class="lab-kicker">${icon("flask", { size: 14, color: TOKENS.research })}<span>Research + Result</span></div>
             <h1>${escapeHtml(compareActive ? "Compare result dossier" : "Plan reproduction run")}</h1>
-            <p>Reading Packet을 재현 계획, 실행 큐, 결과 비교로 연결합니다. 실행 인프라가 연결되기 전까지 Lab 액션은 setup required 상태로 유지됩니다.</p>
+            <p>Reading packet, reproduction plan, and metric deltas.</p>
           </div>
           <div class="lab-source-card">
             <span class="lab-card-label">Reading Packet</span>
@@ -2901,7 +2899,7 @@ function renderLabStage(project) {
             <div class="lab-source-meta">
               ${renderTag(paperVenue)}
               ${renderTag(`${progress}% read`, TOKENS.read, progress > 0)}
-              ${renderTag("setup required", TOKENS.result, true)}
+              ${renderTag(labStatusLabel, session ? TOKENS.search : TOKENS.t3, Boolean(session))}
             </div>
           </div>
         </div>
@@ -2910,10 +2908,9 @@ function renderLabStage(project) {
           <article class="lab-mode-card ${compareActive ? "" : "is-active"}">
             <span class="lab-card-label">Plan</span>
             <h2>Reproduction plan</h2>
-            <p>논문에서 추출한 dataset, model, metric, 환경 조건을 체크리스트로 정리합니다.</p>
             <ul>
-              <li>${project.libraryCount || 0} saved papers available</li>
-              <li>${project.queueCount || 0} reading queue items</li>
+              <li>${project.libraryCount || 0} saved papers</li>
+              <li>${project.queueCount || 0} queued readings</li>
               <li>${session?.sections?.length || 0} parsed sections</li>
             </ul>
           </article>
@@ -2921,14 +2918,12 @@ function renderLabStage(project) {
           <article class="lab-mode-card">
             <span class="lab-card-label">Runs</span>
             <h2>Experiment runs</h2>
-            <p>baseline과 ablation 후보를 실행 대기 카드로 관리합니다.</p>
             <button type="button" class="btn-s" disabled>Run experiment</button>
           </article>
 
           <article class="lab-mode-card ${compareActive ? "is-active" : ""}">
             <span class="lab-card-label">Compare</span>
             <h2>Result Dossier</h2>
-            <p>논문 수치와 재현 수치의 delta를 기록하고 Analyst 설명을 Insight 후보로 승격합니다.</p>
             <button type="button" class="btn-s" data-action="select-stage" data-stage-id="result">Open Compare</button>
           </article>
         </section>
@@ -2970,16 +2965,16 @@ function renderLabStage(project) {
             ${statusIcon("todo")}
             <span>Analyst agent</span>
           </div>
-          ${renderTag("setup required", TOKENS.result, true)}
+          ${renderTag(labStatusLabel, session ? TOKENS.search : TOKENS.t3, Boolean(session))}
         </div>
         <div class="agent-panel-body">
           <section class="agent-panel-section" style="border-left-color:${TOKENS.research}">
             <div class="agent-panel-eyebrow" style="color:${TOKENS.research};margin-bottom:4px">Plan</div>
-            <p>Reading Packet의 method와 result notes를 재현 체크리스트의 seed로 사용합니다.</p>
+            <p>${escapeHtml(session ? "Method and result notes linked." : "No reading packet selected.")}</p>
           </section>
           <section class="agent-panel-section" style="border-left-color:${TOKENS.result}">
             <div class="agent-panel-eyebrow" style="color:${TOKENS.result};margin-bottom:4px">Compare</div>
-            <p>결과 입력이 연결되면 Result Dossier를 만들고 delta 설명을 Insight로 보낼 수 있습니다.</p>
+            <p>${escapeHtml(compareActive ? "Result dossier selected." : "Delta table is empty.")}</p>
           </section>
         </div>
         <div class="agent-panel-footer">
@@ -2995,39 +2990,42 @@ function renderInsightStage(project) {
   const notes = Array.isArray(session?.notes) ? session.notes : [];
   const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
   const evidenceItems = [...notes, ...highlights].slice(0, 4);
+  const hasEvidence = evidenceItems.length > 0;
   const fallbackEvidence = [
     {
-      cat: "Reading Packet",
-      text: session?.summary || project?.focus || "아직 연결된 evidence가 없습니다. Reading 또는 Lab에서 근거를 승격하세요.",
+      cat: session ? "Reading Packet" : "Project",
+      text: session?.summary || project?.focus || "No linked evidence",
     },
     {
       cat: "Result Dossier",
-      text: "실험 결과가 연결되면 metric delta와 analyst explanation이 여기에 쌓입니다.",
+      text: "No result attached",
     },
   ];
   const evidence = evidenceItems.length
     ? evidenceItems.map((entry) => ({
         cat: entry.cat || entry.type || entry.kind || "Evidence",
         page: entry.page || "",
-        text: entry.quote || entry.text || entry.body || entry.memo || "Evidence text pending",
+        text: entry.quote || entry.text || entry.body || entry.memo || "No evidence text",
       }))
     : fallbackEvidence;
-  const primaryClaim = evidence[0]?.text || "Evidence를 기반으로 claim을 작성하세요.";
+  const primaryClaim = hasEvidence ? evidence[0]?.text : project?.focus || "Select evidence to draft a claim";
   const focus = project?.focus || session?.title || "current research direction";
-  const hypotheses = [
-    `If ${focus} is sensitive to preprocessing, rerun the baseline with controlled data variants.`,
-    "A smaller ablation may explain the observed result gap before expanding the full experiment.",
-  ];
+  const hypotheses = hasEvidence
+    ? [
+        `${focus}: verify the strongest unresolved assumption.`,
+        "Compare the smallest ablation before expanding the run.",
+      ]
+    : [];
 
   return `
     <div class="insight-stage" data-ares-surface="insight-stage" data-ares-stage="insight">
       <section class="insight-main">
         <div class="insight-hero">
-          <div>
-            <div class="insight-kicker">${icon("sparkles", { size: 14, color: TOKENS.insight })}<span>Insight</span></div>
-            <h1>Evidence to decisions</h1>
-            <p>Reading Packet과 Result Dossier를 claim, hypothesis, decision으로 승격합니다. 각 Insight Card는 linked evidence, confidence, next action을 함께 가져야 합니다.</p>
-          </div>
+            <div>
+              <div class="insight-kicker">${icon("sparkles", { size: 14, color: TOKENS.insight })}<span>Insight</span></div>
+              <h1>Evidence to decisions</h1>
+              <p>Claims, hypotheses, and decisions from linked evidence.</p>
+            </div>
           <div class="insight-hero-actions">
             <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
             <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
@@ -3065,7 +3063,7 @@ function renderInsightStage(project) {
             <article class="insight-card is-primary">
               <div class="insight-card-top">
                 <span class="insight-card-label">Insight Card</span>
-                ${renderTag("confidence 0.72", TOKENS.insight, true)}
+                ${renderTag(hasEvidence ? "draft" : "empty", hasEvidence ? TOKENS.insight : TOKENS.t3, hasEvidence)}
               </div>
               <h2>${escapeHtml(String(primaryClaim).replace(/\s+/g, " ").slice(0, 96))}</h2>
               <dl>
@@ -3075,11 +3073,11 @@ function renderInsightStage(project) {
                 </div>
                 <div>
                   <dt>confidence</dt>
-                  <dd>medium</dd>
+                  <dd>${escapeHtml(hasEvidence ? "unrated" : "—")}</dd>
                 </div>
                 <div>
                   <dt>next action</dt>
-                  <dd>Use in draft or create a focused follow-up run.</dd>
+                  <dd>${escapeHtml(hasEvidence ? "Send to Writing or Lab" : "Link evidence")}</dd>
                 </div>
               </dl>
               <div class="insight-card-actions">
@@ -3095,20 +3093,24 @@ function renderInsightStage(project) {
               ${renderTag("Decisions", TOKENS.research, true)}
             </div>
             <div class="insight-hypothesis-list">
-              ${hypotheses
-                .map(
-                  (hypothesis, index) => `
-                    <article class="insight-hypothesis-card">
-                      <span class="mono">H${index + 1}</span>
-                      <p>${escapeHtml(hypothesis)}</p>
-                    </article>
-                  `,
-                )
-                .join("")}
+              ${
+                hypotheses.length
+                  ? hypotheses
+                      .map(
+                        (hypothesis, index) => `
+                          <article class="insight-hypothesis-card">
+                            <span class="mono">H${index + 1}</span>
+                            <p>${escapeHtml(hypothesis)}</p>
+                          </article>
+                        `,
+                      )
+                      .join("")
+                  : '<div class="insight-empty-compact">No hypotheses</div>'
+              }
             </div>
             <div class="insight-decision-box">
               <span class="insight-card-label">Decisions</span>
-              <p>채택한 claim은 Writing으로 보내고, 검증이 부족한 claim은 Lab follow-up으로 되돌립니다.</p>
+              <p>${escapeHtml(hasEvidence ? "Route the claim forward or back to Lab." : "No decision")}</p>
             </div>
           </aside>
         </div>
@@ -3131,7 +3133,7 @@ function renderWritingStage(project) {
   const evidence = [
     {
       label: "Insight Card",
-      detail: session?.summary || "Primary claim is waiting for linked evidence.",
+      detail: session?.summary || "No claim selected.",
     },
     {
       label: "Evidence Bundle",
@@ -3139,7 +3141,7 @@ function renderWritingStage(project) {
     },
     {
       label: "Result Dossier",
-      detail: "unresolved evidence gaps remain until Lab results are attached.",
+      detail: "No result attached.",
     },
   ];
 
@@ -3166,11 +3168,11 @@ function renderWritingStage(project) {
 
       <main class="writing-editor">
         <div class="writing-hero">
-          <div>
-            <div class="writing-kicker">${icon("pen", { size: 14, color: TOKENS.writing })}<span>Writing</span></div>
-            <h1>Draft from evidence</h1>
-            <p>Insight와 Result Dossier를 이용해 source-linked draft를 조립합니다. 출처가 비어 있는 문장은 unresolved evidence gaps로 남깁니다.</p>
-          </div>
+            <div>
+              <div class="writing-kicker">${icon("pen", { size: 14, color: TOKENS.writing })}<span>Writing</span></div>
+              <h1>Draft from evidence</h1>
+              <p>Source-linked sections and export queue.</p>
+            </div>
           <div class="writing-actions">
             <button type="button" class="btn-p" disabled>Generate section</button>
             <button type="button" class="btn-s" disabled>Export</button>
@@ -3185,10 +3187,9 @@ function renderWritingStage(project) {
           <article class="writing-draft-body">
             <h2>Method</h2>
             <p>
-              This draft section will use the selected Insight Card and Evidence Bundle from
-              <strong>${escapeHtml(sourceTitle)}</strong>. ARES should keep every generated claim attached to a source, metric, or note before export.
+              Source: <strong>${escapeHtml(sourceTitle)}</strong>
             </p>
-            <blockquote>AI suggestion: tighten the method summary after Lab adds the baseline result.</blockquote>
+            <blockquote>No suggestion selected.</blockquote>
           </article>
           <div class="writing-suggestion-bar">
             <button type="button" class="btn-s" data-action="select-stage" data-stage-id="insight">Insert evidence</button>
@@ -3215,8 +3216,8 @@ function renderWritingStage(project) {
             .join("")}
         </div>
         <div class="writing-gap-box">
-          <span class="writing-card-label">unresolved evidence gaps</span>
-          <p>Lab 결과, citation 후보, confidence가 비어 있는 문장은 export 전에 다시 Insight 또는 Lab으로 돌려야 합니다.</p>
+          <span class="writing-card-label">Evidence gaps</span>
+          <p>Resolve before export.</p>
         </div>
       </aside>
     </div>

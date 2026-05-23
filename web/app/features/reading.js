@@ -226,10 +226,10 @@ export function createReadingFeature({
     return {
       keyPoints,
       limit: readingExcerpt(cards.limit || limitSection?.summary || session?.warning, "한계점과 주의사항은 추가 요약 후 표시됩니다.", 220),
-      method: readingExcerpt(cards.method || methodSection?.summary || session?.abstract, "핵심 방법 설명이 준비되면 여기에 표시됩니다.", 220),
+      method: readingExcerpt(cards.method || methodSection?.summary || session?.abstract, "No method summary.", 220),
       result: readingExcerpt(cards.result || resultSection?.summary || session?.summary, "주요 결과는 요약이 완료되면 표시됩니다.", 220),
       sectionSummaries: Array.isArray(cards.sectionSummaries) ? cards.sectionSummaries : [],
-      tldr: readingExcerpt(cards.tldr || session?.summary || session?.abstract, "요약이 아직 준비되지 않았습니다.", 260),
+      tldr: readingExcerpt(cards.tldr || session?.summary || session?.abstract, "No summary.", 260),
     };
   }
   
@@ -548,7 +548,7 @@ export function createReadingFeature({
               <section class="reading-home-hero">
                 <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Search + Reading</span></div>
                 <h1 class="reading-home-title">Reading Library</h1>
-                <p class="reading-home-copy">Discover에서 저장한 논문이 여기에 쌓입니다.</p>
+                <p class="reading-home-copy">Saved papers and reading sessions.</p>
               </section>
   
               <section class="reading-home-metrics">
@@ -561,7 +561,7 @@ export function createReadingFeature({
               <section class="reading-home-empty">
                 <div class="reading-home-empty-icon">${icon("bookmark", { size: 28, color: TOKENS.read })}</div>
                 <div class="reading-home-empty-title">Nothing saved yet</div>
-                <div class="reading-home-empty-copy">Discover에서 Save를 누르면 여기에 논문이 나타납니다.</div>
+                  <div class="reading-home-empty-copy">No saved papers.</div>
                 <div style="margin-top:18px">
                   <button type="button" class="btn-p" data-action="select-stage" data-stage-id="search">
                     ${icon("search", { size: 13, color: "#ffffff" })}
@@ -588,7 +588,7 @@ export function createReadingFeature({
             <section class="reading-home-hero">
               <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Search + Reading</span></div>
               <h1 class="reading-home-title">Reading Library</h1>
-              <p class="reading-home-copy">수집한 논문을 AI 에이전트와 함께 읽고 분석하세요.</p>
+              <p class="reading-home-copy">Saved papers and reading sessions.</p>
             </section>
   
             <section class="reading-home-metrics">
@@ -700,7 +700,7 @@ export function createReadingFeature({
                           <div class="reading-home-table-empty">
                             <div class="reading-home-empty-icon">${icon("book", { size: 28, color: TOKENS.read })}</div>
                             <div class="reading-home-empty-title">No papers in this slice</div>
-                            <div class="reading-home-empty-copy">현재 필터와 일치하는 저장 논문이 없습니다.</div>
+                            <div class="reading-home-empty-copy">No papers in this filter.</div>
                           </div>
                         `
                   }
@@ -758,8 +758,8 @@ export function createReadingFeature({
         <div class="reading-stage" data-ares-surface="reading-stage" data-ares-stage="reading">
           <section class="reading-empty">
             <div class="placeholder-eyebrow">Reading</div>
-            <h1 class="placeholder-title">Reading session을 불러오는 중입니다</h1>
-            <p class="placeholder-copy">저장된 세션과 PDF 상태를 동기화하고 있습니다.</p>
+            <h1 class="placeholder-title">Loading reading session</h1>
+            <p class="placeholder-copy">Syncing PDF status.</p>
           </section>
         </div>
       `;
@@ -770,11 +770,8 @@ export function createReadingFeature({
         <div class="reading-stage" data-ares-surface="reading-stage" data-ares-stage="reading">
           <section class="reading-empty">
             <div class="placeholder-eyebrow">Reading</div>
-            <h1 class="placeholder-title">구조화 리딩 세션이 아직 없습니다</h1>
-            <p class="placeholder-copy">
-              Search 탭에서 저장한 논문을 열면 Reading 세션이 생성되고,
-              여기서 Parse paper, Summarize, Chat, Notes, Assets를 이어서 사용할 수 있습니다.
-            </p>
+            <h1 class="placeholder-title">No reading session</h1>
+            <p class="placeholder-copy">Open a saved paper to start.</p>
             <div class="tag-row" style="margin-top:16px">
               ${renderTag(`${project.libraryCount} saved`, TOKENS.search, true)}
               ${renderTag(`${project.queueCount} queued`, TOKENS.result, true)}
@@ -884,7 +881,7 @@ export function createReadingFeature({
 
     const renderOutlineItems = (items, { compact = false } = {}) => {
       if (!items.length) {
-        return '<div class="reading-compact-empty">섹션 구조가 아직 준비되지 않았습니다.</div>';
+        return '<div class="reading-compact-empty">No parsed sections.</div>';
       }
 
       return items
@@ -903,7 +900,7 @@ export function createReadingFeature({
 
     const renderHighlightItems = (items) => {
       if (!items.length) {
-        return '<div class="reading-compact-empty">노트가 아직 생성되지 않았습니다.</div>';
+        return '<div class="reading-compact-empty">No notes.</div>';
       }
 
       return items
@@ -1139,7 +1136,7 @@ export function createReadingFeature({
       : `
           <div class="reading-empty-view">
             <div class="reading-empty-icon">${icon("sparkles", { size: 24, color: TOKENS.read })}</div>
-            <div class="reading-empty-title">요약이 아직 생성되지 않았습니다</div>
+            <div class="reading-empty-title">No summary</div>
             <div class="reading-empty-copy">Parse paper 후 <strong>Summarize</strong>를 실행하면 TL;DR, Key Points, Method, Result, Limit 카드가 저장됩니다.</div>
             <button type="button" class="btn-p" data-action="reading-summarize-session" ${!parsed || summarizeBusy ? "disabled" : ""}>
               ${icon("sparkles", { size: 13, color: "#fff" })}
@@ -1391,7 +1388,7 @@ export function createReadingFeature({
                         <div class="reading-asset-meta">
                           <div class="reading-asset-kind" style="color:${asset.kind === "Figure" ? TOKENS.research : TOKENS.writing}">${escapeHtml(asset.kind)} ${asset.number}</div>
                           <div class="reading-asset-caption">${escapeHtml(asset.caption)}</div>
-                          <div class="reading-asset-page mono">${asset.page ? `p.${escapeHtml(String(asset.page))}` : "page n/a"}</div>
+                          <div class="reading-asset-page mono">${asset.page ? `p.${escapeHtml(String(asset.page))}` : "page --"}</div>
                         </div>
                       </button>
                     `,
@@ -1426,7 +1423,7 @@ export function createReadingFeature({
                       <div class="reading-asset-detail-meta">
                         <div class="reading-asset-detail-row">
                           <span>Source page</span>
-                          <strong class="mono">${detailAsset.page ? `p.${escapeHtml(String(detailAsset.page))}` : "n/a"}</strong>
+                          <strong class="mono">${detailAsset.page ? `p.${escapeHtml(String(detailAsset.page))}` : "--"}</strong>
                         </div>
                         <div class="reading-asset-detail-row">
                           <span>Type</span>
@@ -1472,8 +1469,8 @@ export function createReadingFeature({
         : `
             <div class="reading-empty-view">
               <div class="reading-empty-icon">${icon("grid", { size: 24, color: TOKENS.read })}</div>
-              <div class="reading-empty-title">${parsed ? "추출된 에셋이 아직 없습니다" : "에셋 추출 전입니다"}</div>
-              <div class="reading-empty-copy">${parsed ? "Extract를 다시 실행하면 cached PDF를 기준으로 figure/table candidates를 재계산합니다." : "Assets는 Parse paper가 끝난 뒤 생성됩니다."}</div>
+              <div class="reading-empty-title">${parsed ? "No extracted assets" : "Parse first"}</div>
+              <div class="reading-empty-copy">${parsed ? "No figures or tables detected." : "Assets unlock after parsing."}</div>
               <button type="button" class="btn-p" data-action="reading-extract-assets" ${!parsed || extractBusy ? "disabled" : ""}>
                 ${icon("grid", { size: 13, color: "#fff" })}
                 <span>${extractBusy ? "Extracting..." : "Extract assets"}</span>
@@ -1504,7 +1501,7 @@ export function createReadingFeature({
               ? `
                   <div class="reading-chat-warning">
                     ${icon("info", { size: 13, color: TOKENS.result })}
-                    <div><strong>Parse paper</strong> 후에만 채팅이 활성화됩니다. 현재는 본문 청크와 인용이 준비되지 않았습니다.</div>
+                      <div><strong>Parse paper</strong> to enable chat.</div>
                   </div>
                 `
               : ""
@@ -1572,7 +1569,7 @@ export function createReadingFeature({
               : `
                   <div class="reading-empty-view" style="height:auto;min-height:100%">
                     <div class="reading-empty-icon">${icon("chat", { size: 24, color: TOKENS.read })}</div>
-                    <div class="reading-empty-title">Reader chat이 아직 없습니다</div>
+                    <div class="reading-empty-title">No chat yet</div>
                     <div class="reading-empty-copy">질문을 보내면 본문 청크와 인용이 함께 저장됩니다.</div>
                   </div>
                 `
@@ -1615,7 +1612,7 @@ export function createReadingFeature({
                             data-action="jump-reading-page"
                             data-reading-page="${escapeHtml(String(note.page || ""))}"
                             ${note.page ? "" : "disabled"}
-                          >${note.page ? `p.${escapeHtml(String(note.page))}` : "page n/a"}</button>
+                          >${note.page ? `p.${escapeHtml(String(note.page))}` : "page --"}</button>
                       </div>
                       <div class="reading-note-quote">"${escapeHtml(note.quote || note.text || "Quote 없음")}"</div>
                       <textarea class="reading-note-editor" name="readingNoteBody" rows="4" placeholder="메모를 입력하세요…" ${noteBusy ? "disabled" : ""}>${escapeHtml(note.memo || "")}</textarea>
@@ -1631,7 +1628,7 @@ export function createReadingFeature({
             : `
                 <div class="reading-empty-view" style="height:auto;min-height:100%">
                   <div class="reading-empty-icon">${icon("note", { size: 24, color: TOKENS.read })}</div>
-                  <div class="reading-empty-title">노트가 아직 없습니다</div>
+                  <div class="reading-empty-title">No notes</div>
                   <div class="reading-empty-copy">${parsed ? "하이라이트 seed가 비어 있습니다. New note로 수동 메모를 추가할 수 있습니다." : "Parse paper 후 하이라이트 기반 노트 seed가 생성됩니다."}</div>
                 </div>
               `

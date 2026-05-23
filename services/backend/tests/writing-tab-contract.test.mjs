@@ -27,8 +27,9 @@ test('Writing surface exposes Outline, Draft, Sources, and evidence bundle conce
   assert.match(appJs, /Draft/);
   assert.match(appJs, /Sources/);
   assert.match(appJs, /Evidence Bundle/);
-  assert.match(appJs, /unresolved evidence gaps/);
+  assert.match(appJs, /Evidence gaps/);
   assert.match(appJs, /source-linked draft/);
+  assert.doesNotMatch(appJs, /AI suggestion/);
 });
 
 test('Writing actions cover generation, evidence insertion, suggestions, and export', async () => {

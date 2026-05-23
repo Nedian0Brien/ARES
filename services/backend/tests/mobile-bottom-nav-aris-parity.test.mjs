@@ -110,7 +110,7 @@ test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens'
   assert.match(styles, /--mobile-bottom-nav-height:\s*calc\(104px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
   assert.match(styles, /\.bottom-nav-hidden[\s\S]*pointer-events:\s*none/);
   assert.match(styles, /\.bottom-nav-indicator[\s\S]*cubic-bezier\(0\.175,\s*0\.885,\s*0\.32,\s*1\.275\)/);
-  assert.match(styles, /width:\s*min\(400px,\s*calc\(100vw - 2\.5rem\)\)/);
+  assert.match(styles, /width:\s*min\(400px,\s*calc\(100vw - 1rem\)\)/);
   assert.match(styles, /bottom:\s*calc\(1\.25rem \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
   assert.match(styles, /\.bottom-nav[\s\S]*overflow:\s*visible/);
   assert.match(styles, /\.nav-item[\s\S]*min-height:\s*54px/);

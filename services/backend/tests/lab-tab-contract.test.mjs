@@ -35,7 +35,7 @@ test('Lab surface includes Plan, Runs, Compare, and Result Dossier language', as
 test('Lab surface does not expose unsupported execution as a primary completed action', async () => {
   const appJs = await readProjectFile('web/app.js');
 
-  assert.match(appJs, /setup required/);
+  assert.match(appJs, /Not connected/);
   assert.match(appJs, /disabled[^>]*>\s*Attach result/);
   assert.match(appJs, /disabled[^>]*>\s*Run experiment/);
 });

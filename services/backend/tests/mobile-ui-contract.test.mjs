@@ -27,6 +27,8 @@ test('mobile shell uses dynamic viewport and safe-area aware spacing', async () 
   assert.match(styles, /@supports\s*\(height:\s*100dvh\)/);
   assert.match(styles, /--mobile-bottom-nav-height/);
   assert.match(styles, /padding-bottom:\s*calc\(var\(--mobile-bottom-nav-height\)/);
+  assert.match(styles, /html,\s*body\s*\{[\s\S]*overflow-x:\s*clip/);
+  assert.match(styles, /body:has\(\.search-preview-focal:not\(\.is-empty\)\) \.bottom-nav/);
 });
 
 test('core mobile controls keep accessible touch targets and focus rings', async () => {
@@ -44,4 +46,31 @@ test('mobile search and reading surfaces avoid desktop-width table pressure', as
   assert.match(styles, /\.dashboard-tbl-row[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   assert.match(styles, /\.dashboard-tbl-row[\s\S]*min-width:\s*0/);
   assert.match(styles, /\.reading-doc-pane,\s*\.reading-workbench-pane[\s\S]*min-height:\s*min\(68dvh,\s*560px\)/);
+});
+
+test('mobile content trims AI-slop copy and protects narrow labels', async () => {
+  const [appJs, readingJs, searchJs, styles] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/app/features/reading.js'),
+    readProjectFile('web/app/features/search.js'),
+    readProjectFile('web/styles.css'),
+  ]);
+
+  assert.doesNotMatch(appJs, /Next UI/);
+  assert.doesNotMatch(appJs, /UI scaffold/);
+  assert.doesNotMatch(readingJs, /여기에/);
+  assert.doesNotMatch(searchJs, /여기에/);
+  assert.match(searchJs, /dashboard-sbtn-label-mobile/);
+  assert.match(styles, /\.dashboard-sbtn-label-desktop\s*\{[\s\S]*display:\s*none/);
+  assert.match(styles, /\.workflow-mode-btn small\s*\{[\s\S]*display:\s*none/);
+  assert.match(styles, /\.nav-item span\s*\{[\s\S]*text-overflow:\s*ellipsis/);
+});
+
+test('mobile dev overlay stays opt-in so it cannot cover bottom navigation', async () => {
+  const reactGrabDev = await readProjectFile('web/react-grab-dev.js');
+
+  assert.match(reactGrabDev, /function isMobileViewport\(\)/);
+  assert.match(reactGrabDev, /matchMedia\("\(max-width: 900px\)"\)/);
+  assert.match(reactGrabDev, /grabParam === "1"[\s\S]*return true/);
+  assert.match(reactGrabDev, /if \(isMobileViewport\(\)\) \{[\s\S]*return false/);
 });

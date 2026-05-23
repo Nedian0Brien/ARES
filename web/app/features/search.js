@@ -206,7 +206,8 @@ export function createSearchFeature({
               >
                 ${icon(config.icon, { size: 14.5 })}
                 <span class="dashboard-sbtn-copy">
-                  <span>${escapeHtml(config.ctaLabel)}</span>
+                  <span class="dashboard-sbtn-label dashboard-sbtn-label-desktop">${escapeHtml(config.ctaLabel)}</span>
+                  <span class="dashboard-sbtn-label dashboard-sbtn-label-mobile">${escapeHtml(config.compactLabel)}</span>
                   ${icon("ctaArrow", { size: 13 })}
                 </span>
               </button>
@@ -570,7 +571,7 @@ export function createSearchFeature({
             <div class="search-home-hero">
               <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Search + Reading</span></div>
               <h1 class="search-home-title">Discover</h1>
-              <p class="search-home-copy">대상 학회와 키워드를 기준으로 논문을 수집하고 Reading Library로 넘깁니다.</p>
+              <p class="search-home-copy">Collect papers, save candidates, move them to Reading.</p>
             </div>
   
             <form class="dashboard-hero ${escapeHtml(state.searchMode)}" data-action="submit-search">
@@ -763,7 +764,7 @@ export function createSearchFeature({
             ${
               worklistRows.length
                 ? worklistRows.map((row, index) => renderDashboardWorklistRow(row, index)).join("")
-                : '<div class="empty-state dashboard-worklist-empty">저장된 논문이 아직 없습니다. 검색 결과에서 Save를 누르면 이 Worklist에 논문이 쌓입니다.</div>'
+                : '<div class="empty-state dashboard-worklist-empty">No saved papers.</div>'
             }
             <div class="dashboard-tbl-foot">
               <span>${escapeHtml(worklistRangeLabel)}</span>
@@ -1043,7 +1044,7 @@ export function createSearchFeature({
     }
   
     if (!visible.length) {
-      return '<div class="empty-state search-results-empty">현재 필터 조건에 맞는 논문이 없습니다. venue, year, relevance 조건을 조금 넓혀보세요.</div>';
+      return '<div class="empty-state search-results-empty">No results for this filter.</div>';
     }
   
     return visible.map((paper) => renderSearchResultRow(paper)).join("");
@@ -1083,7 +1084,7 @@ export function createSearchFeature({
               ${icon("chevR", { size: 13, color: TOKENS.t2 })}
             </button>
           </div>
-          <div class="empty-state search-preview-empty">리스트에서 논문을 선택하면 프리뷰가 여기에 표시됩니다.</div>
+          <div class="empty-state search-preview-empty">Select a paper.</div>
         </aside>
       `;
     }

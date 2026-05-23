@@ -47,6 +47,7 @@ body.slow-mo {
 html,
 body {
   height: 100%;
+  overflow-x: clip;
 }
 
 body {
@@ -57,7 +58,8 @@ body {
   -webkit-font-smoothing: antialiased;
   font-size: 13px;
   letter-spacing: -0.006em;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: hidden;
 }
 
 button,
@@ -132,6 +134,16 @@ a {
   display: inline-flex;
   gap: 6px;
   letter-spacing: -0.006em;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.btn-p > span,
+.btn-s > span,
+.btn-ghost > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-p {
@@ -719,6 +731,7 @@ a {
   align-items: center;
   display: flex;
   gap: 10px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -738,6 +751,10 @@ a {
   font-size: 13.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-separator {
@@ -866,7 +883,9 @@ a {
   flex: 0 0 auto;
   gap: 6px;
   min-height: 32px;
+  min-width: 0;
   padding: 4px 9px;
+  white-space: nowrap;
 }
 
 .workflow-mode-btn small {
@@ -1300,6 +1319,7 @@ a {
   font-size: 13px;
   line-height: 1.75;
   margin-bottom: 18px;
+  max-width: 56ch;
 }
 
 .placeholder-grid {
@@ -1331,6 +1351,7 @@ a {
   color: var(--t2);
   font-size: 12.5px;
   line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
 .placeholder-tint {
@@ -1740,6 +1761,16 @@ a {
   font-size: 12.5px;
   line-height: 1.6;
   margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.insight-empty-compact {
+  background: var(--s2);
+  border: 1px dashed var(--b1);
+  border-radius: 7px;
+  color: var(--t3);
+  font-size: 12px;
+  padding: 12px 13px;
 }
 
 .insight-card {
@@ -5054,7 +5085,8 @@ body.reading-home-resize-active {
   }
 
   body {
-    overflow: auto;
+    overflow-x: clip;
+    overflow-y: auto;
   }
 
   .app-shell {
@@ -5085,10 +5117,32 @@ body.reading-home-resize-active {
   }
 
   .main-topbar {
+    gap: 10px;
     padding: 0 14px;
     position: sticky;
     top: 0;
     z-index: 20;
+  }
+
+  .topbar-stage {
+    flex: 1 1 auto;
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  .topbar-stage-label {
+    max-width: 44vw;
+  }
+
+  .topbar-stage-mode {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar-breadcrumb,
+  .topbar-breadcrumb-bridge {
+    display: none;
   }
 
   .topbar-actions {
@@ -5097,6 +5151,44 @@ body.reading-home-resize-active {
 
   .stage-wrap {
     overflow: visible;
+  }
+
+  .workflow-mode-nav {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 14px;
+  }
+
+  .workflow-mode-context {
+    display: none;
+  }
+
+  .workflow-mode-list {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    width: 100%;
+  }
+
+  .workflow-mode-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workflow-mode-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    min-height: 44px;
+    padding: 6px 10px;
+  }
+
+  .workflow-mode-btn small {
+    display: none;
+  }
+
+  .workflow-mode-btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .search-stage,
@@ -5147,6 +5239,13 @@ body.reading-home-resize-active {
 
   .insight-main {
     padding: 18px;
+  }
+
+  .lab-hero-copy h1,
+  .insight-hero h1,
+  .writing-hero h1,
+  .placeholder-title {
+    overflow-wrap: anywhere;
   }
 
   .insight-hero,
@@ -5283,7 +5382,7 @@ body.reading-home-resize-active {
     transform: translateX(-50%);
     transform-style: preserve-3d;
     transition: bottom 0.28s ease, opacity 0.2s ease;
-    width: min(400px, calc(100vw - 2.5rem));
+    width: min(400px, calc(100vw - 1rem));
     will-change: bottom, opacity;
     z-index: 1000;
     -webkit-backface-visibility: hidden;
@@ -5351,6 +5450,10 @@ body.reading-home-resize-active {
     font-size: 0.68rem;
     font-weight: 650;
     letter-spacing: 0.01em;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .nav-item.active {
@@ -6507,6 +6610,14 @@ body.reading-home-resize-active {
   white-space: nowrap;
 }
 
+.dashboard-sbtn-label {
+  min-width: 0;
+}
+
+.dashboard-sbtn-label-mobile {
+  display: none;
+}
+
 .dashboard-sbtn.active .dashboard-sbtn-copy {
   max-width: 140px;
   opacity: 1;
@@ -7609,7 +7720,8 @@ body.is-run .stage-run .phase-card {
   }
 
   body {
-    overflow: auto;
+    overflow-x: clip;
+    overflow-y: auto;
   }
 
   .app-shell {
@@ -7639,15 +7751,29 @@ body.is-run .stage-run .phase-card {
     overflow: visible;
   }
 
+  .search-stage,
+  .reading-stage,
+  .reading-home,
+  .reading-home-inner,
+  .results-list-inner,
+  .dashboard-card,
+  .dashboard-tbl-row,
+  .paper-row,
+  .paper-main {
+    min-width: 0;
+  }
+
   .reading-home {
     padding: 18px 18px 32px;
   }
 
   .reading-home-title {
+    overflow-wrap: anywhere;
     white-space: normal;
   }
 
   .search-home-title {
+    overflow-wrap: anywhere;
     white-space: normal;
   }
 
@@ -7662,6 +7788,23 @@ body.is-run .stage-run .phase-card {
   .reading-home-list-tools {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .reading-home-filter-row {
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .reading-home-filter-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reading-home-filter-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .reading-home-tool-row {
@@ -7686,6 +7829,12 @@ body.is-run .stage-run .phase-card {
     grid-template-columns: minmax(0, 1fr) auto;
     min-width: 0;
     padding: 14px 16px;
+  }
+
+  .reading-home-row-title,
+  .paper-title,
+  .preview-title {
+    overflow-wrap: anywhere;
   }
 
   .reading-home-row .reading-home-cell,
@@ -7875,8 +8024,16 @@ body.is-run .stage-run .phase-card {
   }
 
   .dashboard-sbtn.active .dashboard-sbtn-copy {
-    max-width: 100px;
+    max-width: 80px;
     padding-left: 5px;
+  }
+
+  .dashboard-sbtn-label-desktop {
+    display: none;
+  }
+
+  .dashboard-sbtn-label-mobile {
+    display: inline;
   }
 
   .dashboard-sbtn[data-mode="scout"].active,
@@ -8030,7 +8187,7 @@ body.is-run .stage-run .phase-card {
   }
 
   .hero-submit-btn.active .expand {
-    max-width: 100px;
+    max-width: 80px;
     padding-left: 5px;
   }
 
@@ -8057,7 +8214,14 @@ body.is-run .stage-run .phase-card {
   }
 
   .results-summary-actions {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
+  }
+
+  .results-summary-actions .btn-s {
+    justify-content: center;
   }
 
   .paper-score-wrap {
@@ -8069,6 +8233,7 @@ body.is-run .stage-run .phase-card {
 
   .paper-content {
     flex-direction: column;
+    min-width: 0;
   }
 
   .paper-relevance-bar {
@@ -8182,7 +8347,7 @@ body.is-run .stage-run .phase-card {
     display: flex;
     flex-direction: column;
     left: 0;
-    max-height: 85vh;
+    max-height: min(82dvh, 680px);
     position: fixed;
     right: 0;
     z-index: 100;
@@ -8228,13 +8393,76 @@ body.is-run .stage-run .phase-card {
 
   /* Lock body scroll while modal is open */
   body:has(.search-preview-focal:not(.is-empty)) {
-    overflow: hidden;
+    overflow-x: clip;
+    overflow-y: hidden;
+  }
+
+  body:has(.search-preview-focal:not(.is-empty)) .bottom-nav,
+  body:has(.reading-home-preview-overlay.is-open) .bottom-nav {
+    opacity: 0;
+    pointer-events: none;
   }
 
   .scope-picker-popover {
     left: 12px !important;
     right: 12px;
     width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-topbar {
+    height: 42px;
+    padding: 0 12px;
+  }
+
+  .topbar-stage-badge {
+    height: 20px;
+    width: 20px;
+  }
+
+  .topbar-stage-label {
+    max-width: 52vw;
+  }
+
+  .workflow-mode-nav {
+    padding-inline: 12px;
+  }
+
+  .hero-wrap,
+  .search-dashboard,
+  .results-list,
+  .reading-home,
+  .lab-main,
+  .insight-main,
+  .writing-editor,
+  .placeholder-main {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .reading-home-row,
+  .dashboard-tbl-row,
+  .paper-row {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .results-summary-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bottom-nav {
+    height: 58px;
+    width: min(400px, calc(100vw - 0.75rem));
+  }
+
+  .nav-item {
+    min-height: 50px;
+  }
+
+  .nav-item span {
+    font-size: 0.64rem;
   }
 }
 
