@@ -569,7 +569,7 @@ export function createSearchFeature({
         <section class="search-dashboard" data-ares-surface="search-dashboard" data-ares-stage="search">
           <section class="dashboard-hero-wrap">
             <div class="search-home-hero">
-              <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Search + Reading</span></div>
+              <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Read</span></div>
               <h1 class="search-home-title">Discover</h1>
               <p class="search-home-copy">Collect papers, save candidates, move them to Reading.</p>
             </div>

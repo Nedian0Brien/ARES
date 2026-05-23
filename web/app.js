@@ -2483,7 +2483,7 @@ function renderSidebar() {
                 ${icon(tab.icon, { size: 13 })}
               </span>
               <span class="workflow-stage-copy">
-                <span class="workflow-stage-label">${escapeHtml(tab.label)}</span>
+                <span class="workflow-stage-label">${escapeHtml(tab.shortLabel || tab.label)}</span>
               </span>
             </button>
             <div class="workflow-side-actions">
@@ -2645,8 +2645,7 @@ function renderTopbar() {
         <span class="topbar-stage-badge" style="background:${tab.color}">
           ${icon(tab.icon, { size: 13, color: "#ffffff" })}
         </span>
-        <span class="topbar-stage-label topbar-stage-label-desktop">${escapeHtml(tab.label)}</span>
-        <span class="topbar-stage-label topbar-stage-label-mobile">${escapeHtml(tab.shortLabel || tab.label)}</span>
+        <span class="topbar-stage-label">${escapeHtml(tab.shortLabel || tab.label)}</span>
         ${stage.tabId === tab.id && stage.label !== tab.label ? `<span class="topbar-separator">/</span><span class="topbar-stage-mode">${escapeHtml(stage.modeLabel || stage.label)}</span>` : ""}
         ${readingBreadcrumb}
         ${searchBreadcrumb}
@@ -2696,7 +2695,7 @@ function renderWorkflowModeNav() {
     >
       <div class="workflow-mode-context">
         <span class="workflow-mode-kicker">${escapeHtml(tab.shortLabel)}</span>
-        <span class="workflow-mode-title">${escapeHtml(tab.label)}</span>
+        <span class="workflow-mode-title">${escapeHtml(tab.shortLabel || tab.label)}</span>
       </div>
       <div class="workflow-mode-list">
         ${stages
@@ -2890,7 +2889,7 @@ function renderLabStage(project) {
       <section class="lab-main">
         <div class="lab-hero">
           <div class="lab-hero-copy">
-            <div class="lab-kicker">${icon("flask", { size: 14, color: TOKENS.research })}<span>Research + Result</span></div>
+            <div class="lab-kicker">${icon("flask", { size: 14, color: TOKENS.research })}<span>Lab</span></div>
             <h1>${escapeHtml(compareActive ? "Compare result dossier" : "Plan reproduction run")}</h1>
             <p>Reading packet, reproduction plan, and metric deltas.</p>
           </div>

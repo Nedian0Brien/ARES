@@ -530,7 +530,7 @@ export function createReadingFeature({
           <section class="reading-home reading-home--loading">
             <div class="reading-home-inner">
               <div class="reading-home-hero">
-                <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Search + Reading</span></div>
+                <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Read</span></div>
                 <h1 class="reading-home-title">Reading Library</h1>
                 <p class="reading-home-copy">Syncing saved papers and reading sessions.</p>
               </div>
@@ -546,7 +546,7 @@ export function createReadingFeature({
           <section class="reading-home">
             <div class="reading-home-inner">
               <section class="reading-home-hero">
-                <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Search + Reading</span></div>
+                <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Read</span></div>
                 <h1 class="reading-home-title">Reading Library</h1>
                 <p class="reading-home-copy">Saved papers and reading sessions.</p>
               </section>
@@ -586,7 +586,7 @@ export function createReadingFeature({
         <section class="reading-home">
           <div class="reading-home-inner">
             <section class="reading-home-hero">
-              <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Search + Reading</span></div>
+              <div class="reading-home-label">${icon("book", { size: 14, color: TOKENS.read })}<span>Read</span></div>
               <h1 class="reading-home-title">Reading Library</h1>
               <p class="reading-home-copy">Saved papers and reading sessions.</p>
             </section>

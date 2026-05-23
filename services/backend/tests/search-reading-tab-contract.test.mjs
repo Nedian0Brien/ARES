@@ -22,15 +22,15 @@ test('Search + Reading tab exposes Discover, Library, and Reader modes', async (
   assert.match(appJs, /data-tab-id="\$\{escapeHtml\(tab\.id\)\}"/);
 });
 
-test('Search and Reading surfaces use the merged tab language', async () => {
+test('Search and Reading surfaces use Read tab language', async () => {
   const [searchJs, readingJs] = await Promise.all([
     readProjectFile('web/app/features/search.js'),
     readProjectFile('web/app/features/reading.js'),
   ]);
 
-  assert.match(searchJs, /Search \+ Reading/);
+  assert.match(searchJs, /<span>Read<\/span>/);
   assert.match(searchJs, /Discover/);
-  assert.match(readingJs, /Search \+ Reading/);
+  assert.match(readingJs, /<span>Read<\/span>/);
   assert.match(readingJs, /Reading Library/);
   assert.match(readingJs, /Back to Discover/);
 });

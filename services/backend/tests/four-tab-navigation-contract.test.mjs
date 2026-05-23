@@ -46,8 +46,10 @@ test('desktop and mobile workflow chrome render the four tabs instead of raw sta
   assert.doesNotMatch(appJs, /bottom-nav[\s\S]*WORKFLOW_STAGES\.map/);
   assert.match(appJs, /data-ares-tab="\$\{escapeHtml\(tab\.id\)\}"/);
   assert.match(appJs, /aria-label="\$\{escapeHtml\(tab\.label\)\}"/);
-  assert.match(appJs, /topbar-stage-label-desktop[\s\S]*escapeHtml\(tab\.label\)/);
-  assert.match(appJs, /topbar-stage-label-mobile[\s\S]*escapeHtml\(tab\.shortLabel \|\| tab\.label\)/);
+  assert.match(appJs, /topbar-stage-label">\$\{escapeHtml\(tab\.shortLabel \|\| tab\.label\)\}/);
+  assert.match(appJs, /workflow-stage-label">\$\{escapeHtml\(tab\.shortLabel \|\| tab\.label\)\}/);
+  assert.match(appJs, /workflow-mode-title">\$\{escapeHtml\(tab\.shortLabel \|\| tab\.label\)\}/);
+  assert.doesNotMatch(appJs, /topbar-stage-label-desktop/);
 });
 
 test('keyboard shortcuts use four top-level tabs', async () => {

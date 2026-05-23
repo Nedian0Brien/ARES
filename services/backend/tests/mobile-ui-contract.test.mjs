@@ -62,8 +62,8 @@ test('mobile content trims AI-slop copy and protects narrow labels', async () =>
   assert.doesNotMatch(searchJs, /여기에/);
   assert.match(searchJs, /dashboard-sbtn-label-mobile/);
   assert.match(styles, /\.dashboard-sbtn-label-desktop\s*\{[\s\S]*display:\s*none/);
-  assert.match(appJs, /topbar-stage-label-mobile/);
-  assert.match(styles, /\.topbar-stage-label-desktop\s*\{[\s\S]*display:\s*none/);
+  assert.match(appJs, /topbar-stage-label">\$\{escapeHtml\(tab\.shortLabel \|\| tab\.label\)\}/);
+  assert.doesNotMatch(styles, /\.topbar-stage-label-desktop/);
   assert.match(styles, /\.workflow-mode-btn small\s*\{[\s\S]*display:\s*none/);
   assert.match(styles, /\.nav-item span\s*\{[\s\S]*text-overflow:\s*ellipsis/);
 });
