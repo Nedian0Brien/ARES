@@ -17,7 +17,8 @@ ARES treats hardware safe area and Safari browser chrome as separate values.
 
 - `--viewport-safe-bottom`: hardware safe area from `env(safe-area-inset-bottom)`
 - `--viewport-browser-bottom`: runtime browser chrome overlap, written by JavaScript
-- `--viewport-bottom-occlusion`: `max(safe area, browser chrome overlap)`
+- `--viewport-browser-bottom-fallback`: conservative iOS Safari browser-toolbar reserve
+- `--viewport-bottom-occlusion`: `max(safe area, browser chrome overlap, iOS Safari fallback)`
 
 The runtime value is calculated in `web/app.js` from `window.visualViewport`:
 
@@ -26,6 +27,8 @@ bottom occlusion = window.innerHeight - (visualViewport.offsetTop + visualViewpo
 ```
 
 If `visualViewport` is unavailable, the runtime browser overlap is `0px`, and the layout falls back to the hardware safe-area value.
+
+On iOS Safari, the bottom browser toolbar can still visually cover fixed bottom UI even when the browser reports little or no `visualViewport` delta. ARES therefore adds a conservative mobile Safari fallback reserve of roughly one toolbar height. This mirrors the safer portfolio pattern: do not trust `env(safe-area-inset-bottom)` alone for interactive bottom-fixed controls.
 
 ## CSS Rules
 
@@ -56,7 +59,8 @@ Manual or browser verification should check:
 
 1. `meta[name="viewport"]` includes `viewport-fit=cover`.
 2. `--viewport-browser-bottom` updates when `visualViewport` resizes or scrolls.
-3. `.bottom-nav`, `.search-preview-focal`, and `.reading-pdf-dock-layer` use `--viewport-bottom-occlusion`.
-4. The bottom nav remains above the visible viewport bottom on iOS Safari with the bottom toolbar visible.
+3. `--viewport-browser-bottom-fallback` becomes non-zero on iOS Safari mobile browser sessions.
+4. `.bottom-nav`, `.search-preview-focal`, and `.reading-pdf-dock-layer` use `--viewport-bottom-occlusion`.
+5. The bottom nav remains above the visible viewport bottom on iOS Safari with the bottom toolbar visible.
 
 Playwright mobile emulation is useful for bounds checks, but it does not reproduce iOS Safari's real bottom toolbar. Treat real-device Safari confirmation as the final source of truth for this issue.

@@ -94,10 +94,15 @@ test('mobile viewport chrome syncs iOS Safari bottom UI into CSS variables', asy
   const appJs = await readProjectFile('web/app.js');
 
   assert.match(appJs, /function getViewportBrowserBottomOcclusion\(\)/);
+  assert.match(appJs, /function isIosViewportBrowserChromeFallbackTarget\(\)/);
+  assert.match(appJs, /function getViewportBrowserBottomFallback\(\)/);
+  assert.match(appJs, /IOS_BROWSER_CHROME_FALLBACK_MIN/);
+  assert.match(appJs, /IOS_BROWSER_CHROME_FALLBACK_MAX/);
   assert.match(appJs, /window\.visualViewport/);
   assert.match(appJs, /viewport\.offsetTop \+ viewport\.height/);
   assert.match(appJs, /Math\.ceil\(layoutHeight - visibleBottom\)/);
   assert.match(appJs, /--viewport-browser-bottom/);
+  assert.match(appJs, /--viewport-browser-bottom-fallback/);
   assert.match(appJs, /window\.visualViewport\.addEventListener\("resize",\s*scheduleViewportChromeSync\)/);
   assert.match(appJs, /window\.visualViewport\.addEventListener\("scroll",\s*scheduleViewportChromeSync\)/);
   assert.match(appJs, /bindViewportChromeLifecycle\(\)/);
@@ -125,7 +130,8 @@ test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens'
   assert.match(styles, /--viewport-safe-top:\s*env\(safe-area-inset-top,\s*0px\)/);
   assert.match(styles, /--viewport-safe-bottom:\s*env\(safe-area-inset-bottom,\s*0px\)/);
   assert.match(styles, /--viewport-browser-bottom:\s*0px/);
-  assert.match(styles, /--viewport-bottom-occlusion:\s*max\(var\(--viewport-safe-bottom\),\s*var\(--viewport-browser-bottom\)\)/);
+  assert.match(styles, /--viewport-browser-bottom-fallback:\s*0px/);
+  assert.match(styles, /--viewport-bottom-occlusion:\s*max\(\s*var\(--viewport-safe-bottom\),\s*var\(--viewport-browser-bottom\),\s*var\(--viewport-browser-bottom-fallback\)\s*\)/);
   assert.match(styles, /--mobile-viewport-height:\s*100svh/);
   assert.match(styles, /@supports\s*\(height:\s*100dvh\)[\s\S]*--mobile-viewport-height:\s*100dvh/);
   assert.match(styles, /--mobile-bottom-nav-height:\s*calc\(\s*var\(--bottom-nav-shell-height\) \+ var\(--bottom-nav-offset\) \+ var\(--viewport-bottom-occlusion\) \+ var\(--bottom-nav-reserve-extra\)\s*\)/);

@@ -249,6 +249,9 @@ const SEARCH_LAYOUT_BREAKPOINTS = {
   mobileMax: 900,
   tabletMax: 1279,
 };
+const IOS_BROWSER_CHROME_FALLBACK_MIN = 56;
+const IOS_BROWSER_CHROME_FALLBACK_MAX = 82;
+const IOS_BROWSER_CHROME_FALLBACK_RATIO = 0.096;
 const READING_ORIENTATION_BREAKPOINT = 1180;
 
 function defaultReadingOrientation(width = window.innerWidth) {
@@ -3728,6 +3731,14 @@ function isBottomNavMobile() {
   return window.innerWidth <= SEARCH_LAYOUT_BREAKPOINTS.mobileMax;
 }
 
+function isIosViewportBrowserChromeFallbackTarget() {
+  const platform = navigator.platform || "";
+  const userAgent = navigator.userAgent || "";
+  const isIosDevice = /iP(ad|hone|od)/.test(platform) || (/Mac/.test(platform) && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches || navigator.standalone === true;
+  return isBottomNavMobile() && isIosDevice && /Safari/.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent) && !isStandalone;
+}
+
 function getViewportBrowserBottomOcclusion() {
   const viewport = window.visualViewport;
   if (!viewport) {
@@ -3739,8 +3750,21 @@ function getViewportBrowserBottomOcclusion() {
   return Math.max(0, Math.ceil(layoutHeight - visibleBottom));
 }
 
+function getViewportBrowserBottomFallback() {
+  if (!isIosViewportBrowserChromeFallbackTarget()) {
+    return 0;
+  }
+
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || window.visualViewport?.height || 0;
+  return Math.round(Math.min(
+    IOS_BROWSER_CHROME_FALLBACK_MAX,
+    Math.max(IOS_BROWSER_CHROME_FALLBACK_MIN, viewportHeight * IOS_BROWSER_CHROME_FALLBACK_RATIO),
+  ));
+}
+
 function syncViewportChromeVariables() {
   document.documentElement.style.setProperty("--viewport-browser-bottom", `${getViewportBrowserBottomOcclusion()}px`);
+  document.documentElement.style.setProperty("--viewport-browser-bottom-fallback", `${getViewportBrowserBottomFallback()}px`);
 }
 
 function scheduleViewportChromeSync() {

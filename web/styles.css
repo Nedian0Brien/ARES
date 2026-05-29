@@ -39,7 +39,12 @@
   --viewport-safe-top: env(safe-area-inset-top, 0px);
   --viewport-safe-bottom: env(safe-area-inset-bottom, 0px);
   --viewport-browser-bottom: 0px;
-  --viewport-bottom-occlusion: max(var(--viewport-safe-bottom), var(--viewport-browser-bottom));
+  --viewport-browser-bottom-fallback: 0px;
+  --viewport-bottom-occlusion: max(
+    var(--viewport-safe-bottom),
+    var(--viewport-browser-bottom),
+    var(--viewport-browser-bottom-fallback)
+  );
   --mobile-viewport-height: 100vh;
   --mobile-bottom-nav-height: 0px;
   --bottom-nav-shell-height: 62px;
