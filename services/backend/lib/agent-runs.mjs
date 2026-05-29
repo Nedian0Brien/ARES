@@ -162,6 +162,14 @@ function assetRef(type, id, extras = {}) {
   };
 }
 
+function assetIdsFromRefs(refs) {
+  return uniqueStrings(ensureArray(refs).map((ref) => ref?.id));
+}
+
+function assetIdsFromOutputRefs(refs) {
+  return uniqueStrings(ensureArray(refs).flatMap((ref) => ensureArray(ref?.ids)));
+}
+
 function serialiseJson(value) {
   return JSON.stringify(value, null, 2);
 }
@@ -441,6 +449,10 @@ async function executeSearchRun({ context, run, searchService, store }) {
     assetRefs: uniqueSourceRefs([
       ...(run.assetRefs || []),
       ...payload.results.map((paper) => assetRef('paper', paper.paperId, { label: paper.title })),
+    ]),
+    candidateAssetIds: uniqueStrings([
+      ...(run.candidateAssetIds || []),
+      ...payload.results.map((paper) => paper.paperId),
     ]),
     finishedAt: nowIso(),
     outputPayload,
@@ -983,6 +995,7 @@ async function persistTaskOutputs({ context, definition, output, run, store }) {
 
     outputRefs.push({ collection: 'readingSessions', ids: [session.id] });
     return {
+      createdAssetIds: assetIdsFromOutputRefs(outputRefs),
       outputRef: outputRefs,
       outputSummary: output.outputSummary || `Reading session created for ${paper.title}.`,
     };
@@ -1010,6 +1023,7 @@ async function persistTaskOutputs({ context, definition, output, run, store }) {
   }
 
   return {
+    createdAssetIds: assetIdsFromOutputRefs(outputRefs),
     outputRef: outputRefs,
     outputSummary:
       output.outputSummary ||
@@ -1143,6 +1157,7 @@ export function createAgentRunService({
       });
 
       await notifyingStore.updateAgentRun(runId, {
+        createdAssetIds: uniqueStrings([...(run.createdAssetIds || []), ...persisted.createdAssetIds]),
         finishedAt: nowIso(),
         outputRef: persisted.outputRef,
         outputSummary: persisted.outputSummary,
@@ -1183,6 +1198,7 @@ export function createAgentRunService({
       });
 
       await notifyingStore.updateAgentRun(runId, {
+        createdAssetIds: uniqueStrings([...(run.createdAssetIds || []), ...persisted.createdAssetIds]),
         finishedAt: nowIso(),
         outputRef: persisted.outputRef,
         outputSummary: persisted.outputSummary,
@@ -1212,10 +1228,13 @@ export function createAgentRunService({
     const run = await store.createAgentRun({
       agent: input.agent || definition.agent,
       assetRefs: uniqueSourceRefs(input.assetRefs || []),
+      candidateAssetIds: uniqueStrings(input.candidateAssetIds || []),
+      createdAssetIds: uniqueStrings(input.createdAssetIds || []),
       input: input.input || {},
       outputSummary: '',
       profileId: definition.profileId,
       projectId: input.projectId,
+      sourceAssetIds: uniqueStrings([...(input.sourceAssetIds || []), ...assetIdsFromRefs(input.assetRefs || [])]),
       stage,
       status: 'queue',
       taskKind: definition.defaultTaskKind,

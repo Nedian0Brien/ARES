@@ -537,7 +537,9 @@ export async function createFileStore({ seedFile, runtimeFile }) {
       const next = {
         agent: ensureText(input.agent, 'Agent'),
         assetRefs: ensureObjectArray(input.assetRefs),
+        candidateAssetIds: ensureStringArray(input.candidateAssetIds, 128),
         createdAt,
+        createdAssetIds: ensureStringArray(input.createdAssetIds, 128),
         error: ensureText(input.error),
         finishedAt: input.finishedAt || null,
         id: String(input.id || createId('run')),
@@ -547,6 +549,7 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         progressEvents: ensureProgressEvents(input.progressEvents),
         profileId: ensureText(input.profileId),
         projectId,
+        sourceAssetIds: ensureStringArray(input.sourceAssetIds, 128),
         stage: ensureText(input.stage),
         startedAt: input.startedAt || null,
         status: normaliseStatus(input.status, 'todo'),
@@ -570,11 +573,17 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         ...existing,
         ...clone(patch),
         assetRefs: patch.assetRefs !== undefined ? ensureObjectArray(patch.assetRefs) : existing.assetRefs,
+        candidateAssetIds:
+          patch.candidateAssetIds !== undefined ? ensureStringArray(patch.candidateAssetIds, 128) : ensureStringArray(existing.candidateAssetIds, 128),
+        createdAssetIds:
+          patch.createdAssetIds !== undefined ? ensureStringArray(patch.createdAssetIds, 128) : ensureStringArray(existing.createdAssetIds, 128),
         finishedAt: patch.finishedAt !== undefined ? patch.finishedAt : existing.finishedAt,
         input: patch.input !== undefined ? clone(patch.input) : existing.input,
         outputRef: patch.outputRef !== undefined ? clone(patch.outputRef) : existing.outputRef,
         outputSummary: patch.outputSummary !== undefined ? clone(patch.outputSummary) : existing.outputSummary,
         progressEvents: patch.progressEvents !== undefined ? ensureProgressEvents(patch.progressEvents) : ensureProgressEvents(existing.progressEvents),
+        sourceAssetIds:
+          patch.sourceAssetIds !== undefined ? ensureStringArray(patch.sourceAssetIds, 128) : ensureStringArray(existing.sourceAssetIds, 128),
         status: patch.status !== undefined ? normaliseStatus(patch.status, existing.status) : existing.status,
         updatedAt: nowIso(),
       };

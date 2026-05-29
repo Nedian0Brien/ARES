@@ -163,6 +163,7 @@ test('reading agent run falls back locally and creates a reading session', async
   });
 
   const run = await service.createRun({
+    assetRefs: [{ id: 'paper-42', type: 'paper', label: 'Adaptive Retrieval' }],
     input: {
       paper: {
         abstract: 'Adaptive retrieval reduces latency while preserving quality.',
@@ -196,6 +197,8 @@ test('reading agent run falls back locally and creates a reading session', async
   assert.equal(sessions[0].paperId, 'paper-42');
   assert.equal(sessions[0].status, 'done');
   assert.ok(sessions[0].sections.length > 0);
+  assert.deepEqual(finalRun.sourceAssetIds, ['paper-42']);
+  assert.deepEqual(finalRun.createdAssetIds, [sessions[0].id]);
 });
 
 test('agent run service notifies subscribers when run state changes', async () => {

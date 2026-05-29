@@ -647,8 +647,11 @@ const server = http.createServer(async (request, response) => {
 
       const run = await agentRunService.createRun({
         assetRefs: Array.isArray(body.assetRefs) ? body.assetRefs : [],
+        candidateAssetIds: Array.isArray(body.candidateAssetIds) ? body.candidateAssetIds : [],
+        createdAssetIds: Array.isArray(body.createdAssetIds) ? body.createdAssetIds : [],
         input: body.input && typeof body.input === 'object' ? body.input : {},
         projectId,
+        sourceAssetIds: Array.isArray(body.sourceAssetIds) ? body.sourceAssetIds : [],
         stage,
         taskKind: String(body.taskKind || '').trim() || undefined,
       });

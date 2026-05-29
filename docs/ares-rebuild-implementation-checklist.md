@@ -369,7 +369,7 @@
 
 ### Task 7.1: AgentRun output asset linkage
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `services/backend/lib/agent-runs.mjs`
   - store implementations
@@ -378,11 +378,12 @@
 - **Acceptance Criteria**:
   - Reader/Research/Analyst/Writer run이 생성한 자산이 run에 연결된다.
 - **Validation**:
-  - agent-runs tests
+  - `services/backend/tests/agent-runs.test.mjs`
+  - `npm test`
 
 ### Task 7.2: Worker separation plan or implementation
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `docs/backend-runtime-overview.md`
   - 구현 시 `services/backend/lib/agent-worker.mjs`
@@ -391,7 +392,8 @@
   - 최소한 실행/복구/abort 한계가 명시된다.
   - 구현한다면 기존 API가 유지된다.
 - **Validation**:
-  - runtime tests
+  - `docs/backend-runtime-overview.md`
+  - `npm test`
 
 ## 11. Sprint 8: Frontend Restructure
 
