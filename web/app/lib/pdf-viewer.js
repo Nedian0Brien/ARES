@@ -1,5 +1,6 @@
 let pdfjsModulePromise = null;
 let activeRenderToken = 0;
+let activePageObserver = null;
 
 function setMessage(host, message, className = '') {
   if (!host) {
@@ -35,19 +36,46 @@ function applyPdfPageMetrics(element, viewport) {
   element.style.setProperty('--scale-round-y', '1px');
 }
 
-function createCanvasPage(viewport) {
+function scheduleIdleTask(callback) {
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(callback, { timeout: 700 });
+    return;
+  }
+
+  window.setTimeout(callback, 16);
+}
+
+function disconnectActivePageObserver() {
+  if (!activePageObserver) {
+    return;
+  }
+
+  activePageObserver.disconnect();
+  activePageObserver = null;
+}
+
+function createPdfPageShell(viewport, pageNumber) {
   const wrapper = document.createElement('article');
   wrapper.className = 'reading-pdf-canvas-page';
+  wrapper.dataset.readingPdfPage = String(pageNumber);
+  wrapper.dataset.renderState = 'pending';
 
   const surface = document.createElement('div');
   surface.className = 'reading-pdf-page-surface';
   applyPdfPageMetrics(surface, viewport);
 
-  const canvas = document.createElement('canvas');
-  canvas.className = 'reading-pdf-canvas';
-  surface.appendChild(canvas);
+  const placeholder = document.createElement('div');
+  placeholder.className = 'reading-pdf-page-placeholder';
+  placeholder.textContent = `Page ${pageNumber}`;
+  surface.appendChild(placeholder);
+
+  const meta = document.createElement('div');
+  meta.className = 'reading-pdf-canvas-meta';
+  meta.textContent = `Page ${pageNumber}`;
+
   wrapper.appendChild(surface);
-  return { canvas, surface, wrapper };
+  wrapper.appendChild(meta);
+  return { surface, wrapper };
 }
 
 async function createSelectableTextLayer({ page, pdfjsLib, viewport }) {
@@ -89,6 +117,102 @@ export function scrollReadingPdfToPage(host, pageNumber) {
 
 export function resetReadingPdfSurface() {
   activeRenderToken += 1;
+  disconnectActivePageObserver();
+}
+
+async function renderPdfPage({ pageRecord, pdfjsLib, renderToken }) {
+  const { page, surface, viewport, wrapper } = pageRecord;
+  if (renderToken !== activeRenderToken || wrapper.dataset.renderState === 'ready') {
+    return;
+  }
+
+  if (pageRecord.renderPromise) {
+    await pageRecord.renderPromise;
+    return;
+  }
+
+  pageRecord.renderPromise = (async () => {
+    wrapper.dataset.renderState = 'rendering';
+    const outputScale = window.devicePixelRatio || 1;
+    const canvas = document.createElement('canvas');
+    canvas.className = 'reading-pdf-canvas';
+    const context = canvas.getContext('2d', { alpha: false });
+    canvas.width = Math.ceil(viewport.width * outputScale);
+    canvas.height = Math.ceil(viewport.height * outputScale);
+    canvas.style.width = `${viewport.width}px`;
+    canvas.style.height = `${viewport.height}px`;
+
+    surface.replaceChildren(canvas);
+
+    await page.render({
+      canvasContext: context,
+      transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null,
+      viewport,
+    }).promise;
+
+    if (renderToken !== activeRenderToken) {
+      return;
+    }
+
+    const textLayer = await createSelectableTextLayer({ page, pdfjsLib, viewport });
+    if (renderToken !== activeRenderToken) {
+      return;
+    }
+
+    surface.appendChild(textLayer);
+    wrapper.dataset.renderState = 'ready';
+  })().catch((error) => {
+    if (renderToken !== activeRenderToken) {
+      return;
+    }
+
+    wrapper.dataset.renderState = 'error';
+    surface.innerHTML = `<div class="reading-pdf-loading is-error">${error instanceof Error ? error.message : String(error)}</div>`;
+  });
+
+  await pageRecord.renderPromise;
+}
+
+function observePdfPages({ host, pageRecords, pdfjsLib, renderToken }) {
+  disconnectActivePageObserver();
+
+  if (typeof window.IntersectionObserver !== 'function') {
+    pageRecords.forEach((pageRecord) => {
+      scheduleIdleTask(() => {
+        void renderPdfPage({ pageRecord, pdfjsLib, renderToken });
+      });
+    });
+    return;
+  }
+
+  activePageObserver = new IntersectionObserver(
+    (entries, observer) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) {
+          return;
+        }
+
+        observer.unobserve(entry.target);
+        const pageRecord = pageRecords.find((record) => record.wrapper === entry.target);
+        if (!pageRecord) {
+          return;
+        }
+
+        scheduleIdleTask(() => {
+          void renderPdfPage({ pageRecord, pdfjsLib, renderToken });
+        });
+      });
+    },
+    {
+      root: host,
+      rootMargin: '900px 0px',
+      threshold: 0.01,
+    },
+  );
+
+  pageRecords.forEach((pageRecord) => {
+    activePageObserver.observe(pageRecord.wrapper);
+  });
 }
 
 export async function hydrateReadingPdfSurface({ baseUrl, host, pdfUrl, targetPage = null, zoom = 100 }) {
@@ -109,6 +233,7 @@ export async function hydrateReadingPdfSurface({ baseUrl, host, pdfUrl, targetPa
   }
 
   const renderToken = ++activeRenderToken;
+  disconnectActivePageObserver();
   host.dataset.renderState = 'loading';
   host.dataset.pdfUrl = nextPdfUrl;
   host.dataset.pdfZoom = nextZoomKey;
@@ -116,17 +241,7 @@ export async function hydrateReadingPdfSurface({ baseUrl, host, pdfUrl, targetPa
 
   try {
     const pdfjsLib = await loadPdfJs(baseUrl);
-    const response = await fetch(pdfUrl, { cache: 'no-store' });
-    if (!response.ok) {
-      throw new Error(`PDF load failed with ${response.status}`);
-    }
-
-    const pdfBytes = await response.arrayBuffer();
-    if (renderToken !== activeRenderToken) {
-      return;
-    }
-
-    const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+    const loadingTask = pdfjsLib.getDocument({ url: pdfUrl });
     const pdf = await loadingTask.promise;
     if (renderToken !== activeRenderToken) {
       return;
@@ -134,7 +249,7 @@ export async function hydrateReadingPdfSurface({ baseUrl, host, pdfUrl, targetPa
 
     host.innerHTML = '';
     host.dataset.renderState = 'ready';
-    const fragment = document.createDocumentFragment();
+    const pageRecords = [];
 
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
@@ -143,32 +258,16 @@ export async function hydrateReadingPdfSurface({ baseUrl, host, pdfUrl, targetPa
       }
 
       const viewport = page.getViewport({ scale: 1.28 * (nextZoom / 100) });
-      const { canvas, surface, wrapper } = createCanvasPage(viewport);
-      wrapper.dataset.readingPdfPage = String(pageNumber);
-      const outputScale = window.devicePixelRatio || 1;
-      const context = canvas.getContext('2d', { alpha: false });
-      canvas.width = Math.ceil(viewport.width * outputScale);
-      canvas.height = Math.ceil(viewport.height * outputScale);
-      canvas.style.width = `${viewport.width}px`;
-      canvas.style.height = `${viewport.height}px`;
-
-      await page.render({
-        canvasContext: context,
-        transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null,
-        viewport,
-      }).promise;
-
-      const textLayer = await createSelectableTextLayer({ page, pdfjsLib, viewport });
-      surface.appendChild(textLayer);
-
-      const meta = document.createElement('div');
-      meta.className = 'reading-pdf-canvas-meta';
-      meta.textContent = `Page ${pageNumber}`;
-      wrapper.appendChild(meta);
-      fragment.appendChild(wrapper);
+      const { surface, wrapper } = createPdfPageShell(viewport, pageNumber);
+      const pageRecord = { page, surface, viewport, wrapper };
+      pageRecords.push(pageRecord);
+      host.appendChild(wrapper);
+      if (pageNumber <= 2 || pageNumber === Number(targetPage)) {
+        void renderPdfPage({ pageRecord, pdfjsLib, renderToken });
+      }
     }
 
-    host.appendChild(fragment);
+    observePdfPages({ host, pageRecords, pdfjsLib, renderToken });
     if (targetPage) {
       window.requestAnimationFrame(() => {
         scrollReadingPdfToPage(host, targetPage);

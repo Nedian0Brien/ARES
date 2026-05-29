@@ -105,6 +105,47 @@ test('Backend exposes an SSE endpoint for agent run updates', async () => {
   assert.match(indexJs, /agentRunService\.subscribeRun/);
 });
 
+test('PDF viewer renders long documents progressively instead of blocking on every page', async () => {
+  const viewerJs = await readProjectFile('web/app/lib/pdf-viewer.js');
+
+  assert.match(viewerJs, /function createPdfPageShell/);
+  assert.match(viewerJs, /function renderPdfPage/);
+  assert.match(viewerJs, /IntersectionObserver/);
+  assert.match(viewerJs, /requestIdleCallback/);
+  assert.match(viewerJs, /host\.appendChild\(wrapper\)/);
+  assert.doesNotMatch(viewerJs, /host\.appendChild\(fragment\)/);
+});
+
+test('Reading PDF hydration is isolated behind a controller module', async () => {
+  const [appJs, controllerJs] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/app/features/reading-pdf-controller.js'),
+  ]);
+
+  assert.match(appJs, /import \{ createReadingPdfController \} from "\.\/app\/features\/reading-pdf-controller\.js"/);
+  assert.match(appJs, /const readingPdfController = createReadingPdfController/);
+  assert.match(controllerJs, /export function createReadingPdfController/);
+  assert.match(controllerJs, /hydrateReadingPdfSurface/);
+  assert.match(controllerJs, /resetReadingPdfSurface/);
+  assert.match(controllerJs, /scrollReadingPdfToPage/);
+  assert.doesNotMatch(appJs, /import \{ hydrateReadingPdfSurface, resetReadingPdfSurface, scrollReadingPdfToPage \}/);
+});
+
+test('Reading DOM patching is isolated from the app shell', async () => {
+  const [appJs, patchJs] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/app/features/reading-dom-patch.js'),
+  ]);
+
+  assert.match(appJs, /from "\.\/app\/features\/reading-dom-patch\.js"/);
+  assert.match(patchJs, /export function captureStableReadingPdfHost/);
+  assert.match(patchJs, /export function patchStableReadingPdfDocPane/);
+  assert.match(patchJs, /export function patchReadingSplitPreservingPdf/);
+  assert.match(patchJs, /export function syncReadingPdfDockState/);
+  assert.doesNotMatch(appJs, /function matchingStableReadingPdfHosts/);
+  assert.doesNotMatch(appJs, /function syncReadingElementShell/);
+});
+
 test('Reading handoff targets Lab language instead of legacy Research tab copy', async () => {
   const readingJs = await readProjectFile('web/app/features/reading.js');
 

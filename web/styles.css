@@ -3768,6 +3768,18 @@ body.reading-home-resize-active {
   max-width: none;
 }
 
+.reading-pdf-page-placeholder {
+  align-items: center;
+  background: var(--s2);
+  color: var(--t3);
+  display: flex;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}
+
 .reading-pdf-dock-layer {
   --dock-surface: var(--s1);
   --dock-surface-hover: var(--s2);
