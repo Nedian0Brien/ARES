@@ -116,10 +116,18 @@ const searchService = createScoutSearchService({
 });
 
 const PROJECT_ASSET_PATHS = {
+  'draft-sections': 'draftSections',
+  drafts: 'drafts',
+  'evidence-links': 'evidenceLinks',
   'experiment-runs': 'experimentRuns',
+  'insight-cards': 'insightCards',
   'insight-notes': 'insightNotes',
+  'reading-packets': 'readingPackets',
   'reading-sessions': 'readingSessions',
+  'reproduction-plans': 'reproductionPlans',
   'repro-checklist': 'reproChecklistItems',
+  'research-questions': 'researchQuestions',
+  'result-dossiers': 'resultDossiers',
   'result-comparisons': 'resultComparisons',
   'writing-drafts': 'writingDrafts',
 };
@@ -610,6 +618,12 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/graph$/.test(requestPath)) {
+      const projectId = parseProjectRoute(requestPath, 'graph');
+      json(response, 200, store.getProjectGraph(projectId));
+      return;
+    }
+
     if (request.method === 'GET' && requestPath === '/api/search') {
       await handleSearchRequest(response, parseSearchQuery(url.searchParams));
       return;
@@ -833,6 +847,22 @@ const server = http.createServer(async (request, response) => {
             assetRoute.collection === 'readingSessions'
               ? await readingService.listProjectSessions(assetRoute.projectId)
               : store.listProjectAssets(assetRoute.projectId, assetRoute.collection),
+        });
+        return;
+      }
+    }
+
+    if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/[a-z-]+$/.test(requestPath)) {
+      const assetRoute = parseProjectAssetRoute(requestPath);
+      if (assetRoute && assetRoute.collection !== 'readingSessions') {
+        const body = await readJsonBody(request);
+        const asset = await store.upsertProjectAsset(assetRoute.collection, {
+          ...body,
+          projectId: assetRoute.projectId,
+        });
+
+        json(response, 201, {
+          asset,
         });
         return;
       }

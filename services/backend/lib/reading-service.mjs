@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { PDFParse } from 'pdf-parse';
 
+import { normaliseReadingPacket } from './asset-model.mjs';
 import { createAgentRuntime, DEFAULT_AGENT_TIMEOUT_MS } from './agent-runtime.mjs';
 import {
   buildReadingSessionSeed,
@@ -642,6 +643,41 @@ export function createReadingService({
     return normaliseReadingSession(session);
   }
 
+  function buildReadingPacketFromSession(session) {
+    const normalized = normaliseReadingSession(session);
+    const limit = ensureTrimmedString(normalized.summaryCards?.limit, '');
+    const noteEvidenceLinkIds = normalized.notes.map((note) => note.evidenceLinkId).filter(Boolean);
+    return normaliseReadingPacket({
+      agentRunIds: [normalized.runId].filter(Boolean),
+      evidenceLinkIds: [...new Set([...(normalized.evidenceLinkIds || []), ...noteEvidenceLinkIds])],
+      id: `packet-${normalized.id}`,
+      keyPoints: normalized.keyPoints?.length ? normalized.keyPoints : normalized.summaryCards?.keyPoints || [],
+      limitations: limit ? [limit] : [],
+      methodParameters: normalized.reproParams,
+      notes: normalized.notes,
+      paperId: normalized.paperId,
+      projectId: normalized.projectId,
+      questionId: normalized.questionId || '',
+      sections: normalized.sections,
+      status: normalized.parseStatus === 'done' ? 'done' : normalized.parseStatus === 'error' ? 'error' : normalized.status,
+      summary: normalized.summary || normalized.summaryCards?.tldr || '',
+      updatedAt: normalized.updatedAt,
+    });
+  }
+
+  async function syncReadingPacket(session) {
+    if (typeof store.upsertProjectAsset !== 'function') {
+      return normaliseReadingSession(session);
+    }
+
+    const normalized = normaliseReadingSession(session);
+    await store.upsertProjectAsset('readingPackets', buildReadingPacketFromSession(normalized), {
+      matchBy: 'id',
+      prefix: 'packet',
+    });
+    return normalized;
+  }
+
   async function ensureSessionDir(sessionId) {
     const directory = resolveSafePath(rootDir, buildSessionRelativePath(sessionId, ''));
     await fs.mkdir(directory, { recursive: true });
@@ -750,6 +786,7 @@ export function createReadingService({
         { existing: session },
       ),
     );
+    await syncReadingPacket(nextSession);
 
     return {
       buffer,
@@ -769,7 +806,7 @@ export function createReadingService({
       },
       { existing: current },
     );
-    return normaliseReadingSession(await store.upsertReadingSession(next));
+    return syncReadingPacket(await store.upsertReadingSession(next));
   }
 
   async function buildAssetsFromArtifact(sessionId, artifact) {
@@ -1042,6 +1079,7 @@ Rules:
         summary: summary || paper.summary || paper.abstract || '',
       });
       const session = await store.upsertReadingSession(normaliseReadingSession(seed, { existing }));
+      await syncReadingPacket(session);
       await store.queuePaper(projectId, paper, {
         runId: session.runId,
         sessionId: session.id,
@@ -1097,6 +1135,7 @@ Rules:
           { existing: session },
         ),
       );
+      await syncReadingPacket(nextSession);
 
       await store.queuePaper(projectId, savedPaper, {
         sessionId: nextSession.id,
@@ -1421,10 +1460,13 @@ Rules:
     async createNote(sessionId, payload = {}) {
       const session = await getSessionOrThrow(sessionId);
       const timestamp = nowIso();
+      const noteId = payload.id || `note-${Date.now()}`;
+      const evidenceLinkId = `evidence-${session.id}-${noteId}`;
       const note = {
         body: ensureTrimmedString(payload.body, ''),
         createdAt: timestamp,
-        id: payload.id || `note-${Date.now()}`,
+        evidenceLinkId,
+        id: noteId,
         kind: ensureTrimmedString(payload.kind, 'note'),
         origin: ensureTrimmedString(payload.origin, payload.sourceHighlightId ? 'highlight' : 'user'),
         page: payload.page === undefined || payload.page === null || payload.page === '' ? null : Number(payload.page) || 1,
@@ -1433,6 +1475,19 @@ Rules:
         sourceHighlightId: ensureTrimmedString(payload.sourceHighlightId, '') || null,
         updatedAt: timestamp,
       };
+      await store.upsertProjectAsset('evidenceLinks', {
+        createdAt: timestamp,
+        createdBy: 'user',
+        id: evidenceLinkId,
+        page: note.page,
+        paperId: session.paperId,
+        projectId: session.projectId,
+        quote: note.quote || note.body,
+        sectionId: note.sectionId,
+        sourceId: note.id,
+        sourceType: 'note',
+        updatedAt: timestamp,
+      });
       const next = await updateSession(sessionId, {
         notes: [...session.notes, note],
       });
@@ -1467,6 +1522,22 @@ Rules:
       const note = notes.find((entry) => entry.id === noteId);
       if (!note) {
         throw new Error(`Unknown note: ${noteId}`);
+      }
+
+      if (note.evidenceLinkId) {
+        await store.upsertProjectAsset('evidenceLinks', {
+          createdAt: note.createdAt,
+          createdBy: 'user',
+          id: note.evidenceLinkId,
+          page: note.page,
+          paperId: session.paperId,
+          projectId: session.projectId,
+          quote: note.quote || note.body,
+          sectionId: note.sectionId,
+          sourceId: note.id,
+          sourceType: 'note',
+          updatedAt: note.updatedAt,
+        });
       }
 
       const next = await updateSession(sessionId, { notes });

@@ -174,6 +174,7 @@ function normaliseNote(entry, index = 0) {
   return {
     body,
     createdAt,
+    evidenceLinkId: ensureTrimmedString(entry.evidenceLinkId, '') || null,
     id: ensureTrimmedString(entry.id, `note-${index + 1}`),
     kind: ensureTrimmedString(entry.kind || entry.label, 'note').toLowerCase(),
     origin: ensureTrimmedString(entry.origin, entry.sourceHighlightId ? 'highlight' : 'user').toLowerCase(),

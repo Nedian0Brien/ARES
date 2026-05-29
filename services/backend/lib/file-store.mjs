@@ -2,17 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { ASSET_COLLECTIONS, normaliseAsset, normalisePaper } from './asset-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
-
-const ASSET_COLLECTIONS = [
-  'agentRuns',
-  'readingSessions',
-  'reproChecklistItems',
-  'experimentRuns',
-  'resultComparisons',
-  'insightNotes',
-  'writingDrafts',
-];
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
@@ -281,6 +272,59 @@ export async function createFileStore({ seedFile, runtimeFile }) {
     return null;
   }
 
+  function listGraphPapers(projectId) {
+    const papers = new Map();
+
+    for (const paper of [...libraryFor(projectId), ...queueFor(projectId)]) {
+      const normalized = normalisePaper(paper, { projectId });
+      papers.set(normalized.paperId, normalized);
+    }
+
+    for (const session of listCollection('readingSessions', { projectId })) {
+      const normalized = normaliseReadingSession(session);
+      const paper = normalisePaper(
+        {
+          abstract: normalized.abstract,
+          authors: normalized.authors,
+          createdAt: normalized.createdAt,
+          keywords: normalized.keywords,
+          paperId: normalized.paperId,
+          paperUrl: normalized.paperUrl,
+          pdfUrl: normalized.pdfUrl,
+          sourceProvider: normalized.sourceProvider || 'reading',
+          status: normalized.status,
+          summary: normalized.summary,
+          title: normalized.title,
+          updatedAt: normalized.updatedAt,
+          venue: normalized.venue,
+          year: normalized.year,
+        },
+        { projectId },
+      );
+      papers.set(paper.paperId, { ...papers.get(paper.paperId), ...paper });
+    }
+
+    return Array.from(papers.values()).sort(sortByUpdatedDesc);
+  }
+
+  function getProjectGraph(projectId) {
+    const project = projectSummary(ensureProject(projectId));
+    return {
+      drafts: listCollection('drafts', { projectId }),
+      draftSections: listCollection('draftSections', { projectId }),
+      evidenceLinks: listCollection('evidenceLinks', { projectId }),
+      experimentRuns: listCollection('experimentRuns', { projectId }),
+      graphVersion: 1,
+      insightCards: listCollection('insightCards', { projectId }),
+      papers: listGraphPapers(projectId),
+      project,
+      readingPackets: listCollection('readingPackets', { projectId }),
+      reproductionPlans: listCollection('reproductionPlans', { projectId }),
+      researchQuestions: listCollection('researchQuestions', { projectId }),
+      resultDossiers: listCollection('resultDossiers', { projectId }),
+    };
+  }
+
   return {
     backend: 'file',
 
@@ -301,6 +345,8 @@ export async function createFileStore({ seedFile, runtimeFile }) {
     getProject(projectId) {
       return projectSummary(ensureProject(projectId));
     },
+
+    getProjectGraph,
 
     getLibrary(projectId) {
       return clone(libraryFor(projectId));
@@ -454,11 +500,13 @@ export async function createFileStore({ seedFile, runtimeFile }) {
       const id = String(input.id || createId(options.prefix || collectionName.replace(/s$/, '')));
       const matchBy = options.matchBy || 'id';
       const next = {
-        ...clone(input),
+        ...normaliseAsset(collectionName, input, {
+          prefix: options.prefix || collectionName.replace(/s$/, ''),
+          projectId,
+        }),
         createdAt,
         id,
         projectId,
-        sourceRefs: ensureObjectArray(input.sourceRefs),
         updatedAt,
       };
 

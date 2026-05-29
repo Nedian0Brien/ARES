@@ -149,6 +149,30 @@ test('reading service creates uploaded PDF sessions with cached source files', a
   assert.ok(store.getLibrary('demo').some((paper) => paper.paperId === payload.paper.paperId));
 });
 
+test('reading service mirrors sessions into reading packets for the asset graph', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper(),
+    projectId: 'demo',
+  });
+  let graph = store.getProjectGraph('demo');
+  assert.equal(graph.readingPackets.length, 1);
+  assert.equal(graph.readingPackets[0].id, `packet-${session.id}`);
+  assert.equal(graph.readingPackets[0].paperId, 'demo-paper');
+
+  await service.parseSession(session.id);
+  graph = store.getProjectGraph('demo');
+  const packet = graph.readingPackets[0];
+  assert.equal(packet.status, 'done');
+  assert.ok(packet.sections.length >= 3);
+  assert.ok(packet.notes.length >= 1);
+  assert.ok(packet.methodParameters.length >= 1);
+});
+
 test('reading service marks metadata-only sessions as parse errors when pdf is missing', async (t) => {
   const { service, store } = await createHarness();
   t.after(async () => {
@@ -230,11 +254,20 @@ test('reading note CRUD persists inline note edits', async (t) => {
     quote: 'Calibration quality determines the failure mode on hard queries.',
   });
   assert.ok(created.note.id);
+  assert.ok(created.note.evidenceLinkId);
+  let graph = store.getProjectGraph('demo');
+  assert.ok(graph.evidenceLinks.some((entry) => entry.id === created.note.evidenceLinkId));
+  assert.ok(graph.readingPackets[0].evidenceLinkIds.includes(created.note.evidenceLinkId));
 
   const updated = await service.updateNote(session.id, created.note.id, {
     body: 'Need to validate calibration data split before the next run.',
   });
   assert.match(updated.note.body, /before the next run/);
+  graph = store.getProjectGraph('demo');
+  assert.match(
+    graph.evidenceLinks.find((entry) => entry.id === created.note.evidenceLinkId)?.quote,
+    /Calibration quality/,
+  );
 
   const removed = await service.deleteNote(session.id, created.note.id);
   assert.equal(removed.ok, true);
