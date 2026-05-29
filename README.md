@@ -22,31 +22,32 @@ ARES는 AI/ML 연구자가 다음 흐름을 하나의 연속된 작업 공간에
 
 ## Product Direction
 
-ARES는 현재 다음 6단계 워크플로우를 중심으로 설계되어 있다.
+ARES는 현재 4개 상위 surface와 기존 6단계 하위 모드를 함께 유지한다.
 
-### 1. Search
+상위 surface:
 
-연구 주제에 맞는 논문을 탐색하고, 필터링하고, 저장하거나 다음 단계로 보낸다.
+- `Read`: Search + Reading
+- `Lab`: Research + Result
+- `Insight`: Evidence Board
+- `Write`: Draft Studio
 
-### 2. Reading
+기존 6단계 `Search -> Reading -> Research -> Result -> Insight -> Writing`은 route alias와 하위 모드로 보존된다.
 
-논문을 섹션 단위로 읽고, 핵심 주장, 결과, 한계, 재현 파라미터를 구조화한다.
+### 1. Read
 
-### 3. Research
+논문을 탐색하고 라이브러리에 저장한 뒤, PDF/노트/하이라이트를 `ReadingPacket`과 `EvidenceLink`로 구조화한다.
 
-재현 체크리스트를 관리하고, baseline 및 ablation 실험을 설계한다.
+### 2. Lab
 
-### 4. Result
+Reader에서 넘어온 근거를 `ReproductionPlan`, `ExperimentRun`, `ResultDossier`로 연결한다.
 
-원 논문 수치와 재현 결과를 비교하고, delta와 차이 원인을 분석한다.
+### 3. Insight
 
-### 5. Insight
+`EvidenceLink`와 result delta를 바탕으로 `InsightCard`를 만든다.
 
-실험 결과를 연구 인사이트와 후속 연구 가설로 정리한다.
+### 4. Write
 
-### 6. Writing
-
-축적된 결과를 바탕으로 리포트나 논문 초안을 작성한다.
+`InsightCard`를 `Draft`와 `DraftSection`으로 조립하고 source evidence를 추적한다.
 
 ## Agent Model
 
@@ -61,27 +62,28 @@ ARES는 역할 기반 에이전트 구조를 전제로 설계되어 있다.
 
 ## Current Status
 
-2026년 4월 21일 기준으로, ARES는 여전히 프로토타입과 문서가 중심인 저장소지만 이제 **Search 탭 기준의 첫 실행 가능한 서비스 골격**이 추가되었다.
+2026년 5월 29일 기준으로, ARES는 **asset graph 기반의 실행 가능한 연구 워크스페이스 골격**을 갖춘 상태다.
 
 현재 포함된 내용:
 
 - 인터랙션이 반영된 HTML 프로토타입
 - 와이어프레임
 - 제품 비전 문서
-- 프로토타입 기준 기능 명세 문서
-- Search 탭 MVP를 위한 로컬 Node 서비스
+- asset graph 기준 목표 구조와 구현 체크리스트
+- 로컬 Node backend 서비스
 - 프로젝트별 논문 검색 / 필터링 / 스크랩 저장 / reading queue API
+- `Paper`, `ResearchQuestion`, `ReadingPacket`, `EvidenceLink`, `ReproductionPlan`, `ExperimentRun`, `ResultDossier`, `InsightCard`, `Draft`, `DraftSection` 저장 API
+- Reader -> Lab -> Insight -> Write로 이어지는 최소 저장 흐름
 - 파일 기반 fallback과 PostgreSQL backend를 모두 지원하는 런타임 저장소
 - 실제 API 사용이 불가능할 때도 화면이 유지되도록 하는 seed fallback 데이터
 
 아직 포함되지 않은 내용:
 
-- Reading 이후 단계의 실제 서비스 구현
 - 사용자 인증
-- 실제 에이전트 실행 인프라
-- 재현 실험 실행 파이프라인
+- 별도 worker 프로세스 기반 agent run lease/복구
+- 실제 재현 실험 실행 파이프라인
 
-즉, 현재 단계의 목적은 **프로토타입을 실제 제품으로 옮기기 위한 첫 서비스 기반을 세우고, Search 단계부터 실제 데이터 흐름을 붙여 나가는 것**이다.
+즉, 현재 단계의 목적은 **프로토타입을 asset graph 중심 제품으로 재구성하고, 각 surface가 저장 가능한 연구 자산을 만들도록 연결하는 것**이다.
 
 ## Repository Structure
 
@@ -97,14 +99,18 @@ ARES/
 ├── docs/
 │   ├── product vision.md
 │   ├── specification.md
-│   ├── 구현 기획서.md
-│   └── 구현 기획서 - 원본.md
+│   ├── ares-rebuild-target-architecture.md
+│   ├── ares-rebuild-implementation-checklist.md
+│   └── backend-runtime-overview.md
 ├── services/
 │   └── backend/
 │       ├── index.mjs
 │       ├── lib/
 │       └── tests/
 ├── web/
+│   ├── app/
+│   │   ├── features/
+│   │   └── lib/
 │   ├── app.js
 │   ├── index.html
 │   └── styles.css

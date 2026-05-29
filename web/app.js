@@ -1,5 +1,8 @@
 import { createSearchFeature } from "./app/features/search.js";
 import { createReadingFeature } from "./app/features/reading.js";
+import { createDraftFeatureModel } from "./app/features/draft.js";
+import { graphEvidenceItems } from "./app/features/evidence.js";
+import { createLabFeatureModel } from "./app/features/lab.js";
 import {
   appendReadingPdfDockWithAnimation,
   captureStableReadingPdfHost,
@@ -12,6 +15,7 @@ import {
   transplantStableReadingPdfHost,
 } from "./app/features/reading-dom-patch.js";
 import { createReadingPdfController } from "./app/features/reading-pdf-controller.js";
+import { SURFACE_ROUTE_ALIASES, createSurfaceRouteNormalizer } from "./app/features/surface-router.js";
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from "./app/lib/mobile-scroll-auto-hide.js";
 
 const TOKENS = {
@@ -206,19 +210,12 @@ const WORKFLOW_STAGES = [
   },
 ];
 
-const STAGE_ALIASES = {
-  papers: "reading",
-  lab: "research",
-  search: "search",
-  reading: "reading",
-  research: "research",
-  result: "result",
-  insight: "insight",
-  writing: "writing",
-  read: "reading",
-  results: "result",
-  insights: "insight",
-};
+const STAGE_ALIASES = SURFACE_ROUTE_ALIASES;
+const normalizeSurfaceStage = createSurfaceRouteNormalizer({
+  aliases: STAGE_ALIASES,
+  fallback: "search",
+  stages: WORKFLOW_STAGES,
+});
 
 const STORAGE_KEYS = {
   stage: "ares.stage",
@@ -428,8 +425,7 @@ function saveStorage(key, value) {
 }
 
 function normalizeStage(stageId) {
-  const resolved = STAGE_ALIASES[stageId] || stageId;
-  return WORKFLOW_STAGES.some((stage) => stage.id === resolved) ? resolved : "search";
+  return normalizeSurfaceStage(stageId);
 }
 
 function normalizeReadingDocumentTab(tabId) {
@@ -939,33 +935,13 @@ async function createManualExperimentRun() {
   render();
 }
 
-function graphEvidenceItems() {
-  const evidenceLinks = Array.isArray(state.projectGraph?.evidenceLinks) ? state.projectGraph.evidenceLinks : [];
-  const resultDossiers = Array.isArray(state.projectGraph?.resultDossiers) ? state.projectGraph.resultDossiers : [];
-  const linkItems = evidenceLinks.map((link) => ({
-    cat: link.sourceType === "note" ? "paper quote" : link.sourceType || "evidence",
-    evidenceLinkIds: [link.id].filter(Boolean),
-    page: link.page || link.locator?.page || "",
-    text: link.quote || "Linked evidence",
-  }));
-  const resultItems = resultDossiers.flatMap((dossier) =>
-    (Array.isArray(dossier.comparisons) ? dossier.comparisons : []).map((comparison) => ({
-      cat: "result delta",
-      evidenceLinkIds: Array.isArray(dossier.evidenceLinkIds) ? dossier.evidenceLinkIds : [],
-      page: "",
-      text: comparison.summary || comparison.delta || dossier.deltaSummary || "Result delta",
-    })),
-  );
-  return [...linkItems, ...resultItems];
-}
-
 async function createInsightCardFromEvidence() {
   const project = activeProject();
   if (!project) {
     return;
   }
 
-  const evidence = graphEvidenceItems()[0] || null;
+  const evidence = graphEvidenceItems(state.projectGraph)[0] || null;
   if (!evidence?.text || !evidence.evidenceLinkIds?.length) {
     state.error = "Link evidence before creating an insight card.";
     render();
@@ -994,8 +970,7 @@ async function createDraftSectionFromInsight() {
     return;
   }
 
-  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
-  const drafts = Array.isArray(state.projectGraph?.drafts) ? state.projectGraph.drafts : [];
+  const { drafts, insightCards } = createDraftFeatureModel(state.projectGraph);
   const insightCard = insightCards[0] || null;
   if (!insightCard?.id) {
     state.error = "Create an insight card before drafting.";
@@ -1027,6 +1002,22 @@ async function createDraftSectionFromInsight() {
   });
 
   await loadProjectGraph();
+  render();
+}
+
+async function exportWritingDraft() {
+  const sections = Array.isArray(state.projectGraph?.draftSections) ? state.projectGraph.draftSections : [];
+  if (!sections.length) {
+    state.error = "Create a draft section before export.";
+    render();
+    return;
+  }
+
+  const markdown = sections
+    .map((section) => [`## ${section.title || "Untitled section"}`, "", section.body || ""].join("\n"))
+    .join("\n\n");
+  await copyTextToClipboard(markdown);
+  state.error = "";
   render();
 }
 
@@ -3188,12 +3179,7 @@ function renderLabStage(project) {
   const stage = stageById(state.activeStage);
   const session = selectedReadingSession();
   const library = dashboardLibraryItems();
-  const plans = Array.isArray(state.projectGraph?.reproductionPlans) ? state.projectGraph.reproductionPlans : [];
-  const experimentRuns = Array.isArray(state.projectGraph?.experimentRuns) ? state.projectGraph.experimentRuns : [];
-  const dossiers = Array.isArray(state.projectGraph?.resultDossiers) ? state.projectGraph.resultDossiers : [];
-  const readingPackets = Array.isArray(state.projectGraph?.readingPackets) ? state.projectGraph.readingPackets : [];
-  const plan = plans[0] || null;
-  const sourcePacket = readingPackets.find((packet) => packet.id === plan?.readingPacketId) || readingPackets[0] || null;
+  const { dossiers, experimentRuns, plan, plans, sourcePacket } = createLabFeatureModel(state.projectGraph);
   const sourcePaper = session || sourcePacket || library[0] || null;
   const paperTitle = sourcePaper?.title || "No reading packet";
   const paperVenue = sourcePaper?.venue || "No venue";
@@ -3327,7 +3313,7 @@ function renderInsightStage(project) {
   const session = selectedReadingSession();
   const notes = Array.isArray(session?.notes) ? session.notes : [];
   const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
-  const graphEvidence = graphEvidenceItems();
+  const graphEvidence = graphEvidenceItems(state.projectGraph);
   const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
   const evidenceItems = graphEvidence.length ? graphEvidence : [...notes, ...highlights].slice(0, 4);
   const hasEvidence = evidenceItems.length > 0;
@@ -3487,8 +3473,7 @@ function renderInsightStage(project) {
 function renderWritingStage(project) {
   const session = selectedReadingSession();
   const sourceTitle = session?.title || dashboardLibraryItems()[0]?.title || project?.name || "Untitled research draft";
-  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
-  const draftSections = Array.isArray(state.projectGraph?.draftSections) ? state.projectGraph.draftSections : [];
+  const { draftSections, insightCards } = createDraftFeatureModel(state.projectGraph);
   const sections = draftSections.length
     ? draftSections.map((section) => ({
         id: section.id,
@@ -3551,7 +3536,7 @@ function renderWritingStage(project) {
           </div>
           <div class="writing-actions">
             <button type="button" class="btn-p" data-action="create-draft-section" ${activeInsight ? "" : "disabled"}>Generate section</button>
-            <button type="button" class="btn-s" disabled>Export</button>
+            <button type="button" class="btn-s" data-action="export-writing-draft" ${draftSections.length ? "" : "disabled"}>Export</button>
           </div>
         </div>
 
@@ -3569,7 +3554,7 @@ function renderWritingStage(project) {
           </article>
           <div class="writing-suggestion-bar">
             <button type="button" class="btn-s" data-action="select-stage" data-stage-id="insight">Insert evidence</button>
-            <button type="button" class="btn-s" disabled>Accept suggestion</button>
+            <button type="button" class="btn-s" data-action="create-draft-section" ${activeInsight ? "" : "disabled"}>Accept suggestion</button>
           </div>
         </section>
       </main>
@@ -5039,6 +5024,16 @@ document.addEventListener("click", async (event) => {
   if (action === "create-draft-section") {
     try {
       await createDraftSectionFromInsight();
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
+  if (action === "export-writing-draft") {
+    try {
+      await exportWritingDraft();
     } catch (error) {
       state.error = error.message;
       render();

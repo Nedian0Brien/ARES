@@ -27,16 +27,33 @@ test('workflow navigation is driven by four product tabs while preserving six st
   assert.match(appJs, /id:\s*"result"[\s\S]*tabId:\s*"lab"/);
 });
 
+test('surface feature modules exist for queue, lab, evidence, draft, and router boundaries', async () => {
+  const queueModule = await readProjectFile('web/app/features/queue.js');
+  const labModule = await readProjectFile('web/app/features/lab.js');
+  const evidenceModule = await readProjectFile('web/app/features/evidence.js');
+  const draftModule = await readProjectFile('web/app/features/draft.js');
+  const routerModule = await readProjectFile('web/app/features/surface-router.js');
+
+  assert.match(queueModule, /createQueueFeatureModel/);
+  assert.match(labModule, /createLabFeatureModel/);
+  assert.match(evidenceModule, /graphEvidenceItems/);
+  assert.match(draftModule, /createDraftFeatureModel/);
+  assert.match(routerModule, /createSurfaceRouteNormalizer/);
+});
+
+
 test('legacy stage ids and new tab ids normalize to compatible stage routes', async () => {
   const appJs = await readProjectFile('web/app.js');
+  const routerModule = await readProjectFile('web/app/features/surface-router.js');
 
-  assert.match(appJs, /papers:\s*"reading"/);
-  assert.match(appJs, /lab:\s*"research"/);
-  assert.match(appJs, /search:\s*"search"/);
-  assert.match(appJs, /reading:\s*"reading"/);
-  assert.match(appJs, /research:\s*"research"/);
-  assert.match(appJs, /result:\s*"result"/);
-  assert.match(appJs, /results:\s*"result"/);
+  assert.match(routerModule, /papers:\s*"reading"/);
+  assert.match(routerModule, /lab:\s*"research"/);
+  assert.match(appJs, /createSurfaceRouteNormalizer/);
+  assert.match(routerModule, /search:\s*"search"/);
+  assert.match(routerModule, /reading:\s*"reading"/);
+  assert.match(routerModule, /research:\s*"research"/);
+  assert.match(routerModule, /result:\s*"result"/);
+  assert.match(routerModule, /results:\s*"result"/);
 });
 
 test('desktop and mobile workflow chrome render the four tabs instead of raw stages', async () => {

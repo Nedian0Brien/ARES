@@ -18,6 +18,7 @@ test('Research + Result tab renders a Lab surface instead of generic placeholder
   assert.match(appJs, /data-ares-surface="lab-stage"/);
   assert.match(appJs, /state\.activeStage === "research" \|\| state\.activeStage === "result"/);
   assert.match(appJs, /renderLabStage\(project\)/);
+  assert.match(appJs, /createLabFeatureModel/);
   assert.match(appJs, /createManualExperimentRun/);
 });
 

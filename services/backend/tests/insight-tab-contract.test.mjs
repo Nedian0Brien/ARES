@@ -18,12 +18,14 @@ test('Insight tab renders a dedicated evidence-to-claim surface', async () => {
   assert.match(appJs, /data-ares-surface="insight-stage"/);
   assert.match(appJs, /state\.activeStage === "insight"/);
   assert.match(appJs, /renderInsightStage\(project\)/);
+  assert.match(appJs, /app\/features\/evidence\.js/);
   assert.match(appJs, /graphEvidenceItems/);
   assert.match(appJs, /createInsightCardFromEvidence/);
 });
 
 test('Insight surface exposes the four synthesis modes and card anatomy', async () => {
   const appJs = await readProjectFile('web/app.js');
+  const evidenceModule = await readProjectFile('web/app/features/evidence.js');
 
   assert.match(appJs, /Evidence/);
   assert.match(appJs, /Claims/);
@@ -31,8 +33,8 @@ test('Insight surface exposes the four synthesis modes and card anatomy', async 
   assert.match(appJs, /Decisions/);
   assert.match(appJs, /Insight Card/);
   assert.match(appJs, /linked evidence/);
-  assert.match(appJs, /paper quote/);
-  assert.match(appJs, /result delta/);
+  assert.match(evidenceModule, /paper quote/);
+  assert.match(evidenceModule, /result delta/);
   assert.match(appJs, /confidence/);
   assert.match(appJs, /next action/);
   assert.doesNotMatch(appJs, /confidence 0\.72/);

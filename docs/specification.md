@@ -63,6 +63,8 @@ ARES는 논문 탐색, 리딩, 재현 연구, 실험 비교, 인사이트 정리
 
 ARES는 워크스페이스 셸, 4개 상위 탭, 기존 6단계를 보존하는 하위 워크플로우 모드로 구성된다.
 
+현재 구현의 source of truth는 project asset graph다. 각 surface는 `/api/projects/:projectId/graph`로 읽은 자산을 기준으로 렌더링하고, 생성 action은 collection별 API에 저장 가능한 asset을 남긴다.
+
 ### 5.1 워크스페이스 셸
 
 모든 화면에서 공통으로 유지되는 상위 레이아웃은 다음 요소를 포함한다.
@@ -83,6 +85,17 @@ ARES는 워크스페이스 셸, 4개 상위 탭, 기존 6단계를 보존하는 
 - `Writing`: 아웃라인, 초안, 출처 기반 작성
 
 기존 6단계는 하위 모드 및 route alias로 유지된다. 따라서 기존 링크나 사용자의 인지 모델은 `Search`, `Reading`, `Research`, `Result`, `Insight`, `Writing` 흐름을 계속 사용할 수 있고, 모바일 내비게이션은 더 짧은 4개 목적지로 압축된다.
+
+### 5.3 Asset graph collections
+
+- `researchQuestions`: active question과 search context
+- `readingPackets`: 구조화된 Reader 결과
+- `evidenceLinks`: PDF quote, note, result delta의 source link
+- `reproductionPlans`: 재현 체크리스트와 metric 계획
+- `experimentRuns`: manual 또는 worker 실행 결과
+- `resultDossiers`: 원문 결과와 재현 결과 비교
+- `insightCards`: claim, hypothesis, decision
+- `drafts`, `draftSections`: source-linked writing output
 
 ## 6. 공통 UX 규칙
 

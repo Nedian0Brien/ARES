@@ -18,6 +18,7 @@ test('Writing tab renders a dedicated evidence-backed drafting surface', async (
   assert.match(appJs, /data-ares-surface="writing-stage"/);
   assert.match(appJs, /state\.activeStage === "writing"/);
   assert.match(appJs, /renderWritingStage\(project\)/);
+  assert.match(appJs, /createDraftFeatureModel/);
   assert.match(appJs, /createDraftSectionFromInsight/);
 });
 
@@ -40,5 +41,6 @@ test('Writing actions cover generation, evidence insertion, suggestions, and exp
   assert.match(appJs, /data-action="create-draft-section"/);
   assert.match(appJs, /Insert evidence/);
   assert.match(appJs, /Accept suggestion/);
+  assert.match(appJs, /data-action="export-writing-draft"/);
   assert.match(appJs, /Export/);
 });

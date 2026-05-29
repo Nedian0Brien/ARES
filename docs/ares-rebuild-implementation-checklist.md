@@ -407,7 +407,7 @@
 
 ### Task 8.1: Surface router 도입
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `web/app.js`
 - **Description**: legacy stage route를 새 surface route로 normalize한다.
@@ -415,11 +415,12 @@
   - 기존 deep link가 새 surface로 안전하게 매핑된다.
   - URL과 active state가 일관된다.
 - **Validation**:
-  - navigation contract test
+  - `services/backend/tests/four-tab-navigation-contract.test.mjs`
+  - `npm test`
 
 ### Task 8.2: Feature modules 분리
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `web/app/features/queue.js`
   - `web/app/features/reading.js`
@@ -446,7 +447,7 @@
 
 ### Task 9.1: Legacy placeholder audit
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `web/app.js`
   - `web/app/features/*`
@@ -456,11 +457,11 @@
   - 버튼은 handler, route, stored output 중 하나 이상을 가진다.
 - **Validation**:
   - static grep audit
-  - browser smoke
+  - `npm test`
 
 ### Task 9.2: Documentation alignment
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `README.md`
   - `docs/specification.md`
@@ -471,6 +472,7 @@
   - 실행 방법과 dev deploy 방법은 현재와 일치한다.
 - **Validation**:
   - `git diff --check`
+  - `npm test`
 
 ## 13. Ongoing Verification
 
