@@ -816,6 +816,13 @@ async function handoffReadingToResearch({ noteId = "" } = {}) {
     : (Array.isArray(session.notes) ? session.notes : []).map((note) => note.id).filter(Boolean);
   const assetIds = (Array.isArray(session.assets) ? session.assets : []).map((asset) => asset.id).filter(Boolean);
   const sectionIds = (Array.isArray(session.sections) ? session.sections : []).map((section) => section.id).filter(Boolean);
+  const graph = state.projectGraph?.project?.id === project.id ? state.projectGraph : null;
+  const readingPacket =
+    graph?.readingPackets?.find((packet) => packet.id === `packet-${session.id}` || packet.paperId === session.paperId) || null;
+  const evidenceLinkIds = [
+    ...(Array.isArray(readingPacket?.evidenceLinkIds) ? readingPacket.evidenceLinkIds : []),
+    ...(Array.isArray(session.notes) ? session.notes.map((note) => note.evidenceLinkId).filter(Boolean) : []),
+  ];
   const paper = readingPaperFromSession(session) || {
     abstract: session.abstract || session.summary || "",
     authors: session.authors || [],
@@ -829,20 +836,41 @@ async function handoffReadingToResearch({ noteId = "" } = {}) {
     year: session.year ?? null,
   };
 
+  const planPayload = await api(`api/projects/${encodeURIComponent(project.id)}/reproduction-plans`, {
+    method: "POST",
+    body: JSON.stringify({
+      checklist: [
+        { category: "repo", status: "queue", title: "Confirm code availability" },
+        { category: "env", status: "todo", title: "Validate environment setup" },
+        { category: "eval", status: "todo", title: "Lock evaluation protocol" },
+      ],
+      evidenceLinkIds,
+      metrics: ["primary score"],
+      questionId: activeResearchQuestion()?.id || "",
+      readingPacketId: readingPacket?.id || `packet-${session.id}`,
+      status: "draft",
+    }),
+  });
+
   const payload = await api("api/agent-runs", {
     method: "POST",
     body: JSON.stringify({
       assetRefs: [
         { type: "paper", id: session.paperId, label: session.title || "Paper" },
         { type: "readingSession", id: session.id, label: session.title || "Reading session" },
+        { type: "readingPacket", id: readingPacket?.id || `packet-${session.id}`, label: session.title || "Reading packet" },
+        { type: "reproductionPlan", id: planPayload.asset?.id || "", label: "Reproduction plan" },
       ],
       input: {
         assetIds,
+        evidenceLinkIds,
         handoffSource: "reading",
         noteIds,
         paper,
         paperId: session.paperId,
+        readingPacketId: readingPacket?.id || `packet-${session.id}`,
         readingSessionId: session.id,
+        reproductionPlanId: planPayload.asset?.id || "",
         sectionIds,
       },
       projectId: project.id,
@@ -853,11 +881,62 @@ async function handoffReadingToResearch({ noteId = "" } = {}) {
   state.activeStage = "research";
   state.scopePicker = null;
   saveStorage(STORAGE_KEYS.stage, state.activeStage);
+  await loadProjectGraph();
   if (payload?.run?.id) {
     state.activeReadingRunId = payload.run.id;
     subscribeAgentRun(payload.run.id);
   }
   renderWithViewTransition();
+}
+
+async function createManualExperimentRun() {
+  const project = activeProject();
+  if (!project) {
+    return;
+  }
+
+  const plans = Array.isArray(state.projectGraph?.reproductionPlans) ? state.projectGraph.reproductionPlans : [];
+  const plan = plans[0] || null;
+  if (!plan?.id) {
+    state.error = "Create a reproduction plan from Reader first.";
+    render();
+    return;
+  }
+
+  const runPayload = await api(`api/projects/${encodeURIComponent(project.id)}/experiment-runs`, {
+    method: "POST",
+    body: JSON.stringify({
+      config: { source: "manual" },
+      kind: "manual",
+      metrics: { primary: "pending" },
+      notes: "Manual result entry initialized from Lab.",
+      reproductionPlanId: plan.id,
+      status: "queue",
+    }),
+  });
+
+  await api(`api/projects/${encodeURIComponent(project.id)}/result-dossiers`, {
+    method: "POST",
+    body: JSON.stringify({
+      comparisons: [
+        {
+          delta: "Awaiting result",
+          metric: "primary",
+          paperValue: "linked evidence",
+          reproducedValue: "pending",
+          summary: "Manual run created; attach observed metrics after execution.",
+        },
+      ],
+      evidenceLinkIds: plan.evidenceLinkIds || [],
+      experimentRunIds: [runPayload.asset?.id].filter(Boolean),
+      paperId: selectedReadingSession()?.paperId || "",
+      questionId: plan.questionId || activeResearchQuestion()?.id || "",
+      status: "draft",
+    }),
+  });
+
+  await loadProjectGraph();
+  render();
 }
 
 function readingCitationText(session) {
@@ -3018,32 +3097,39 @@ function renderLabStage(project) {
   const stage = stageById(state.activeStage);
   const session = selectedReadingSession();
   const library = dashboardLibraryItems();
-  const sourcePaper = session || library[0] || null;
+  const plans = Array.isArray(state.projectGraph?.reproductionPlans) ? state.projectGraph.reproductionPlans : [];
+  const experimentRuns = Array.isArray(state.projectGraph?.experimentRuns) ? state.projectGraph.experimentRuns : [];
+  const dossiers = Array.isArray(state.projectGraph?.resultDossiers) ? state.projectGraph.resultDossiers : [];
+  const readingPackets = Array.isArray(state.projectGraph?.readingPackets) ? state.projectGraph.readingPackets : [];
+  const plan = plans[0] || null;
+  const sourcePacket = readingPackets.find((packet) => packet.id === plan?.readingPacketId) || readingPackets[0] || null;
+  const sourcePaper = session || sourcePacket || library[0] || null;
   const paperTitle = sourcePaper?.title || "No reading packet";
   const paperVenue = sourcePaper?.venue || "No venue";
   const progress = session ? readingProgress(session) : 0;
   const status = session?.status || (project.queueCount ? "queue" : "todo");
   const compareActive = stage.id === "result";
   const labMode = compareActive ? "Compare" : "Plan";
-  const labStatusLabel = session ? "Packet linked" : "Not connected";
-  const runs = [
-    {
-      name: "Baseline reproduction",
-      metric: "primary score",
-      paper: session ? "linked" : "none",
-      ours: "—",
-      delta: "—",
-      status: status === "done" ? "queue" : "todo",
-    },
-    {
-      name: "Ablation candidate",
-      metric: "sensitivity",
-      paper: "none",
-      ours: "—",
-      delta: "—",
-      status: "todo",
-    },
-  ];
+  const labStatusLabel = plan ? "Plan linked" : session || sourcePacket ? "Packet linked" : "Not connected";
+  const runs = experimentRuns.length
+    ? experimentRuns.map((run) => ({
+        delta: "—",
+        metric: Object.keys(run.metrics || {})[0] || "primary",
+        name: run.title || `${run.kind || "Manual"} run`,
+        ours: run.metrics?.primary || "pending",
+        paper: plan ? "linked" : "none",
+        status: run.status || "todo",
+      }))
+    : [
+        {
+          name: "Baseline reproduction",
+          metric: "primary score",
+          paper: plan || session ? "linked" : "none",
+          ours: "—",
+          delta: "—",
+          status: status === "done" ? "queue" : "todo",
+        },
+      ];
 
   return `
     <div class="lab-stage" data-ares-surface="lab-stage" data-ares-stage="${escapeHtml(stage.id)}" data-lab-mode="${escapeHtml(labMode.toLowerCase())}">
@@ -3095,7 +3181,7 @@ function renderLabStage(project) {
               <span class="lab-card-label">Runs</span>
               <h2>Current run queue</h2>
             </div>
-            <button type="button" class="btn-s" disabled>Attach result</button>
+            <button type="button" class="btn-s" data-action="create-manual-experiment-run" ${plan ? "" : "disabled"}>Attach result</button>
           </div>
           <div class="lab-run-grid">
             ${runs
@@ -3131,11 +3217,11 @@ function renderLabStage(project) {
         <div class="agent-panel-body">
           <section class="agent-panel-section" style="border-left-color:${TOKENS.research}">
             <div class="agent-panel-eyebrow" style="color:${TOKENS.research};margin-bottom:4px">Plan</div>
-            <p>${escapeHtml(session ? "Method and result notes linked." : "No reading packet selected.")}</p>
+            <p>${escapeHtml(plan ? `${plans.length} plan · ${experimentRuns.length} run · ${dossiers.length} dossier` : session || sourcePacket ? "Reading packet linked. Create a plan from Reader handoff." : "No reading packet selected.")}</p>
           </section>
           <section class="agent-panel-section" style="border-left-color:${TOKENS.result}">
             <div class="agent-panel-eyebrow" style="color:${TOKENS.result};margin-bottom:4px">Compare</div>
-            <p>${escapeHtml(compareActive ? "Result dossier selected." : "Delta table is empty.")}</p>
+            <p>${escapeHtml(dossiers.length ? `${dossiers.length} result dossier ready.` : compareActive ? "Result dossier selected." : "Delta table is empty.")}</p>
           </section>
         </div>
         <div class="agent-panel-footer">
@@ -4794,6 +4880,16 @@ document.addEventListener("click", async (event) => {
       await handoffReadingToResearch({
         noteId: noteCard?.dataset.readingNoteId || "",
       });
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
+  if (action === "create-manual-experiment-run") {
+    try {
+      await createManualExperimentRun();
     } catch (error) {
       state.error = error.message;
       render();

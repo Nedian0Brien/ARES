@@ -238,7 +238,7 @@
 
 ### Task 4.1: ReproductionPlan 생성 flow
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `services/backend/lib/agent-runs.mjs`
   - `services/backend/index.mjs`
@@ -248,12 +248,12 @@
   - ReadingPacket/EvidenceLink ID가 plan에 포함된다.
   - stage 이동만 하고 끝나는 action이 아니다.
 - **Validation**:
-  - backend route test
-  - browser smoke
+  - `services/backend/tests/lab-tab-contract.test.mjs`
+  - `npm test`
 
 ### Task 4.2: ExperimentRun manual entry
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `services/backend/index.mjs`
   - `web/app.js`
@@ -263,12 +263,12 @@
   - run status, metric, artifact note가 저장된다.
   - ResultDossier 생성에 사용할 수 있다.
 - **Validation**:
-  - route test
-  - browser smoke
+  - `services/backend/tests/lab-tab-contract.test.mjs`
+  - `npm test`
 
 ### Task 4.3: ResultDossier comparison view
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `web/app.js`
   - 신규 가능: `web/app/features/lab.js`
@@ -277,8 +277,8 @@
   - dossier가 evidence link와 experiment run을 참조한다.
   - unsupported 자동 실행은 setup-required로 표시된다.
 - **Validation**:
-  - contract test
-  - browser smoke
+  - `services/backend/tests/lab-tab-contract.test.mjs`
+  - `npm test`
 
 ## 8. Sprint 5: Evidence Board
 
