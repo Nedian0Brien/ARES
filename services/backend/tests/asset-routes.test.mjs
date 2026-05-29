@@ -140,5 +140,30 @@ test('asset graph routes expose project graph and create graph assets', async (t
   const listed = await listResponse.json();
   assert.equal(listResponse.status, 200);
   assert.equal(listed.results[0].id, created.asset.id);
-});
 
+  const draftResponse = await fetch(new URL('/api/projects/demo/drafts', server.url), {
+    body: JSON.stringify({
+      title: 'Demo draft',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const draft = await draftResponse.json();
+  assert.equal(draftResponse.status, 201);
+
+  const sectionResponse = await fetch(new URL('/api/projects/demo/draft-sections', server.url), {
+    body: JSON.stringify({
+      body: 'Calibration controls adaptive reranking risk.',
+      draftId: draft.asset.id,
+      evidenceLinkIds: ['evidence-1'],
+      insightCardIds: [created.asset.id],
+      title: 'Method',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const section = await sectionResponse.json();
+  assert.equal(sectionResponse.status, 201);
+  assert.equal(section.asset.draftId, draft.asset.id);
+  assert.deepEqual(section.asset.insightCardIds, [created.asset.id]);
+});

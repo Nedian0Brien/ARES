@@ -291,7 +291,7 @@
 
 ### Task 5.1: Evidence stream
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - 신규 가능: `web/app/features/evidence.js`
   - `web/app.js`
@@ -301,11 +301,12 @@
   - paper quote, note, result delta가 구분된다.
   - evidence 없는 claim 생성은 기본 flow가 아니다.
 - **Validation**:
-  - browser smoke
+  - `services/backend/tests/insight-tab-contract.test.mjs`
+  - `npm test`
 
 ### Task 5.2: InsightCard CRUD
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `services/backend/index.mjs`
   - `web/app.js`
@@ -315,8 +316,9 @@
   - evidenceLinkIds, confidence, nextAction이 저장된다.
   - Writing 또는 Lab으로 handoff할 수 있다.
 - **Validation**:
-  - route test
-  - browser smoke
+  - `services/backend/tests/asset-routes.test.mjs`
+  - `services/backend/tests/insight-tab-contract.test.mjs`
+  - `npm test`
 
 ## 9. Sprint 6: Draft Studio
 
@@ -329,7 +331,7 @@
 
 ### Task 6.1: Draft and DraftSection store/API
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `services/backend/index.mjs`
   - store implementations
@@ -338,11 +340,12 @@
 - **Acceptance Criteria**:
   - DraftSection이 insightCardIds/evidenceLinkIds를 가진다.
 - **Validation**:
-  - route test
+  - `services/backend/tests/asset-routes.test.mjs`
+  - `npm test`
 
 ### Task 6.2: Draft Studio UI
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - 신규 가능: `web/app/features/draft.js`
   - `web/app.js`
@@ -352,7 +355,8 @@
   - 문단이 어떤 insight/evidence에서 왔는지 확인 가능하다.
   - export 전에도 draft state가 저장된다.
 - **Validation**:
-  - browser smoke
+  - `services/backend/tests/writing-tab-contract.test.mjs`
+  - `npm test`
 
 ## 10. Sprint 7: Runtime Hardening
 

@@ -939,6 +939,97 @@ async function createManualExperimentRun() {
   render();
 }
 
+function graphEvidenceItems() {
+  const evidenceLinks = Array.isArray(state.projectGraph?.evidenceLinks) ? state.projectGraph.evidenceLinks : [];
+  const resultDossiers = Array.isArray(state.projectGraph?.resultDossiers) ? state.projectGraph.resultDossiers : [];
+  const linkItems = evidenceLinks.map((link) => ({
+    cat: link.sourceType === "note" ? "paper quote" : link.sourceType || "evidence",
+    evidenceLinkIds: [link.id].filter(Boolean),
+    page: link.page || link.locator?.page || "",
+    text: link.quote || "Linked evidence",
+  }));
+  const resultItems = resultDossiers.flatMap((dossier) =>
+    (Array.isArray(dossier.comparisons) ? dossier.comparisons : []).map((comparison) => ({
+      cat: "result delta",
+      evidenceLinkIds: Array.isArray(dossier.evidenceLinkIds) ? dossier.evidenceLinkIds : [],
+      page: "",
+      text: comparison.summary || comparison.delta || dossier.deltaSummary || "Result delta",
+    })),
+  );
+  return [...linkItems, ...resultItems];
+}
+
+async function createInsightCardFromEvidence() {
+  const project = activeProject();
+  if (!project) {
+    return;
+  }
+
+  const evidence = graphEvidenceItems()[0] || null;
+  if (!evidence?.text || !evidence.evidenceLinkIds?.length) {
+    state.error = "Link evidence before creating an insight card.";
+    render();
+    return;
+  }
+
+  await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
+    method: "POST",
+    body: JSON.stringify({
+      claim: String(evidence.text).replace(/\s+/g, " ").slice(0, 180),
+      confidence: "unrated",
+      evidenceLinkIds: evidence.evidenceLinkIds,
+      nextAction: "Send to Writing or Lab",
+      questionId: activeResearchQuestion()?.id || "",
+      type: "claim",
+    }),
+  });
+
+  await loadProjectGraph();
+  render();
+}
+
+async function createDraftSectionFromInsight() {
+  const project = activeProject();
+  if (!project) {
+    return;
+  }
+
+  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
+  const drafts = Array.isArray(state.projectGraph?.drafts) ? state.projectGraph.drafts : [];
+  const insightCard = insightCards[0] || null;
+  if (!insightCard?.id) {
+    state.error = "Create an insight card before drafting.";
+    render();
+    return;
+  }
+
+  const draft =
+    drafts[0] ||
+    (
+      await api(`api/projects/${encodeURIComponent(project.id)}/drafts`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: `${project.name || "ARES"} draft`,
+        }),
+      })
+    ).asset;
+
+  await api(`api/projects/${encodeURIComponent(project.id)}/draft-sections`, {
+    method: "POST",
+    body: JSON.stringify({
+      body: insightCard.claim,
+      draftId: draft.id,
+      evidenceLinkIds: insightCard.evidenceLinkIds || [],
+      insightCardIds: [insightCard.id],
+      sectionType: "method",
+      title: "Method",
+    }),
+  });
+
+  await loadProjectGraph();
+  render();
+}
+
 function readingCitationText(session) {
   const authors = Array.isArray(session?.authors) && session.authors.length ? session.authors.join(", ") : "Unknown authors";
   const title = session?.title || "Untitled paper";
@@ -3236,7 +3327,9 @@ function renderInsightStage(project) {
   const session = selectedReadingSession();
   const notes = Array.isArray(session?.notes) ? session.notes : [];
   const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
-  const evidenceItems = [...notes, ...highlights].slice(0, 4);
+  const graphEvidence = graphEvidenceItems();
+  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
+  const evidenceItems = graphEvidence.length ? graphEvidence : [...notes, ...highlights].slice(0, 4);
   const hasEvidence = evidenceItems.length > 0;
   const fallbackEvidence = [
     {
@@ -3251,11 +3344,15 @@ function renderInsightStage(project) {
   const evidence = evidenceItems.length
     ? evidenceItems.map((entry) => ({
         cat: entry.cat || entry.type || entry.kind || "Evidence",
+        evidenceLinkIds: Array.isArray(entry.evidenceLinkIds)
+          ? entry.evidenceLinkIds
+          : [entry.evidenceLinkId].filter(Boolean),
         page: entry.page || "",
         text: entry.quote || entry.text || entry.body || entry.memo || "No evidence text",
       }))
     : fallbackEvidence;
-  const primaryClaim = hasEvidence ? evidence[0]?.text : project?.focus || "Select evidence to draft a claim";
+  const primaryCard = insightCards[0] || null;
+  const primaryClaim = primaryCard?.claim || (hasEvidence ? evidence[0]?.text : project?.focus || "Select evidence to draft a claim");
   const focus = project?.focus || session?.title || "current research direction";
   const hypotheses = hasEvidence
     ? [
@@ -3276,6 +3373,7 @@ function renderInsightStage(project) {
           <div class="insight-hero-actions">
             <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
             <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
+            <button type="button" class="btn-s" data-action="create-insight-card" ${hasEvidence ? "" : "disabled"}>Create insight card</button>
           </div>
         </div>
 
@@ -3305,33 +3403,53 @@ function renderInsightStage(project) {
           <section class="insight-panel insight-panel--cards">
             <div class="insight-panel-head">
               <span class="insight-card-label">Claims</span>
-              ${renderTag("Insight Card", TOKENS.insight, true)}
+              ${renderTag(`${insightCards.length || 1} Insight Card`, TOKENS.insight, true)}
             </div>
-            <article class="insight-card is-primary">
-              <div class="insight-card-top">
-                <span class="insight-card-label">Insight Card</span>
-                ${renderTag(hasEvidence ? "draft" : "empty", hasEvidence ? TOKENS.insight : TOKENS.t3, hasEvidence)}
-              </div>
-              <h2>${escapeHtml(String(primaryClaim).replace(/\s+/g, " ").slice(0, 96))}</h2>
-              <dl>
-                <div>
-                  <dt>linked evidence</dt>
-                  <dd>${escapeHtml(evidence[0]?.cat || "Evidence")}</dd>
-                </div>
-                <div>
-                  <dt>confidence</dt>
-                  <dd>${escapeHtml(hasEvidence ? "unrated" : "—")}</dd>
-                </div>
-                <div>
-                  <dt>next action</dt>
-                  <dd>${escapeHtml(hasEvidence ? "Send to Writing or Lab" : "Link evidence")}</dd>
-                </div>
-              </dl>
-              <div class="insight-card-actions">
-                <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
-                <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
-              </div>
-            </article>
+            ${
+              (insightCards.length
+                ? insightCards
+                : [
+                    {
+                      claim: primaryClaim,
+                      confidence: hasEvidence ? "unrated" : "—",
+                      evidenceLinkIds: evidence[0]?.evidenceLinkIds || [],
+                      nextAction: hasEvidence ? "Send to Writing or Lab" : "Link evidence",
+                      status: hasEvidence ? "draft" : "empty",
+                    },
+                  ]
+              )
+                .slice(0, 3)
+                .map(
+                  (card, index) => `
+                    <article class="insight-card ${index === 0 ? "is-primary" : ""}">
+                      <div class="insight-card-top">
+                        <span class="insight-card-label">Insight Card</span>
+                        ${renderTag(card.status || "draft", hasEvidence || insightCards.length ? TOKENS.insight : TOKENS.t3, Boolean(hasEvidence || insightCards.length))}
+                      </div>
+                      <h2>${escapeHtml(String(card.claim || primaryClaim).replace(/\s+/g, " ").slice(0, 96))}</h2>
+                      <dl>
+                        <div>
+                          <dt>linked evidence</dt>
+                          <dd>${escapeHtml(card.evidenceLinkIds?.length ? `${card.evidenceLinkIds.length} source` : evidence[0]?.cat || "Evidence")}</dd>
+                        </div>
+                        <div>
+                          <dt>confidence</dt>
+                          <dd>${escapeHtml(card.confidence || "unrated")}</dd>
+                        </div>
+                        <div>
+                          <dt>next action</dt>
+                          <dd>${escapeHtml(card.nextAction || "Send to Writing or Lab")}</dd>
+                        </div>
+                      </dl>
+                      <div class="insight-card-actions">
+                        <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
+                        <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
+                      </div>
+                    </article>
+                  `,
+                )
+                .join("")
+            }
           </section>
 
           <aside class="insight-panel">
@@ -3369,22 +3487,33 @@ function renderInsightStage(project) {
 function renderWritingStage(project) {
   const session = selectedReadingSession();
   const sourceTitle = session?.title || dashboardLibraryItems()[0]?.title || project?.name || "Untitled research draft";
-  const sections = [
-    { id: "abstract", label: "Abstract", status: "todo", words: 0 },
-    { id: "intro", label: "Introduction", status: "queue", words: 120 },
-    { id: "related", label: "Related Work", status: "todo", words: 0 },
-    { id: "method", label: "Method", status: "queue", words: 180 },
-    { id: "experiments", label: "Experiments", status: "todo", words: 0 },
-    { id: "conclusion", label: "Conclusion", status: "todo", words: 0 },
-  ];
+  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
+  const draftSections = Array.isArray(state.projectGraph?.draftSections) ? state.projectGraph.draftSections : [];
+  const sections = draftSections.length
+    ? draftSections.map((section) => ({
+        id: section.id,
+        label: section.title || section.sectionType || "Section",
+        status: section.status || "draft",
+        words: String(section.body || "").split(/\s+/).filter(Boolean).length,
+      }))
+    : [
+        { id: "abstract", label: "Abstract", status: "todo", words: 0 },
+        { id: "intro", label: "Introduction", status: "queue", words: 120 },
+        { id: "related", label: "Related Work", status: "todo", words: 0 },
+        { id: "method", label: "Method", status: "queue", words: 180 },
+        { id: "experiments", label: "Experiments", status: "todo", words: 0 },
+        { id: "conclusion", label: "Conclusion", status: "todo", words: 0 },
+      ];
+  const activeSection = draftSections[0] || null;
+  const activeInsight = insightCards[0] || null;
   const evidence = [
     {
       label: "Insight Card",
-      detail: session?.summary || "No claim selected.",
+      detail: activeInsight?.claim || session?.summary || "No claim selected.",
     },
     {
       label: "Evidence Bundle",
-      detail: sourceTitle,
+      detail: activeInsight?.evidenceLinkIds?.length ? `${activeInsight.evidenceLinkIds.length} linked source` : sourceTitle,
     },
     {
       label: "Result Dossier",
@@ -3419,9 +3548,9 @@ function renderWritingStage(project) {
               <div class="writing-kicker">${icon("pen", { size: 14, color: TOKENS.writing })}<span>Writing</span></div>
               <h1>Draft from evidence</h1>
               <p>Source-linked sections and export queue.</p>
-            </div>
+          </div>
           <div class="writing-actions">
-            <button type="button" class="btn-p" disabled>Generate section</button>
+            <button type="button" class="btn-p" data-action="create-draft-section" ${activeInsight ? "" : "disabled"}>Generate section</button>
             <button type="button" class="btn-s" disabled>Export</button>
           </div>
         </div>
@@ -3432,11 +3561,11 @@ function renderWritingStage(project) {
             ${renderTag("source-linked draft", TOKENS.writing, true)}
           </div>
           <article class="writing-draft-body">
-            <h2>Method</h2>
+            <h2>${escapeHtml(activeSection?.title || "Method")}</h2>
             <p>
               Source: <strong>${escapeHtml(sourceTitle)}</strong>
             </p>
-            <blockquote>No suggestion selected.</blockquote>
+            <blockquote>${escapeHtml(activeSection?.body || "No suggestion selected.")}</blockquote>
           </article>
           <div class="writing-suggestion-bar">
             <button type="button" class="btn-s" data-action="select-stage" data-stage-id="insight">Insert evidence</button>
@@ -4890,6 +5019,26 @@ document.addEventListener("click", async (event) => {
   if (action === "create-manual-experiment-run") {
     try {
       await createManualExperimentRun();
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
+  if (action === "create-insight-card") {
+    try {
+      await createInsightCardFromEvidence();
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
+  if (action === "create-draft-section") {
+    try {
+      await createDraftSectionFromInsight();
     } catch (error) {
       state.error = error.message;
       render();
