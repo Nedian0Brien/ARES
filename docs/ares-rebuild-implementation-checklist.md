@@ -13,14 +13,14 @@
 
 전체 재구성은 아래 조건을 모두 만족해야 완료다.
 
-- [ ] `Paper -> ReadingPacket -> ReproductionPlan -> ExperimentRun -> ResultDossier -> InsightCard -> DraftSection` 흐름이 저장소 모델로 표현된다.
-- [ ] Reader에서 만든 evidence가 Lab, Evidence, Draft까지 같은 ID로 추적된다.
-- [ ] Agent run output이 message가 아니라 asset candidate 또는 asset mutation으로 저장된다.
-- [ ] Queue, Reader, Lab, Evidence, Draft surface가 각각 자신의 산출물을 실제로 만들고 조회한다.
-- [ ] 기존 Search/Reading 기능이 새 asset graph 아래에서 동작한다.
-- [ ] placeholder action은 제거되거나 disabled/setup-required 상태로 명확히 표시된다.
-- [ ] `npm run lint`와 `npm test`가 통과한다.
-- [ ] dev 배포 또는 로컬 dev server smoke를 통해 `https://lawdigest.kr/proxy/3100/`에서 확인 가능하다.
+- [x] `Paper -> ReadingPacket -> ReproductionPlan -> ExperimentRun -> ResultDossier -> InsightCard -> DraftSection` 흐름이 저장소 모델로 표현된다.
+- [x] Reader에서 만든 evidence가 Lab, Evidence, Draft까지 같은 ID로 추적된다.
+- [x] Agent run output이 message가 아니라 asset candidate 또는 asset mutation으로 저장된다.
+- [x] Queue, Reader, Lab, Evidence, Draft surface가 각각 자신의 산출물을 실제로 만들고 조회한다.
+- [x] 기존 Search/Reading 기능이 새 asset graph 아래에서 동작한다.
+- [x] placeholder action은 제거되거나 disabled/setup-required 상태로 명확히 표시된다.
+- [x] `npm run lint`와 `npm test`가 통과한다.
+- [x] dev 배포 또는 로컬 dev server smoke를 통해 `https://lawdigest.kr/proxy/3100/`에서 확인 가능하다.
 
 ## 3. Sprint 0: 기준 고정
 
