@@ -214,3 +214,61 @@ test('reading routes deliver binary PDF, enforce summarize prerequisite, and par
   assert.ok(parsed.session.pageCount >= 1);
   assert.ok(parsed.session.assets.length >= 1);
 });
+
+test('reading routes create sessions from uploaded PDFs', async (t) => {
+  const dataRootDir = await createDataRoot();
+  const server = await startServer(dataRootDir);
+  t.after(async () => {
+    await server.close();
+  });
+
+  const uploadResponse = await fetch(new URL('/api/projects/demo/reading-sessions/upload', server.url), {
+    body: JSON.stringify({
+      contentBase64: Buffer.from('%PDF-1.4\n%%EOF').toString('base64'),
+      fileName: 'uploaded-paper.pdf',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const uploaded = await uploadResponse.json();
+
+  assert.equal(uploadResponse.status, 200);
+  assert.equal(uploaded.paper.sourceProvider, 'upload');
+  assert.equal(uploaded.readingSession.title, 'uploaded-paper');
+  assert.match(uploaded.readingSession.pdfUrl, /^uploaded:\/\//);
+
+  const sessionsResponse = await fetch(new URL('/api/projects/demo/reading-sessions', server.url));
+  const sessions = await sessionsResponse.json();
+  assert.ok(sessions.results.some((session) => session.id === uploaded.readingSession.id));
+
+  const libraryResponse = await fetch(new URL('/api/projects/demo/library', server.url));
+  const library = await libraryResponse.json();
+  assert.ok(library.results.some((paper) => paper.paperId === uploaded.paper.paperId));
+
+  const pdfResponse = await fetch(new URL(`/api/reading-sessions/${uploaded.readingSession.id}/pdf`, server.url));
+  const pdfBytes = new Uint8Array(await pdfResponse.arrayBuffer());
+  assert.equal(pdfResponse.status, 200);
+  assert.equal(new TextDecoder().decode(pdfBytes.slice(0, 5)), '%PDF-');
+});
+
+test('reading routes create sessions from binary PDF uploads', async (t) => {
+  const dataRootDir = await createDataRoot();
+  const server = await startServer(dataRootDir);
+  t.after(async () => {
+    await server.close();
+  });
+
+  const uploadResponse = await fetch(new URL('/api/projects/demo/reading-sessions/upload', server.url), {
+    body: Buffer.from('%PDF-1.4\n%%EOF'),
+    headers: {
+      'content-type': 'application/pdf',
+      'x-file-name': encodeURIComponent('binary-upload.pdf'),
+    },
+    method: 'POST',
+  });
+  const uploaded = await uploadResponse.json();
+
+  assert.equal(uploadResponse.status, 200);
+  assert.equal(uploaded.paper.sourceName, 'binary-upload.pdf');
+  assert.equal(uploaded.readingSession.title, 'binary-upload');
+});

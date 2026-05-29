@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 import { PDFParse } from 'pdf-parse';
 
@@ -13,6 +14,8 @@ import {
 const READING_RUNTIME_DIR = path.join('data', 'runtime', 'reading');
 const DEMO_PDF_HOST = 'example.org';
 const MAX_CHAT_CHUNKS = 4;
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const MAX_UPLOAD_MB = Math.round(MAX_UPLOAD_BYTES / 1024 / 1024);
 
 function ensureString(value, fallback = '') {
   if (value === null || value === undefined) {
@@ -203,6 +206,38 @@ function createDemoPdfBuffer(session) {
 
 function buildSessionRelativePath(sessionId, fileName) {
   return path.join(READING_RUNTIME_DIR, sessionId, fileName).replaceAll('\\', '/');
+}
+
+function slugFileName(value, fallback = 'upload.pdf') {
+  const base = ensureTrimmedString(value, fallback)
+    .replace(/[/\\]/g, '-')
+    .replace(/[^a-zA-Z0-9._ -]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const withName = base || fallback;
+  return /\.pdf$/i.test(withName) ? withName : `${withName}.pdf`;
+}
+
+function titleFromFileName(value) {
+  return slugFileName(value).replace(/\.pdf$/i, '').trim() || 'Uploaded PDF';
+}
+
+function decodeUploadedPdf({ contentBase64 = '', contentBuffer = null } = {}) {
+  const compact = ensureTrimmedString(contentBase64, '').replace(/^data:application\/pdf;base64,/i, '');
+  if (!compact && !contentBuffer) {
+    throw new Error('PDF upload content is required.');
+  }
+
+  const buffer = contentBuffer ? Buffer.from(contentBuffer) : Buffer.from(compact, 'base64');
+  if (!buffer.length || buffer.length > MAX_UPLOAD_BYTES) {
+    throw new Error(`PDF upload must be between 1 byte and ${MAX_UPLOAD_MB}MB.`);
+  }
+
+  if (buffer.subarray(0, 5).toString('utf8') !== '%PDF-') {
+    throw new Error('Uploaded file must be a PDF.');
+  }
+
+  return buffer;
 }
 
 function resolveSafePath(rootDir, relativePath) {
@@ -1013,6 +1048,65 @@ Rules:
         status: session.status,
       });
       return normaliseReadingSession(session);
+    },
+
+    async createUploadedSession({ contentBase64, contentBuffer, fileName = 'upload.pdf', projectId, title = '' } = {}) {
+      if (!projectId) {
+        throw new Error('projectId is required.');
+      }
+
+      const buffer = decodeUploadedPdf({ contentBase64, contentBuffer });
+      const safeFileName = slugFileName(fileName);
+      const paperId = `upload-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      const paperTitle = ensureTrimmedString(title, titleFromFileName(safeFileName));
+      const timestamp = nowIso();
+      const paper = {
+        abstract: '',
+        authors: [],
+        citedByCount: 0,
+        keyPoints: [],
+        keywords: [],
+        matchedKeywords: [],
+        openAccess: true,
+        paperId,
+        paperUrl: null,
+        pdfUrl: `uploaded://${paperId}/${encodeURIComponent(safeFileName)}`,
+        relevance: 0,
+        sourceName: safeFileName,
+        sourceProvider: 'upload',
+        summary: '',
+        title: paperTitle,
+        venue: 'Uploaded PDF',
+        year: null,
+      };
+
+      const savedPaper = await store.savePaper(projectId, paper);
+      const seed = buildReadingSessionSeed(projectId, savedPaper, {
+        createdAt: timestamp,
+        sourceRefs: [{ id: paperId, type: 'upload', label: safeFileName }],
+        status: 'todo',
+      });
+      const session = normaliseReadingSession(seed);
+      const pdfCachePath = await writeBinaryAsset(session.id, 'source.pdf', buffer);
+      const nextSession = await store.upsertReadingSession(
+        normaliseReadingSession(
+          {
+            ...session,
+            pdfCachePath,
+          },
+          { existing: session },
+        ),
+      );
+
+      await store.queuePaper(projectId, savedPaper, {
+        sessionId: nextSession.id,
+        status: nextSession.status,
+      });
+
+      return {
+        paper: savedPaper,
+        session: normaliseReadingSession(nextSession),
+      };
     },
 
     async getSession(sessionId) {

@@ -136,23 +136,40 @@ function notFound(response) {
   json(response, 404, { error: 'Not found' });
 }
 
-async function readJsonBody(request) {
+async function readRequestBody(request) {
   const chunks = [];
   for await (const chunk of request) {
     chunks.push(chunk);
   }
 
-  if (!chunks.length) {
+  return Buffer.concat(chunks);
+}
+
+async function readJsonBody(request) {
+  const body = await readRequestBody(request);
+
+  if (!body.length) {
     return {};
   }
 
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  return JSON.parse(body.toString('utf8'));
 }
 
 function sendError(response, error, statusCode = 500) {
   json(response, statusCode, {
     error: error instanceof Error ? error.message : String(error),
   });
+}
+
+function uploadErrorStatus(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/100MB|between 1 byte/i.test(message)) {
+    return 413;
+  }
+  if (/PDF upload content|must be a PDF/i.test(message)) {
+    return 400;
+  }
+  return 500;
 }
 
 function sendSseEvent(response, event, payload) {
@@ -247,6 +264,38 @@ function registerLiveReloadClient(request, response) {
   request.on('close', () => {
     clearInterval(heartbeat);
     liveReloadClients.delete(client);
+  });
+}
+
+function registerAgentRunEventClient(request, response, runId) {
+  const initialPayload = agentRunService.getRun(runId);
+  if (!initialPayload) {
+    notFound(response);
+    return;
+  }
+
+  response.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-store',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no',
+  });
+  response.write('retry: 2500\n');
+
+  const sendRun = (payload) => {
+    sendSseEvent(response, 'run', payload);
+  };
+  sendRun(initialPayload);
+
+  const heartbeat = setInterval(() => {
+    response.write(': keep-alive\n\n');
+  }, 15000);
+  heartbeat.unref?.();
+
+  const unsubscribe = agentRunService.subscribeRun(runId, sendRun);
+  request.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
   });
 }
 
@@ -360,6 +409,11 @@ function parseAgentRunId(requestPath) {
 
 function parseAgentRunActionId(requestPath) {
   const match = requestPath.match(/^\/api\/agent-runs\/([^/]+)\/actions$/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
+function parseAgentRunEventsId(requestPath) {
+  const match = requestPath.match(/^\/api\/agent-runs\/([^/]+)\/events$/);
   return match ? decodeURIComponent(match[1]) : '';
 }
 
@@ -602,6 +656,11 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && /^\/api\/agent-runs\/[^/]+\/events$/.test(requestPath)) {
+      registerAgentRunEventClient(request, response, parseAgentRunEventsId(requestPath));
+      return;
+    }
+
     if (request.method === 'POST' && /^\/api\/agent-runs\/[^/]+\/actions$/.test(requestPath)) {
       const runId = parseAgentRunActionId(requestPath);
       const body = await readJsonBody(request);
@@ -808,6 +867,32 @@ const server = http.createServer(async (request, response) => {
         queued,
         readingSession: session,
       });
+      return;
+    }
+
+    if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/reading-sessions\/upload$/.test(requestPath)) {
+      const projectId = parseProjectRoute(requestPath, 'reading-sessions/upload');
+      try {
+        const contentType = String(request.headers['content-type'] || '');
+        const fileNameHeader = String(request.headers['x-file-name'] || '');
+        const decodedFileName = fileNameHeader ? decodeURIComponent(fileNameHeader) : '';
+        const body = contentType.includes('application/json') ? await readJsonBody(request) : {};
+        const payload = await readingService.createUploadedSession({
+          contentBase64: body.contentBase64,
+          contentBuffer: contentType.includes('application/json') ? null : await readRequestBody(request),
+          fileName: body.fileName || decodedFileName,
+          projectId,
+          title: body.title,
+        });
+
+        json(response, 200, {
+          paper: payload.paper,
+          project: store.getProject(projectId),
+          readingSession: payload.session,
+        });
+      } catch (error) {
+        sendError(response, error, uploadErrorStatus(error));
+      }
       return;
     }
 

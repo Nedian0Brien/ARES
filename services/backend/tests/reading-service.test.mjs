@@ -125,6 +125,30 @@ test('reading service parses cached PDF and seeds sections, notes, and assets', 
   await fs.access(path.join(rootDir, payload.session.parsedArtifactPath));
 });
 
+test('reading service creates uploaded PDF sessions with cached source files', async (t) => {
+  const { rootDir, service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const payload = await service.createUploadedSession({
+    contentBase64: Buffer.from('%PDF-1.4\n%%EOF').toString('base64'),
+    fileName: 'local-paper.pdf',
+    projectId: 'demo',
+  });
+
+  assert.equal(payload.paper.sourceProvider, 'upload');
+  assert.equal(payload.session.title, 'local-paper');
+  assert.equal(payload.session.sourceProvider, 'upload');
+  assert.ok(payload.session.pdfCachePath);
+  assert.match(payload.session.pdfUrl, /^uploaded:\/\//);
+
+  const pdf = await service.getSessionPdf(payload.session.id);
+  assert.equal(pdf.buffer.subarray(0, 5).toString('utf8'), '%PDF-');
+  await fs.access(path.join(rootDir, payload.session.pdfCachePath));
+  assert.ok(store.getLibrary('demo').some((paper) => paper.paperId === payload.paper.paperId));
+});
+
 test('reading service marks metadata-only sessions as parse errors when pdf is missing', async (t) => {
   const { service, store } = await createHarness();
   t.after(async () => {

@@ -34,6 +34,33 @@ function createFailingSpawn() {
   };
 }
 
+function createDelayedFailingSpawn(delayMs = 30) {
+  return function spawnImpl(_command, args) {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.exitCode = null;
+    child.kill = () => {
+      child.exitCode = 0;
+      child.emit('close', 0, null);
+    };
+
+    process.nextTick(() => {
+      if (args.includes('--version')) {
+        child.exitCode = 0;
+        child.emit('close', 0, null);
+        return;
+      }
+
+      setTimeout(() => {
+        child.emit('error', new Error('runtime unavailable'));
+      }, delayMs);
+    });
+
+    return child;
+  };
+}
+
 function paperFixture(overrides = {}) {
   return {
     abstract: 'A paper about local inference serving.',
@@ -113,6 +140,20 @@ async function waitForRun(store, runId, timeoutMs = 1000) {
   throw new Error(`Timed out waiting for run ${runId}`);
 }
 
+async function waitForEvent(events, predicate, timeoutMs = 1000) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (events.some(predicate)) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  throw new Error('Timed out waiting for agent run event.');
+}
+
 test('reading agent run falls back locally and creates a reading session', async () => {
   const store = await createDemoStore();
   const service = createAgentRunService({
@@ -155,6 +196,36 @@ test('reading agent run falls back locally and creates a reading session', async
   assert.equal(sessions[0].paperId, 'paper-42');
   assert.equal(sessions[0].status, 'done');
   assert.ok(sessions[0].sections.length > 0);
+});
+
+test('agent run service notifies subscribers when run state changes', async () => {
+  const store = await createDemoStore();
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createDelayedFailingSpawn(),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      paper: paperFixture(),
+      paperId: 'paper-local-serving',
+    },
+    projectId: 'demo',
+    stage: 'reading',
+    taskKind: 'create-reading-session',
+  });
+  const events = [];
+  const unsubscribe = service.subscribeRun(run.id, (payload) => {
+    events.push(payload.run.status);
+  });
+
+  await waitForRun(store, run.id);
+  await waitForEvent(events, (status) => status === 'done');
+  unsubscribe();
+
+  assert.ok(events.includes('running'));
+  assert.ok(events.includes('done'));
 });
 
 test('search agent run reports an error when Scout service is unavailable', async () => {

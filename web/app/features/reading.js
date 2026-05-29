@@ -602,7 +602,10 @@ export function createReadingFeature({
               class="reading-home-content ${layout === "desktop" && selected ? "is-resizable" : ""}"
               style="${layout === "desktop" && selected ? `--reading-home-preview-w:${state.readingHomePreviewWidth}px` : ""}"
             >
-              <article class="reading-home-panel">
+              <article
+                class="reading-home-panel reading-home-dropzone ${state.readingPdfDropActive ? "is-dragging" : ""}"
+                data-reading-pdf-dropzone="true"
+              >
                 <div class="reading-home-panel-head">
                   <div class="reading-home-panel-title-wrap">
                     <span class="reading-home-panel-kicker">Worklist</span>
@@ -636,6 +639,20 @@ export function createReadingFeature({
                   </div>
   
                   <div class="reading-home-tool-row">
+                    <label
+                      class="reading-home-tool-btn reading-home-upload-btn ${state.readingUploading ? "is-busy" : ""}"
+                      ${state.readingUploading ? 'aria-disabled="true"' : ""}
+                    >
+                      <input
+                        class="reading-home-upload-input"
+                        type="file"
+                        name="readingPdfUpload"
+                        accept="application/pdf,.pdf"
+                        ${state.readingUploading ? "disabled" : ""}
+                      />
+                      ${icon("pdf", { size: 12, color: "currentColor" })}
+                      <span>${state.readingUploading ? "Uploading" : "Upload PDF"}</span>
+                    </label>
                     <button type="button" class="reading-home-tool-btn">
                       ${icon("filter", { size: 12, color: "currentColor" })}
                       <span>Filter</span>
@@ -644,6 +661,10 @@ export function createReadingFeature({
                       <span>Sort: Saved newest</span>
                       ${icon("chevD", { size: 12, color: TOKENS.t3 })}
                     </button>
+                  </div>
+                  <div class="reading-home-drop-hint">
+                    ${icon("pdf", { size: 12, color: "currentColor" })}
+                    <span>${state.readingPdfDropActive ? "Drop PDF to upload" : "Drag PDF here"}</span>
                   </div>
                 </div>
   

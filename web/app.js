@@ -293,6 +293,8 @@ const INITIAL_SEARCH_LAYOUT = detectSearchLayout();
 const INITIAL_FILTER_PANEL_OPEN = INITIAL_SEARCH_LAYOUT === "desktop";
 const INITIAL_PREVIEW_PANEL_OPEN = false;
 const INITIAL_READING_HOME_LAYOUT = detectReadingHomeLayout();
+const MAX_READING_PDF_UPLOAD_BYTES = 100 * 1024 * 1024;
+const MAX_READING_PDF_UPLOAD_LABEL = "100MB";
 
 function defaultReadingRailOpen(layout = detectSearchLayout()) {
   return layout === "desktop" ? "overview" : "";
@@ -303,6 +305,8 @@ const state = {
   hasSearched: false,
   loading: false,
   readingLoading: false,
+  readingUploading: false,
+  readingPdfDropActive: false,
   savingPaperId: "",
   readingStartingPaperId: "",
   error: "",
@@ -381,6 +385,7 @@ const state = {
 const app = document.querySelector("#app");
 let modalClosing = false;
 let activeRunPollTimer = 0;
+let activeRunEventSource = null;
 let readingResizeDrag = null;
 let readingResizeFrame = 0;
 let readingHomeResizeDrag = null;
@@ -739,6 +744,9 @@ function api(path, options = {}) {
   }).then(async (response) => {
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
+      if (response.status === 413) {
+        throw new Error(`PDF 파일은 최대 ${MAX_READING_PDF_UPLOAD_LABEL}까지 업로드할 수 있습니다.`);
+      }
       throw new Error(payload.error || `Request failed with ${response.status}`);
     }
 
@@ -850,7 +858,7 @@ async function handoffReadingToResearch({ noteId = "" } = {}) {
   saveStorage(STORAGE_KEYS.stage, state.activeStage);
   if (payload?.run?.id) {
     state.activeReadingRunId = payload.run.id;
-    void pollAgentRun(payload.run.id);
+    subscribeAgentRun(payload.run.id);
   }
   renderWithViewTransition();
 }
@@ -1017,7 +1025,7 @@ async function applyBrowserRouteFromUrl() {
           },
           state.searchAgentRun || {},
         );
-        void pollAgentRun(route.searchAgentRunId);
+        subscribeAgentRun(route.searchAgentRunId);
       } else {
         state.searchAgentRun = null;
         state.searchAgentTransitioning = false;
@@ -1919,6 +1927,10 @@ function clearActiveRunPoll() {
     window.clearTimeout(activeRunPollTimer);
     activeRunPollTimer = 0;
   }
+  if (activeRunEventSource) {
+    activeRunEventSource.close();
+    activeRunEventSource = null;
+  }
 }
 
 function setProjects(projects) {
@@ -1979,8 +1991,47 @@ async function loadReadingSessions({ preserveSelection = true } = {}) {
   }
 }
 
+async function applyAgentRunPayload(payload) {
+  const run = payload?.run || null;
+  if (!run) {
+    state.activeReadingRunId = "";
+    return true;
+  }
+
+  if (run.stage === "reading") {
+    await loadProjects();
+    await loadReadingSessions({ preserveSelection: true });
+    if (payload.assets?.length) {
+      const readingAsset = payload.assets.find((entry) => entry.collection === "readingSessions");
+      if (readingAsset?.item?.id) {
+        state.activeReadingSessionId = readingAsset.item.id;
+      }
+    }
+  }
+
+  if (run.stage === "search") {
+    state.searchAgentRun = normaliseSearchAgentRun(run, state.searchAgentRun || {});
+    applyAgenticSearchOutput(run.outputPayload, { preserveSelection: true });
+    state.loading = !isTerminalAgentRunStatus(run.status);
+    if (run.status === "error") {
+      state.error = run.error || run.outputSummary || "Agentic Search failed.";
+    }
+  }
+
+  if (run.stage !== "reading" && isTerminalAgentRunStatus(run.status)) {
+    await loadProjects();
+  }
+
+  if (isTerminalAgentRunStatus(run.status)) {
+    state.activeReadingRunId = "";
+    return true;
+  }
+
+  state.activeReadingRunId = run.id || state.activeReadingRunId;
+  return false;
+}
+
 async function pollAgentRun(runId) {
-  clearActiveRunPoll();
   if (!runId) {
     state.activeReadingRunId = "";
     return;
@@ -1990,52 +2041,66 @@ async function pollAgentRun(runId) {
 
   try {
     const payload = await api(`api/agent-runs/${encodeURIComponent(runId)}`);
-    const run = payload.run || null;
-    if (!run) {
-      state.activeReadingRunId = "";
-      return;
-    }
-
-    if (run.stage === "reading") {
-      await loadProjects();
-      await loadReadingSessions({ preserveSelection: true });
-      if (payload.assets?.length) {
-        const readingAsset = payload.assets.find((entry) => entry.collection === "readingSessions");
-        if (readingAsset?.item?.id) {
-          state.activeReadingSessionId = readingAsset.item.id;
-        }
-      }
-    }
-
-    if (run.stage === "search") {
-      state.searchAgentRun = normaliseSearchAgentRun(run, state.searchAgentRun || {});
-      applyAgenticSearchOutput(run.outputPayload, { preserveSelection: true });
-      state.loading = !isTerminalAgentRunStatus(run.status);
-      if (run.status === "error") {
-        state.error = run.error || run.outputSummary || "Agentic Search failed.";
-      }
-    }
-
-    if (run.stage !== "reading" && isTerminalAgentRunStatus(run.status)) {
-      await loadProjects();
-    }
-
-    if (!isTerminalAgentRunStatus(run.status)) {
+    const done = await applyAgentRunPayload(payload);
+    if (!done) {
       activeRunPollTimer = window.setTimeout(() => {
         void pollAgentRun(runId);
-      }, 1200);
-      return;
+      }, 5000);
     }
-
-    state.activeReadingRunId = "";
   } catch (error) {
     state.error = error.message;
     activeRunPollTimer = window.setTimeout(() => {
       void pollAgentRun(runId);
-    }, 1800);
+    }, 5000);
   } finally {
-    render();
+    refreshActiveStageUI();
   }
+}
+
+function subscribeAgentRun(runId) {
+  clearActiveRunPoll();
+  if (!runId) {
+    state.activeReadingRunId = "";
+    return;
+  }
+
+  state.activeReadingRunId = runId;
+
+  if (typeof window.EventSource !== "function") {
+    void pollAgentRun(runId);
+    return;
+  }
+
+  const source = new EventSource(appUrl(`api/agent-runs/${encodeURIComponent(runId)}/events`).href);
+  activeRunEventSource = source;
+
+  source.addEventListener("run", (event) => {
+    void (async () => {
+      try {
+        const payload = JSON.parse(event.data || "{}");
+        const done = await applyAgentRunPayload(payload);
+        refreshActiveStageUI();
+        if (done && activeRunEventSource === source) {
+          clearActiveRunPoll();
+        }
+      } catch (error) {
+        state.error = error.message;
+        refreshActiveStageUI();
+      }
+    })();
+  });
+
+  source.onerror = () => {
+    if (activeRunEventSource !== source) {
+      return;
+    }
+
+    source.close();
+    activeRunEventSource = null;
+    activeRunPollTimer = window.setTimeout(() => {
+      void pollAgentRun(runId);
+    }, 2500);
+  };
 }
 
 function resetSearchState() {
@@ -2280,7 +2345,7 @@ async function startAgenticSearchRun({ query } = {}) {
     state.loading = false;
     render();
     if (payload.run?.id) {
-      void pollAgentRun(payload.run.id);
+      subscribeAgentRun(payload.run.id);
     }
   } catch (error) {
     state.searchAgentRun = {
@@ -2368,6 +2433,80 @@ async function startReadingSession(paper) {
     state.readingStartingPaperId = "";
     render();
   }
+}
+
+async function uploadReadingPdf(file) {
+  const project = activeProject();
+  if (!project || !file) {
+    return;
+  }
+
+  if (file.type && file.type !== "application/pdf") {
+    state.error = "PDF 파일만 업로드할 수 있습니다.";
+    render();
+    return;
+  }
+
+  if (file.size > MAX_READING_PDF_UPLOAD_BYTES) {
+    state.error = `PDF 파일은 최대 ${MAX_READING_PDF_UPLOAD_LABEL}까지 업로드할 수 있습니다.`;
+    render();
+    return;
+  }
+
+  state.readingUploading = true;
+  state.error = "";
+  render();
+
+  try {
+    const payload = await api(`api/projects/${encodeURIComponent(project.id)}/reading-sessions/upload`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/pdf",
+        "x-file-name": encodeURIComponent(file.name || "upload.pdf"),
+      },
+      body: file,
+    });
+
+    if (payload.paper?.paperId) {
+      const existingIndex = state.projectLibrary.findIndex((entry) => entry.paperId === payload.paper.paperId);
+      if (existingIndex >= 0) {
+        state.projectLibrary[existingIndex] = payload.paper;
+      } else {
+        state.projectLibrary.unshift(payload.paper);
+      }
+      state.readingHomeSelectedPaperId = payload.paper.paperId;
+    }
+
+    if (payload.readingSession?.id) {
+      syncReadingSession(payload.readingSession);
+      state.activeReadingSessionId = payload.readingSession.id;
+    }
+
+    state.activeStage = "reading";
+    state.readingView = "detail";
+    state.readingDocumentTab = "pdf";
+    state.readingHomePreviewOpen = false;
+    state.readingRailOpen = defaultReadingRailOpen(state.searchLayout);
+    saveStorage(STORAGE_KEYS.stage, state.activeStage);
+    await loadProjects();
+    await loadProjectLibrary();
+    await loadReadingSessions({ preserveSelection: true });
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.readingUploading = false;
+    renderWithViewTransition();
+  }
+}
+
+function dragEventHasFiles(event) {
+  return Array.from(event.dataTransfer?.types || []).includes("Files");
+}
+
+function getReadingPdfDropFile(dataTransfer) {
+  return Array.from(dataTransfer?.files || []).find(
+    (file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name || ""),
+  );
 }
 
 async function openReadingDetailForPaper(paperId, { createIfMissing = true } = {}) {
@@ -3547,6 +3686,31 @@ function patchSearchSelectionUI() {
   return true;
 }
 
+function patchSearchStageUI() {
+  if (state.activeStage !== "search") {
+    return false;
+  }
+
+  const project = activeProject();
+  const currentStage = document.querySelector('[data-ares-surface="search-stage"]');
+  if (!project || !currentStage) {
+    return false;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = renderSearchStage(project).trim();
+  const nextStage = template.content.firstElementChild;
+  if (!nextStage) {
+    return false;
+  }
+
+  currentStage.replaceWith(nextStage);
+  syncAgenticSearchStageDom();
+  syncAppActivePaperMetadata(selectedPaper());
+  syncBrowserUrlFromState();
+  return true;
+}
+
 function directReadingChildByClass(root, className) {
   return Array.from(root?.children || []).find((child) => child.classList?.contains(className)) || null;
 }
@@ -4069,6 +4233,19 @@ function refreshReadingStageUI(options = {}) {
   if (!patchReadingStageUI(options)) {
     render();
   }
+}
+
+function refreshActiveStageUI() {
+  if (state.activeStage === "reading") {
+    refreshReadingStageUI();
+    return;
+  }
+
+  if (state.activeStage === "search" && patchSearchStageUI()) {
+    return;
+  }
+
+  render();
 }
 
 function prefersReducedMotion() {
@@ -5409,6 +5586,15 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  if (event.target.name === "readingPdfUpload") {
+    const [file] = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (file) {
+      void uploadReadingPdf(file);
+    }
+    return;
+  }
+
   if (event.target.name === "sort") {
     state.sort = event.target.value;
     syncSelectedPaper();
@@ -5450,6 +5636,63 @@ document.addEventListener("change", (event) => {
     syncSelectedPaper();
     render();
   }
+});
+
+document.addEventListener("dragover", (event) => {
+  if (!dragEventHasFiles(event)) {
+    return;
+  }
+
+  const dropzone = event.target.closest('[data-reading-pdf-dropzone="true"]');
+  if (!dropzone || state.readingUploading) {
+    if (state.readingPdfDropActive) {
+      state.readingPdfDropActive = false;
+      refreshReadingStageUI();
+    }
+    return;
+  }
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+  if (!state.readingPdfDropActive) {
+    state.readingPdfDropActive = true;
+    refreshReadingStageUI();
+  }
+});
+
+document.addEventListener("dragleave", (event) => {
+  if (!state.readingPdfDropActive) {
+    return;
+  }
+
+  if (event.clientX > 0 && event.clientY > 0 && event.clientX < window.innerWidth && event.clientY < window.innerHeight) {
+    return;
+  }
+
+  state.readingPdfDropActive = false;
+  refreshReadingStageUI();
+});
+
+document.addEventListener("drop", (event) => {
+  const dropzone = event.target.closest('[data-reading-pdf-dropzone="true"]');
+  if (!dropzone || state.readingUploading) {
+    if (state.readingPdfDropActive) {
+      state.readingPdfDropActive = false;
+      refreshReadingStageUI();
+    }
+    return;
+  }
+
+  event.preventDefault();
+  state.readingPdfDropActive = false;
+  const file = getReadingPdfDropFile(event.dataTransfer);
+  if (file) {
+    void uploadReadingPdf(file);
+    return;
+  }
+
+  state.error = "PDF 파일만 업로드할 수 있습니다.";
+  refreshReadingStageUI();
 });
 
 document.addEventListener("keydown", async (event) => {
@@ -5551,7 +5794,7 @@ async function boot() {
     syncReadingHomeSelection();
     const pendingSession = state.readingSessions.find((session) => session.runId && session.status !== "done");
     if (pendingSession?.runId) {
-      void pollAgentRun(pendingSession.runId);
+      subscribeAgentRun(pendingSession.runId);
     }
   } catch (error) {
     state.error = error.message;

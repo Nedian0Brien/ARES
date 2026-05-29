@@ -2299,6 +2299,16 @@ a {
   letter-spacing: -0.03em;
 }
 
+.reading-home-dropzone {
+  position: relative;
+}
+
+.reading-home-dropzone.is-dragging {
+  background: var(--s2);
+  outline: 1px dashed color-mix(in srgb, var(--read) 55%, var(--b2));
+  outline-offset: -6px;
+}
+
 .reading-home-list-tools {
   align-items: center;
   display: flex;
@@ -2346,6 +2356,28 @@ a {
   gap: 8px;
 }
 
+.reading-home-drop-hint {
+  align-items: center;
+  color: var(--t3);
+  display: inline-flex;
+  font-size: 11.5px;
+  gap: 5px;
+  min-height: 24px;
+}
+
+.reading-home-dropzone.is-dragging .reading-home-drop-hint {
+  color: var(--read);
+  font-weight: 500;
+}
+
+.reading-home-upload-input {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+}
+
 .reading-home-tool-btn {
   align-items: center;
   background: transparent;
@@ -2360,6 +2392,15 @@ a {
 
 .reading-home-tool-btn:hover {
   background: var(--s2);
+}
+
+.reading-home-upload-btn {
+  cursor: pointer;
+}
+
+.reading-home-upload-btn.is-busy {
+  color: var(--t3);
+  cursor: progress;
 }
 
 .reading-home-table {

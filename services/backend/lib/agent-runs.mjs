@@ -1059,9 +1059,37 @@ export function createAgentRunService({
     spawnImpl,
   });
   const activeRuns = new Map();
+  const runSubscribers = new Map();
+
+  function notifyRun(runId) {
+    const listeners = runSubscribers.get(runId);
+    if (!listeners?.size) {
+      return;
+    }
+
+    const payload = getRun(runId);
+    if (!payload) {
+      return;
+    }
+
+    for (const listener of listeners) {
+      try {
+        listener(payload);
+      } catch {
+        // Broken subscribers are cleaned up by their request close handlers.
+      }
+    }
+  }
+
+  const notifyingStore = Object.create(store);
+  notifyingStore.updateAgentRun = async (runId, patch = {}) => {
+    const updated = await store.updateAgentRun(runId, patch);
+    notifyRun(runId);
+    return updated;
+  };
 
   async function executeRun(runId) {
-    const run = store.getAgentRun(runId);
+    const run = notifyingStore.getAgentRun(runId);
     if (!run) {
       return;
     }
@@ -1069,9 +1097,9 @@ export function createAgentRunService({
     const definition = resolveTask(run.stage, run.taskKind);
     let context;
     try {
-      context = buildRunContext(store, run);
+      context = buildRunContext(notifyingStore, run);
     } catch (error) {
-      await store.updateAgentRun(runId, {
+      await notifyingStore.updateAgentRun(runId, {
         error: error.message,
         finishedAt: nowIso(),
         status: 'done',
@@ -1080,17 +1108,17 @@ export function createAgentRunService({
     }
 
     try {
-      await store.updateAgentRun(runId, {
+      await notifyingStore.updateAgentRun(runId, {
         startedAt: nowIso(),
         status: 'running',
       });
 
       if (definition.bootstrap) {
-        await definition.bootstrap({ context, run, store });
+        await definition.bootstrap({ context, run, store: notifyingStore });
       }
 
       if (definition.stage === 'search') {
-        await executeSearchRun({ context, run, searchService, store });
+        await executeSearchRun({ context, run, searchService, store: notifyingStore });
         return;
       }
 
@@ -1111,10 +1139,10 @@ export function createAgentRunService({
         definition,
         output,
         run,
-        store,
+        store: notifyingStore,
       });
 
-      await store.updateAgentRun(runId, {
+      await notifyingStore.updateAgentRun(runId, {
         finishedAt: nowIso(),
         outputRef: persisted.outputRef,
         outputSummary: persisted.outputSummary,
@@ -1125,7 +1153,7 @@ export function createAgentRunService({
       const message = error instanceof Error ? error.message : String(error);
 
       if (/aborted/i.test(message)) {
-        await store.updateAgentRun(runId, {
+        await notifyingStore.updateAgentRun(runId, {
           error: 'Aborted by user.',
           finishedAt: nowIso(),
           status: definition.stage === 'search' ? 'error' : 'done',
@@ -1134,7 +1162,7 @@ export function createAgentRunService({
       }
 
       if (definition.stage === 'search') {
-        await store.updateAgentRun(runId, {
+        await notifyingStore.updateAgentRun(runId, {
           error: message,
           finishedAt: nowIso(),
           outputRef: [],
@@ -1151,10 +1179,10 @@ export function createAgentRunService({
         definition,
         output: normaliseAgentPayload(fallback, definition),
         run,
-        store,
+        store: notifyingStore,
       });
 
-      await store.updateAgentRun(runId, {
+      await notifyingStore.updateAgentRun(runId, {
         finishedAt: nowIso(),
         outputRef: persisted.outputRef,
         outputSummary: persisted.outputSummary,
@@ -1193,6 +1221,7 @@ export function createAgentRunService({
       taskKind: definition.defaultTaskKind,
     });
 
+    notifyRun(run.id);
     void executeRun(run.id);
     return store.getAgentRun(run.id);
   }
@@ -1202,7 +1231,7 @@ export function createAgentRunService({
     if (abort) {
       abort();
     } else {
-      await store.updateAgentRun(runId, {
+      await notifyingStore.updateAgentRun(runId, {
         error: 'Aborted by user.',
         finishedAt: nowIso(),
         status: 'done',
@@ -1210,6 +1239,24 @@ export function createAgentRunService({
     }
 
     return getRun(runId);
+  }
+
+  function subscribeRun(runId, listener) {
+    const normalizedRunId = String(runId || '').trim();
+    if (!normalizedRunId || typeof listener !== 'function') {
+      return () => {};
+    }
+
+    const listeners = runSubscribers.get(normalizedRunId) || new Set();
+    listeners.add(listener);
+    runSubscribers.set(normalizedRunId, listeners);
+
+    return () => {
+      listeners.delete(listener);
+      if (!listeners.size) {
+        runSubscribers.delete(normalizedRunId);
+      }
+    };
   }
 
   async function retryRun(runId) {
@@ -1245,5 +1292,6 @@ export function createAgentRunService({
     createRun,
     getRun,
     retryRun,
+    subscribeRun,
   };
 }

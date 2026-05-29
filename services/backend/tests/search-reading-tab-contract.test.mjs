@@ -35,6 +35,76 @@ test('Search and Reading surfaces use Read tab language', async () => {
   assert.match(readingJs, /Back to Discover/);
 });
 
+test('Read library upload uses a native file input inside the visible control', async () => {
+  const readingJs = await readProjectFile('web/app/features/reading.js');
+
+  assert.match(readingJs, /<label\s+class="reading-home-tool-btn reading-home-upload-btn/);
+  assert.match(readingJs, /type="file"/);
+  assert.match(readingJs, /name="readingPdfUpload"/);
+  assert.match(readingJs, /accept="application\/pdf,\.pdf"/);
+  assert.match(readingJs, /Upload PDF/);
+  assert.doesNotMatch(readingJs, /trigger-reading-pdf-upload/);
+});
+
+test('Read library accepts dragged PDF files on the worklist panel', async () => {
+  const [appJs, readingJs, stylesCss] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/app/features/reading.js'),
+    readProjectFile('web/styles.css'),
+  ]);
+
+  assert.match(readingJs, /data-reading-pdf-dropzone="true"/);
+  assert.match(readingJs, /Drag PDF here/);
+  assert.match(readingJs, /Drop PDF to upload/);
+  assert.match(stylesCss, /\.reading-home-dropzone\.is-dragging/);
+  assert.match(appJs, /readingPdfDropActive/);
+  assert.match(appJs, /document\.addEventListener\("dragover"/);
+  assert.match(appJs, /document\.addEventListener\("drop"/);
+  assert.match(appJs, /getReadingPdfDropFile/);
+  assert.match(appJs, /void uploadReadingPdf\(file\)/);
+});
+
+test('Read upload sends binary PDFs and guards the 100MB client limit', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /MAX_READING_PDF_UPLOAD_BYTES = 100 \* 1024 \* 1024/);
+  assert.match(appJs, /MAX_READING_PDF_UPLOAD_LABEL = "100MB"/);
+  assert.match(appJs, /file\.size > MAX_READING_PDF_UPLOAD_BYTES/);
+  assert.match(appJs, /"content-type": "application\/pdf"/);
+  assert.match(appJs, /"x-file-name": encodeURIComponent/);
+  assert.match(appJs, /body: file/);
+  assert.doesNotMatch(appJs, /arrayBufferToBase64/);
+});
+
+test('Agent run updates use SSE and refresh only the active stage', async () => {
+  const appJs = await readProjectFile('web/app.js');
+  const pollStart = appJs.indexOf('async function pollAgentRun(runId)');
+  const subscribeStart = appJs.indexOf('function subscribeAgentRun(runId)');
+  const resetStart = appJs.indexOf('function resetSearchState()');
+  const pollAgentRunBody = appJs.slice(pollStart, subscribeStart);
+  const subscribeAgentRunBody = appJs.slice(subscribeStart, resetStart);
+
+  assert.match(appJs, /activeRunEventSource/);
+  assert.match(appJs, /function subscribeAgentRun\(runId\)/);
+  assert.match(appJs, /new EventSource\(appUrl\(`api\/agent-runs\/\$\{encodeURIComponent\(runId\)\}\/events`\)\.href\)/);
+  assert.match(subscribeAgentRunBody, /source\.addEventListener\("run"/);
+  assert.match(subscribeAgentRunBody, /void pollAgentRun\(runId\)/);
+  assert.match(appJs, /function patchSearchStageUI\(\)/);
+  assert.match(appJs, /function refreshActiveStageUI\(\)/);
+  assert.match(pollAgentRunBody, /refreshActiveStageUI\(\)/);
+  assert.doesNotMatch(pollAgentRunBody, /render\(\)/);
+});
+
+test('Backend exposes an SSE endpoint for agent run updates', async () => {
+  const indexJs = await readProjectFile('services/backend/index.mjs');
+
+  assert.match(indexJs, /function registerAgentRunEventClient/);
+  assert.match(indexJs, /content-type': 'text\/event-stream; charset=utf-8'/);
+  assert.match(indexJs, /sendSseEvent\(response, 'run', payload\)/);
+  assert.match(indexJs, /\/api\\\/agent-runs\\\/\[\^\/\]\+\\\/events/);
+  assert.match(indexJs, /agentRunService\.subscribeRun/);
+});
+
 test('Reading handoff targets Lab language instead of legacy Research tab copy', async () => {
   const readingJs = await readProjectFile('web/app/features/reading.js');
 
