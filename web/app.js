@@ -2839,14 +2839,13 @@ function renderSidebar() {
   return `
     <aside class="desktop-sidebar" data-ares-surface="sidebar" data-ares-role="navigation" data-collapsed="${collapsed ? "true" : "false"}">
       <section class="sidebar-section">
-        <button type="button" class="workspace-switch hov" title="ARES · Research workspace">
+        <div class="workspace-switch" title="ARES · Research workspace">
           <span class="brand-mark">A</span>
           <span class="brand-copy">
             <span class="brand-title">ARES</span>
             <span class="brand-subtitle">Research workspace</span>
           </span>
-          ${icon("chevD", { size: 13, color: TOKENS.t3 })}
-        </button>
+        </div>
       </section>
 
       <section class="sidebar-section">
@@ -2912,14 +2911,13 @@ function renderSidebar() {
       </section>
 
       <section class="sidebar-section">
-        <button type="button" class="sidebar-account hov" title="Dokyung · Pro plan">
+        <div class="sidebar-account" title="Dokyung · Pro plan">
           <span class="account-mark">DK</span>
           <span class="brand-copy">
             <span class="account-name">Dokyung</span>
             <span class="account-plan">Pro plan</span>
           </span>
-          ${icon("settings", { size: 13, color: TOKENS.t3 })}
-        </button>
+        </div>
       </section>
     </aside>
   `;
@@ -2973,8 +2971,8 @@ function renderTopbar() {
       </div>
       <div class="topbar-actions">
         ${searchRunBadge}
-        <button type="button" class="btn-s">${icon("share", { size: 12 })} Share</button>
-        <button type="button" class="btn-s">${icon("filter", { size: 12 })} Filter</button>
+        <button type="button" class="btn-s" data-action="copy-stage-link" data-stage-id="${escapeHtml(stage.id)}">${icon("share", { size: 12 })} Share</button>
+        <button type="button" class="btn-s" ${stage.id === "search" ? 'data-action="toggle-filter-panel"' : "disabled"}>${icon("filter", { size: 12 })} Filter</button>
       </div>
     </header>
   `;

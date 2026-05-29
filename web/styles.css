@@ -187,8 +187,6 @@ a {
 .reading-home-tool-btn:focus-visible,
 .reading-chat-send:focus-visible,
 .reading-pdf-dock-layer .dock-btn:focus-visible,
-.dashboard-f-chip:focus-visible,
-.dashboard-tool-btn:focus-visible,
 .scope-add:focus-visible,
 .dashboard-scope-add:focus-visible,
 .workflow-mode-btn:focus-visible,
@@ -7314,18 +7312,17 @@ body.is-run .stage-run .phase-card {
   padding: 2px;
 }
 
-.dashboard-toggle-group button {
+.dashboard-toggle-group span {
   background: transparent;
   border: none;
   border-radius: 4px;
   color: var(--t3);
-  cursor: pointer;
   font-family: inherit;
   font-size: 10.5px;
   padding: 3px 8px;
 }
 
-.dashboard-toggle-group button.active {
+.dashboard-toggle-group span.active {
   background: var(--s1);
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
   color: var(--tx);
@@ -7414,16 +7411,11 @@ body.is-run .stage-run .phase-card {
   border: 1px solid transparent;
   border-radius: 12px;
   color: var(--t2);
-  cursor: pointer;
   display: inline-flex;
   font-family: inherit;
   font-size: 11.5px;
   gap: 6px;
   padding: 4px 10px;
-}
-
-.dashboard-f-chip:hover {
-  background: var(--s2);
 }
 
 .dashboard-f-chip.active {
@@ -7452,16 +7444,11 @@ body.is-run .stage-run .phase-card {
   border: 1px solid var(--b1);
   border-radius: 6px;
   color: var(--t2);
-  cursor: pointer;
   display: inline-flex;
   font-family: inherit;
   font-size: 11.5px;
   gap: 5px;
   padding: 4px 10px;
-}
-
-.dashboard-tool-btn:hover {
-  background: var(--s2);
 }
 
 .dashboard-tbl {
@@ -7698,18 +7685,12 @@ body.is-run .stage-run .phase-card {
   border: none;
   border-radius: 5px;
   color: var(--t3);
-  cursor: pointer;
   display: grid;
   font-family: inherit;
   font-size: 11px;
   height: 24px;
   place-items: center;
   width: 24px;
-}
-
-.dashboard-page-btn:hover {
-  background: var(--s2);
-  color: var(--t2);
 }
 
 .dashboard-page-btn.active {

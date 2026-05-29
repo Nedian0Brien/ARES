@@ -35,6 +35,32 @@ test('Search and Reading surfaces use Read tab language', async () => {
   assert.match(readingJs, /Back to Discover/);
 });
 
+test('Visible dashboard controls are wired actions or non-interactive status text', async () => {
+  const [appJs, searchJs, stylesCss] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/app/features/search.js'),
+    readProjectFile('web/styles.css'),
+  ]);
+
+  assert.match(appJs, /data-action="copy-stage-link"[\s\S]*Share/);
+  assert.match(appJs, /data-action="toggle-filter-panel"[\s\S]*Filter/);
+  assert.match(appJs, /<div class="workspace-switch"/);
+  assert.match(appJs, /<div class="sidebar-account"/);
+  assert.match(searchJs, /<span>7D<\/span><span class="active">30D<\/span><span>90D<\/span><span>ALL<\/span>/);
+  assert.match(searchJs, /<span class="dashboard-f-chip active">전체/);
+  assert.match(searchJs, /<span class="dashboard-tool-btn">/);
+  assert.match(searchJs, /<span class="dashboard-page-btn">‹<\/span>/);
+  assert.match(searchJs, /<span class="btn-g results-summary-btn">/);
+  assert.match(stylesCss, /\.dashboard-toggle-group span/);
+  assert.doesNotMatch(searchJs, /<button type="button">7D<\/button>/);
+  assert.doesNotMatch(searchJs, /<button type="button" class="dashboard-f-chip/);
+  assert.doesNotMatch(searchJs, /<button type="button" class="dashboard-tool-btn/);
+  assert.doesNotMatch(searchJs, /<button type="button" class="dashboard-page-btn/);
+  assert.doesNotMatch(searchJs, /<button type="button" class="btn-g results-summary-btn/);
+  assert.doesNotMatch(appJs, /<button type="button" class="workspace-switch/);
+  assert.doesNotMatch(appJs, /<button type="button" class="sidebar-account/);
+});
+
 test('Read library upload uses a native file input inside the visible control', async () => {
   const readingJs = await readProjectFile('web/app/features/reading.js');
 
