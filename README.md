@@ -128,6 +128,8 @@ ARES/
   - 프로토타입 기준으로 정렬된 기능 명세 문서
 - [Product Vision](docs/product%20vision.md)
   - 제품의 문제 정의, 비전, 사용자 가치
+- [iOS Safari Viewport Handling](docs/ios-safari-viewport.md)
+  - iOS Safari 하단 브라우저 UI와 fixed bottom UI 클리핑 방지 규칙
 
 ## Run The Search MVP
 

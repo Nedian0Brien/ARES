@@ -24,10 +24,13 @@
   --eaze: cubic-bezier(0.32, 0.72, 0, 1);
   --viewport-safe-top: env(safe-area-inset-top, 0px);
   --viewport-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --viewport-browser-bottom: 0px;
+  --viewport-bottom-occlusion: max(var(--viewport-safe-bottom), var(--viewport-browser-bottom));
   --mobile-viewport-height: 100vh;
   --mobile-bottom-nav-height: 0px;
   --bottom-nav-shell-height: 62px;
   --bottom-nav-offset: 1.25rem;
+  --bottom-nav-reserve-extra: 22px;
   --bottom-nav-bg: rgba(255, 255, 255, 0.78);
   --bottom-nav-border: rgba(10, 10, 11, 0.08);
   --bottom-nav-inset-border: rgba(255, 255, 255, 0.52);
@@ -5138,7 +5141,9 @@ body.reading-home-resize-active {
 @media (max-width: 900px) {
   :root {
     --mobile-viewport-height: 100svh;
-    --mobile-bottom-nav-height: calc(104px + var(--viewport-safe-bottom));
+    --mobile-bottom-nav-height: calc(
+      var(--bottom-nav-shell-height) + var(--bottom-nav-offset) + var(--viewport-bottom-occlusion) + var(--bottom-nav-reserve-extra)
+    );
   }
 
   @supports (height: 100dvh) {
@@ -5418,7 +5423,7 @@ body.reading-home-resize-active {
     background: var(--bottom-nav-bg);
     border: 1px solid var(--bottom-nav-border);
     border-radius: 999px;
-    bottom: calc(var(--bottom-nav-offset) + var(--viewport-safe-bottom));
+    bottom: calc(var(--bottom-nav-offset) + var(--viewport-bottom-occlusion));
     box-shadow:
       inset 0 0 0 1px var(--bottom-nav-inset-border),
       var(--bottom-nav-shadow);
@@ -5442,7 +5447,7 @@ body.reading-home-resize-active {
   }
 
   .bottom-nav-hidden {
-    bottom: calc(0px - var(--bottom-nav-shell-height) - var(--bottom-nav-offset) - var(--viewport-safe-bottom) - 8px);
+    bottom: calc(0px - var(--bottom-nav-shell-height) - var(--bottom-nav-offset) - var(--viewport-bottom-occlusion) - 8px);
     opacity: 0;
     pointer-events: none;
   }
@@ -7752,7 +7757,9 @@ body.is-run .stage-run .phase-card {
 @media (max-width: 900px) {
   :root {
     --mobile-viewport-height: 100svh;
-    --mobile-bottom-nav-height: calc(104px + var(--viewport-safe-bottom));
+    --mobile-bottom-nav-height: calc(
+      var(--bottom-nav-shell-height) + var(--bottom-nav-offset) + var(--viewport-bottom-occlusion) + var(--bottom-nav-reserve-extra)
+    );
   }
 
   @supports (height: 100dvh) {
@@ -7895,7 +7902,11 @@ body.is-run .stage-run .phase-card {
     align-items: center;
     display: flex;
     justify-content: center;
-    padding: 20px;
+    padding: 20px 20px calc(20px + var(--viewport-bottom-occlusion));
+  }
+
+  .reading-home-preview-overlay.is-modal {
+    inset: var(--viewport-safe-top) 0 0;
   }
 
   .reading-home-preview-overlay.is-modal .reading-home-preview-surface {
@@ -7903,7 +7914,7 @@ body.is-run .stage-run .phase-card {
   }
 
   .reading-home-preview.is-modal {
-    max-height: calc(100vh - 40px);
+    max-height: calc(var(--mobile-viewport-height) - var(--viewport-safe-top) - var(--viewport-bottom-occlusion) - 40px);
     width: min(100%, 480px);
   }
 
@@ -8110,7 +8121,7 @@ body.is-run .stage-run .phase-card {
   }
 
   .reading-pdf-dock-layer {
-    padding: 0 10px calc(16px + env(safe-area-inset-bottom, 0px));
+    padding: 0 10px calc(16px + var(--viewport-bottom-occlusion));
   }
 
   .reading-pdf-dock-layer .pdf-dock {
@@ -8373,12 +8384,12 @@ body.is-run .stage-run .phase-card {
     border-top: 1px solid var(--b1);
     border-top-left-radius: 18px;
     border-top-right-radius: 18px;
-    bottom: 0;
+    bottom: var(--viewport-bottom-occlusion);
     box-shadow: 0 -12px 42px rgba(0, 0, 0, 0.22);
     display: flex;
     flex-direction: column;
     left: 0;
-    max-height: min(82dvh, 680px);
+    max-height: min(calc(var(--mobile-viewport-height) - var(--viewport-safe-top) - var(--viewport-bottom-occlusion) - 18px), 680px);
     position: fixed;
     right: 0;
     z-index: 100;
@@ -8445,6 +8456,7 @@ body.is-run .stage-run .phase-card {
   :root {
     --bottom-nav-shell-height: 58px;
     --bottom-nav-offset: 0.75rem;
+    --bottom-nav-reserve-extra: 34px;
   }
 
   .main-topbar {

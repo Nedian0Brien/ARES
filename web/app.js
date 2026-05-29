@@ -407,6 +407,8 @@ let bottomNavAutoHideState = null;
 let bottomNavHidden = false;
 let bottomNavScrollFrame = 0;
 let bottomNavLifecycleBound = false;
+let viewportChromeFrame = 0;
+let viewportChromeLifecycleBound = false;
 
 function loadStorage(key, fallback) {
   try {
@@ -3635,6 +3637,51 @@ function isBottomNavMobile() {
   return window.innerWidth <= SEARCH_LAYOUT_BREAKPOINTS.mobileMax;
 }
 
+function getViewportBrowserBottomOcclusion() {
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    return 0;
+  }
+
+  const layoutHeight = window.innerHeight || document.documentElement.clientHeight || viewport.height;
+  const visibleBottom = viewport.offsetTop + viewport.height;
+  return Math.max(0, Math.ceil(layoutHeight - visibleBottom));
+}
+
+function syncViewportChromeVariables() {
+  document.documentElement.style.setProperty("--viewport-browser-bottom", `${getViewportBrowserBottomOcclusion()}px`);
+}
+
+function scheduleViewportChromeSync() {
+  if (viewportChromeFrame) {
+    return;
+  }
+
+  viewportChromeFrame = window.requestAnimationFrame(() => {
+    viewportChromeFrame = 0;
+    syncViewportChromeVariables();
+    syncBottomNavIndicator();
+  });
+}
+
+function bindViewportChromeLifecycle() {
+  if (viewportChromeLifecycleBound) {
+    return;
+  }
+
+  viewportChromeLifecycleBound = true;
+  syncViewportChromeVariables();
+  window.addEventListener("resize", scheduleViewportChromeSync);
+  window.addEventListener("orientationchange", scheduleViewportChromeSync);
+  window.addEventListener("pageshow", scheduleViewportChromeSync);
+  document.addEventListener("visibilitychange", scheduleViewportChromeSync);
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", scheduleViewportChromeSync);
+    window.visualViewport.addEventListener("scroll", scheduleViewportChromeSync);
+  }
+}
+
 function setBottomNavHidden(nextHidden) {
   if (bottomNavHidden === nextHidden) {
     return;
@@ -3680,6 +3727,8 @@ function onBottomNavScroll() {
 }
 
 function onBottomNavResize() {
+  scheduleViewportChromeSync();
+
   if (bottomNavScrollFrame) {
     window.cancelAnimationFrame(bottomNavScrollFrame);
     bottomNavScrollFrame = 0;
@@ -3732,6 +3781,7 @@ function bindBottomNavLifecycle() {
   }
 
   bottomNavLifecycleBound = true;
+  bindViewportChromeLifecycle();
   primeBottomNavAutoHideState();
   window.addEventListener("scroll", onBottomNavScroll, { passive: true });
   document.addEventListener("scroll", onBottomNavScroll, { passive: true, capture: true });
