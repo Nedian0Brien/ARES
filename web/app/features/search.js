@@ -26,6 +26,7 @@ export function createSearchFeature({
   dashboardVenueBreakdown,
   dashboardPaperTags,
   actualReadingSessions,
+  activeResearchQuestion = () => null,
 }) {
   function uniqueValues(values = []) {
     return Array.from(new Set(values.filter(Boolean)));
@@ -483,6 +484,7 @@ export function createSearchFeature({
   }
   
   function renderSearchDashboard(project) {
+    const question = activeResearchQuestion();
     const library = dashboardLibraryItems();
     const totalCollected = library.length;
     const recentCount = dashboardRecentCount(library, 7, ["savedAt", "updatedAt", "createdAt"]);
@@ -569,9 +571,9 @@ export function createSearchFeature({
         <section class="search-dashboard" data-ares-surface="search-dashboard" data-ares-stage="search">
           <section class="dashboard-hero-wrap">
             <div class="search-home-hero">
-              <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Read</span></div>
-              <h1 class="search-home-title">Discover</h1>
-              <p class="search-home-copy">Collect papers, save candidates, move them to Reading.</p>
+              <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Queue</span></div>
+              <h1 class="search-home-title">Research Queue</h1>
+              <p class="search-home-copy">Collect candidates and move evidence into Reader.</p>
             </div>
   
             <form class="dashboard-hero ${escapeHtml(state.searchMode)}" data-action="submit-search">
@@ -589,7 +591,12 @@ export function createSearchFeature({
             </form>
   
             <div class="dashboard-scope-row">
-              <span class="dashboard-scope-label">Target</span>
+              <span class="dashboard-scope-label">Question</span>
+              ${
+                question
+                  ? `<span class="scope-chip is-active"><span class="scope-chip-type">RQ</span><span>${escapeHtml(question.title || question.prompt || "Research question")}</span></span>`
+                  : ""
+              }
               ${state.searchScopes.map((scope) => renderDashboardScopeChip(scope)).join("")}
               <button
                 type="button"

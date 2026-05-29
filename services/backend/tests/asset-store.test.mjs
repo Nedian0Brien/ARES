@@ -54,7 +54,8 @@ test('file store migrates graph collections and returns project graph', async ()
 
   assert.equal(graph.graphVersion, 1);
   assert.equal(graph.project.id, 'demo');
-  assert.deepEqual(graph.researchQuestions, []);
+  assert.equal(graph.researchQuestions.length, 1);
+  assert.equal(graph.researchQuestions[0].id, 'question-demo-default');
   assert.equal(graph.papers.length, 1);
   assert.equal(graph.papers[0].paperId, 'paper-1');
 });
@@ -88,4 +89,3 @@ test('file store persists graph asset collections through generic project asset 
   assert.equal(graph.readingPackets[0].id, packet.id);
   assert.deepEqual(graph.readingPackets[0].evidenceLinkIds, [evidence.id]);
 });
-

@@ -553,6 +553,7 @@ async function handleSearchRequest(response, searchInput) {
 
   json(response, 200, {
     project,
+    questionId: searchInput.questionId || '',
     query,
     ...enrichSearchResponse(searchInput.projectId, providerPayload),
   });

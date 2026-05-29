@@ -28,8 +28,8 @@ test('Search and Reading surfaces use Read tab language', async () => {
     readProjectFile('web/app/features/reading.js'),
   ]);
 
-  assert.match(searchJs, /<span>Read<\/span>/);
-  assert.match(searchJs, /Discover/);
+  assert.match(searchJs, /<span>Queue<\/span>/);
+  assert.match(searchJs, /Research Queue/);
   assert.match(readingJs, /<span>Read<\/span>/);
   assert.match(readingJs, /Reading Library/);
   assert.match(readingJs, /Back to Discover/);

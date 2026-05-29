@@ -198,7 +198,7 @@
 
 ### Task 3.1: ResearchQuestion UI/API 연결
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `services/backend/index.mjs`
   - `web/app.js`
@@ -207,12 +207,13 @@
 - **Acceptance Criteria**:
   - active question이 search, queue, reader context에 포함된다.
 - **Validation**:
-  - route test
-  - browser smoke
+  - `services/backend/tests/asset-store.test.mjs`
+  - `services/backend/tests/search.test.mjs`
+  - `services/backend/tests/search-agentic-render.test.mjs`
 
 ### Task 3.2: Queue shell 추가
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `web/app.js`
   - `web/styles.css`
@@ -223,7 +224,8 @@
   - 화면 copy는 기능적이고 짧다.
 - **Validation**:
   - `npm run lint`
-  - responsive smoke
+  - `services/backend/tests/search-agentic-render.test.mjs`
+  - 기존 Search 기능은 같은 renderer 안에서 유지
 
 ## 7. Sprint 4: Lab Minimal Core
 

@@ -323,8 +323,10 @@ const state = {
   error: "",
   activeStage: normalizeStage(INITIAL_ROUTE_STATE.activeStage || loadStorage(STORAGE_KEYS.stage, "search")),
   activeProjectId: INITIAL_ROUTE_STATE.projectId || loadStorage(STORAGE_KEYS.project, ""),
+  activeQuestionId: "",
   searchInput: "",
   projects: [],
+  projectGraph: null,
   projectLibrary: [],
   results: [],
   availableVenues: [],
@@ -937,6 +939,11 @@ async function runReadingRequest(kind, sessionId, task, { preserveRailFocus = fa
 
 function activeProject() {
   return state.projects.find((project) => project.id === state.activeProjectId) || state.projects[0] || null;
+}
+
+function activeResearchQuestion() {
+  const questions = Array.isArray(state.projectGraph?.researchQuestions) ? state.projectGraph.researchQuestions : [];
+  return questions.find((question) => question.id === state.activeQuestionId) || questions[0] || null;
 }
 
 function buildBrowserRouteHash({ stageId = state.activeStage } = {}) {
@@ -1947,6 +1954,22 @@ async function loadProjects() {
   setProjects(payload.projects || []);
 }
 
+async function loadProjectGraph() {
+  const project = activeProject();
+  if (!project) {
+    state.projectGraph = null;
+    state.activeQuestionId = "";
+    return;
+  }
+
+  const payload = await api(`api/projects/${encodeURIComponent(project.id)}/graph`);
+  state.projectGraph = payload;
+  const questions = Array.isArray(payload.researchQuestions) ? payload.researchQuestions : [];
+  if (!state.activeQuestionId || !questions.some((question) => question.id === state.activeQuestionId)) {
+    state.activeQuestionId = questions[0]?.id || "";
+  }
+}
+
 async function loadProjectLibrary() {
   const project = activeProject();
   if (!project) {
@@ -2249,6 +2272,7 @@ async function runSearch({ preserveSelection = false } = {}) {
       method: "POST",
       body: JSON.stringify({
         projectId: project.id,
+        questionId: activeResearchQuestion()?.id || "",
         q: query,
         mode: state.searchMode,
         scopes: state.searchScopes,
@@ -2307,6 +2331,7 @@ async function startAgenticSearchRun({ query } = {}) {
     createdAt: new Date().toISOString(),
     id: "",
     input: {
+      questionId: activeResearchQuestion()?.id || "",
       query: trimmedQuery,
       scopes: state.searchScopes,
     },
@@ -2327,6 +2352,7 @@ async function startAgenticSearchRun({ query } = {}) {
       method: "POST",
       body: JSON.stringify({
         input: {
+          questionId: activeResearchQuestion()?.id || "",
           query: trimmedQuery,
           scopes: state.searchScopes,
         },
@@ -2883,6 +2909,7 @@ const searchFeature = createSearchFeature({
   dashboardVenueBreakdown,
   dashboardPaperTags,
   actualReadingSessions,
+  activeResearchQuestion,
 });
 
 const { renderSearchPreview, renderSearchStage, resolveScopeCatalogItem, searchPlaceholder } = searchFeature;
@@ -4266,7 +4293,8 @@ document.addEventListener("click", async (event) => {
     state.projectLibrary = [];
     state.scopePicker = null;
     saveStorage(STORAGE_KEYS.project, state.activeProjectId);
-    state.searchInput = activeProject()?.defaultQuery || "";
+    await loadProjectGraph();
+    state.searchInput = activeResearchQuestion()?.prompt || activeProject()?.defaultQuery || "";
     resetSearchState();
     await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: false });
@@ -5504,8 +5532,9 @@ window.addEventListener("resize", () => {
 async function boot() {
   try {
     await loadProjects();
+    await loadProjectGraph();
     const project = activeProject();
-    state.searchInput = project?.defaultQuery || "";
+    state.searchInput = activeResearchQuestion()?.prompt || project?.defaultQuery || "";
     resetSearchState();
     await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: Boolean(state.activeReadingSessionId) });

@@ -868,6 +868,7 @@ export async function createPostgresStore({
 
   function getProjectGraph(projectId) {
     const project = projectSummary(ensureProject(projectId));
+    const researchQuestions = listCollection('researchQuestions', { projectId });
     return {
       drafts: listCollection('drafts', { projectId }),
       draftSections: listCollection('draftSections', { projectId }),
@@ -879,7 +880,17 @@ export async function createPostgresStore({
       project,
       readingPackets: listCollection('readingPackets', { projectId }),
       reproductionPlans: listCollection('reproductionPlans', { projectId }),
-      researchQuestions: listCollection('researchQuestions', { projectId }),
+      researchQuestions: researchQuestions.length
+        ? researchQuestions
+        : [
+            normaliseAsset('researchQuestions', {
+              id: `question-${project.id}-default`,
+              projectId,
+              prompt: project.defaultQuery || project.focus || project.name,
+              status: 'active',
+              title: project.focus || project.defaultQuery || `${project.name} question`,
+            }),
+          ],
       resultDossiers: listCollection('resultDossiers', { projectId }),
     };
   }
