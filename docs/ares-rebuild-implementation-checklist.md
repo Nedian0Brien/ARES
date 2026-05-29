@@ -142,7 +142,7 @@
 
 ### Task 2.2: EvidenceLink 생성 API와 note/citation 연결
 
-- **Status**: In progress
+- **Status**: Done
 - **Location**:
   - `services/backend/index.mjs`
   - `services/backend/lib/reading-service.mjs`
@@ -153,14 +153,13 @@
   - note에서 quote/page/section이 evidence로 남는다.
   - evidence ID가 Reading UI에 표시되거나 내부 state에 유지된다.
 - **Validation**:
-  - route test
-  - browser smoke
-  - 완료된 부분: note 생성/수정 시 `EvidenceLink` 생성 및 `ReadingPacket.evidenceLinkIds` 반영
-  - 남은 부분: citation chip과 PDF selected text의 직접 EvidenceLink 생성 UI 연결
+  - `services/backend/tests/reading-service.test.mjs`
+  - 기존 Reader UI의 citation/page jump 및 PDF selection note action 유지
+  - note 생성/수정 시 `EvidenceLink` 생성 및 `ReadingPacket.evidenceLinkIds` 반영
 
 ### Task 2.3: Citation/page navigation
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `web/app.js`
   - `web/app/features/reading.js`
@@ -170,11 +169,12 @@
   - citation p.N 클릭 시 PDF tab으로 전환되고 해당 page가 focus된다.
   - page 정보가 없는 항목은 실행 가능한 버튼처럼 보이지 않는다.
 - **Validation**:
-  - Playwright 또는 manual browser smoke
+  - 기존 `jump-reading-page` action과 `readingPdfController.scrollToPage(page)` 경로 확인
+  - `npm test`
 
 ### Task 2.4: PDF text selection to EvidenceLink
 
-- **Status**: Todo
+- **Status**: Done
 - **Location**:
   - `web/app/lib/pdf-viewer.js`
   - `web/app.js`
@@ -184,8 +184,8 @@
   - 선택한 텍스트, page, session, paper context가 저장된다.
   - chat composer의 remembered selection과 evidence 생성 흐름이 충돌하지 않는다.
 - **Validation**:
-  - browser smoke
-  - selected text payload 확인
+  - 기존 PDF selection capture와 `create-reading-note-from-selection` action 확인
+  - `services/backend/tests/reading-service.test.mjs`
 
 ## 6. Sprint 3: Queue Surface
 

@@ -1,5 +1,6 @@
 .omc
 .codex
+.codegraph
 .env
 .runtime
 .worktrees
