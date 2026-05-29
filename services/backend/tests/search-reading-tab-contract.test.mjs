@@ -61,6 +61,24 @@ test('Visible dashboard controls are wired actions or non-interactive status tex
   assert.doesNotMatch(appJs, /<button type="button" class="sidebar-account/);
 });
 
+test('Theme switcher persists light, dark, and system modes through shared CSS tokens', async () => {
+  const [appJs, stylesCss] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/styles.css'),
+  ]);
+
+  assert.match(appJs, /themeMode: "ares\.theme\.mode"/);
+  assert.match(appJs, /const THEME_MODES = \["light", "dark", "system"\]/);
+  assert.match(appJs, /function applyThemeMode\(mode = state\.themeMode\)/);
+  assert.match(appJs, /root\.dataset\.theme = resolved/);
+  assert.match(appJs, /data-action="set-theme-mode"/);
+  assert.match(appJs, /aria-pressed="\$\{active \? "true" : "false"\}"/);
+  assert.match(stylesCss, /html\[data-theme="dark"\]/);
+  assert.match(stylesCss, /--control-strong-bg:/);
+  assert.match(stylesCss, /--hover-control-bg:/);
+  assert.match(stylesCss, /\.theme-switcher-btn\.is-active/);
+});
+
 test('Read library upload uses a native file input inside the visible control', async () => {
   const readingJs = await readProjectFile('web/app/features/reading.js');
 

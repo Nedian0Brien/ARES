@@ -405,7 +405,7 @@ export function createReadingFeature({
   
   function renderReadingHomeStatusPill(item) {
     return `
-      <span class="reading-home-status-pill is-${escapeHtml(item.status.bucket)}" style="background:${item.status.color}12;border-color:${item.status.color}30;color:${item.status.color}">
+      <span class="reading-home-status-pill is-${escapeHtml(item.status.bucket)}" style="background:color-mix(in srgb, ${item.status.color} 8%, transparent);border-color:color-mix(in srgb, ${item.status.color} 22%, transparent);color:${item.status.color}">
         <span class="dot"></span>
         <span>${escapeHtml(item.status.label)}</span>
       </span>
@@ -989,7 +989,7 @@ export function createReadingFeature({
                             ${categoryRows
                               .map(
                                 (entry) => `
-                                  <span class="reading-highlight-chip" style="background:${entry.color}12;color:${entry.color};border-color:${entry.color}30">
+                                  <span class="reading-highlight-chip" style="background:color-mix(in srgb, ${entry.color} 8%, transparent);color:${entry.color};border-color:color-mix(in srgb, ${entry.color} 22%, transparent)">
                                     <span class="dot" style="background:${entry.color}"></span>
                                     <span>${escapeHtml(entry.label)}</span>
                                     <span class="mono">${entry.count}</span>

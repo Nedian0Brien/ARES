@@ -19,17 +19,17 @@ import { SURFACE_ROUTE_ALIASES, createSurfaceRouteNormalizer } from "./app/featu
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from "./app/lib/mobile-scroll-auto-hide.js";
 
 const TOKENS = {
-  bg: "#fbfbfa",
-  sb: "#f5f5f4",
-  s1: "#ffffff",
-  s2: "#f7f7f6",
-  s3: "#f0efed",
-  b1: "#e8e8e6",
-  b2: "#d4d4d2",
-  tx: "#0a0a0b",
-  t2: "#4a4a50",
-  t3: "#8a8a92",
-  t4: "#b0b0b8",
+  bg: "var(--bg)",
+  sb: "var(--sb)",
+  s1: "var(--s1)",
+  s2: "var(--s2)",
+  s3: "var(--s3)",
+  b1: "var(--b1)",
+  b2: "var(--b2)",
+  tx: "var(--tx)",
+  t2: "var(--t2)",
+  t3: "var(--t3)",
+  t4: "var(--t4)",
   search: "#5e9c6f",
   read: "#5e6ad2",
   research: "#8957c9",
@@ -221,7 +221,9 @@ const STORAGE_KEYS = {
   stage: "ares.stage",
   project: "ares.project",
   sidebarCollapsed: "ares.sidebar.collapsed",
+  themeMode: "ares.theme.mode",
 };
+const THEME_MODES = ["light", "dark", "system"];
 
 const SEARCH_MODE_TRANSITION_MS = 280;
 const AGENTIC_SEARCH_PRESS_MS = 780;
@@ -373,6 +375,7 @@ const state = {
   },
   workflowOpen: true,
   sidebarCollapsed: loadStorage(STORAGE_KEYS.sidebarCollapsed, "false") === "true",
+  themeMode: normalizeThemeMode(loadStorage(STORAGE_KEYS.themeMode, "system")),
   openWorkflowMenu: "",
   searchMeta: {
     provider: "seed",
@@ -391,6 +394,7 @@ const state = {
     savedOnly: false,
   },
 };
+applyThemeMode(state.themeMode);
 
 const app = document.querySelector("#app");
 let modalClosing = false;
@@ -424,6 +428,55 @@ function saveStorage(key, value) {
   } catch {
     // Ignore storage failures in restricted browsers.
   }
+}
+
+function normalizeThemeMode(mode) {
+  return THEME_MODES.includes(mode) ? mode : "system";
+}
+
+function resolvedThemeMode(mode = state.themeMode) {
+  const normalized = normalizeThemeMode(mode);
+  if (normalized !== "system") {
+    return normalized;
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyThemeMode(mode = state.themeMode) {
+  const normalized = normalizeThemeMode(mode);
+  const resolved = resolvedThemeMode(normalized);
+  const root = document.documentElement;
+  root.dataset.themeMode = normalized;
+  root.dataset.theme = resolved;
+  root.style.colorScheme = resolved;
+}
+
+function setThemeMode(mode) {
+  const nextMode = normalizeThemeMode(mode);
+  if (nextMode === state.themeMode) {
+    applyThemeMode(nextMode);
+    return false;
+  }
+
+  state.themeMode = nextMode;
+  saveStorage(STORAGE_KEYS.themeMode, nextMode);
+  applyThemeMode(nextMode);
+  return true;
+}
+
+function bindThemeModeListener() {
+  const mediaQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+  if (!mediaQuery) {
+    return;
+  }
+
+  mediaQuery.addEventListener?.("change", () => {
+    if (state.themeMode === "system") {
+      applyThemeMode("system");
+      render();
+    }
+  });
 }
 
 function normalizeStage(stageId) {
@@ -675,6 +728,12 @@ function icon(name, { size = 16, color = "currentColor", className = "" } = {}) 
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path></svg>',
     sidebar:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18"></path></svg>',
+    sun:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="M6.34 17.66l-1.41 1.41"></path><path d="M19.07 4.93l-1.41 1.41"></path></svg>',
+    moon:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.6A8.2 8.2 0 0 1 9.4 3.5a7 7 0 1 0 11.1 11.1Z"></path></svg>',
+    monitor:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path></svg>',
     settings:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>',
     moreH:
@@ -736,7 +795,9 @@ function renderKbd(value) {
 }
 
 function renderTag(label, color, dot = false) {
-  const style = color ? ` style="background:${color}12;color:${color};border-color:${color}30"` : "";
+  const style = color
+    ? ` style="background:color-mix(in srgb, ${color} 8%, transparent);color:${color};border-color:color-mix(in srgb, ${color} 22%, transparent)"`
+    : "";
   const dotMarkup = dot ? `<span class="tag-dot" style="background:${color || TOKENS.t3}"></span>` : "";
   return `<span class="tag"${style}>${dotMarkup}${escapeHtml(label)}</span>`;
 }
@@ -2925,6 +2986,35 @@ function renderSidebar() {
   `;
 }
 
+function renderThemeSwitcher() {
+  return `
+    <div class="theme-switcher" role="group" aria-label="Color theme">
+      ${[
+        ["light", "Light", "sun"],
+        ["dark", "Dark", "moon"],
+        ["system", "System", "monitor"],
+      ]
+        .map(([mode, label, iconName]) => {
+          const active = state.themeMode === mode;
+          return `
+            <button
+              type="button"
+              class="theme-switcher-btn ${active ? "is-active" : ""}"
+              data-action="set-theme-mode"
+              data-theme-mode="${mode}"
+              aria-pressed="${active ? "true" : "false"}"
+              title="${label}"
+            >
+              ${icon(iconName, { size: 12 })}
+              <span>${label}</span>
+            </button>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
 function renderTopbar() {
   const stage = stageById(state.activeStage);
   const tab = activeWorkflowTab();
@@ -2973,6 +3063,7 @@ function renderTopbar() {
       </div>
       <div class="topbar-actions">
         ${searchRunBadge}
+        ${renderThemeSwitcher()}
         <button type="button" class="btn-s" data-action="copy-stage-link" data-stage-id="${escapeHtml(stage.id)}">${icon("share", { size: 12 })} Share</button>
         <button type="button" class="btn-s" ${stage.id === "search" ? 'data-action="toggle-filter-panel"' : "disabled"}>${icon("filter", { size: 12 })} Filter</button>
       </div>
@@ -5267,6 +5358,13 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "set-theme-mode") {
+    if (setThemeMode(trigger.dataset.themeMode)) {
+      render();
+    }
+    return;
+  }
+
   if (action === "toggle-workflow-menu") {
     state.openWorkflowMenu = state.openWorkflowMenu === trigger.dataset.stageId ? "" : trigger.dataset.stageId;
     render();
@@ -5839,5 +5937,6 @@ async function boot() {
   }
 }
 
+bindThemeModeListener();
 renderWithViewTransition();
 boot();
