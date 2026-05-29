@@ -101,17 +101,26 @@ test('mobile bottom nav observes ARES nested scroll containers used by Discover'
 });
 
 test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens', async () => {
-  const [styles, designSystem] = await Promise.all([
+  const [styles, designSystem, indexHtml] = await Promise.all([
     readProjectFile('web/styles.css'),
     readProjectFile('design/ARES Design System.html'),
+    readProjectFile('web/index.html'),
   ]);
 
+  assert.match(indexHtml, /viewport-fit=cover/);
   assert.match(styles, /--bottom-nav-bg:\s*rgba\(255,\s*255,\s*255,\s*0\.78\)/);
-  assert.match(styles, /--mobile-bottom-nav-height:\s*calc\(104px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+  assert.match(styles, /--viewport-safe-top:\s*env\(safe-area-inset-top,\s*0px\)/);
+  assert.match(styles, /--viewport-safe-bottom:\s*env\(safe-area-inset-bottom,\s*0px\)/);
+  assert.match(styles, /--mobile-viewport-height:\s*100svh/);
+  assert.match(styles, /@supports\s*\(height:\s*100dvh\)[\s\S]*--mobile-viewport-height:\s*100dvh/);
+  assert.match(styles, /--mobile-bottom-nav-height:\s*calc\(104px \+ var\(--viewport-safe-bottom\)\)/);
+  assert.match(styles, /\.app-shell[\s\S]*padding-top:\s*var\(--viewport-safe-top\)/);
+  assert.match(styles, /\.workspace[\s\S]*min-height:\s*calc\(var\(--mobile-viewport-height\) - var\(--viewport-safe-top\)\)/);
+  assert.match(styles, /\.main-topbar[\s\S]*top:\s*var\(--viewport-safe-top\)/);
   assert.match(styles, /\.bottom-nav-hidden[\s\S]*pointer-events:\s*none/);
   assert.match(styles, /\.bottom-nav-indicator[\s\S]*cubic-bezier\(0\.175,\s*0\.885,\s*0\.32,\s*1\.275\)/);
   assert.match(styles, /width:\s*min\(400px,\s*calc\(100vw - 1rem\)\)/);
-  assert.match(styles, /bottom:\s*calc\(1\.25rem \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+  assert.match(styles, /bottom:\s*calc\(var\(--bottom-nav-offset\) \+ var\(--viewport-safe-bottom\)\)/);
   assert.match(styles, /\.bottom-nav[\s\S]*overflow:\s*visible/);
   assert.match(styles, /\.nav-item[\s\S]*min-height:\s*54px/);
   assert.match(styles, /@media\s*\(max-width:\s*900px\)[\s\S]*\.bottom-nav/);

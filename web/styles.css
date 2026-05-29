@@ -22,7 +22,12 @@
   --t-in: 360ms;
   --gap: 140ms;
   --eaze: cubic-bezier(0.32, 0.72, 0, 1);
+  --viewport-safe-top: env(safe-area-inset-top, 0px);
+  --viewport-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-viewport-height: 100vh;
   --mobile-bottom-nav-height: 0px;
+  --bottom-nav-shell-height: 62px;
+  --bottom-nav-offset: 1.25rem;
   --bottom-nav-bg: rgba(255, 255, 255, 0.78);
   --bottom-nav-border: rgba(10, 10, 11, 0.08);
   --bottom-nav-inset-border: rgba(255, 255, 255, 0.52);
@@ -5132,7 +5137,14 @@ body.reading-home-resize-active {
 
 @media (max-width: 900px) {
   :root {
-    --mobile-bottom-nav-height: calc(104px + env(safe-area-inset-bottom, 0px));
+    --mobile-viewport-height: 100svh;
+    --mobile-bottom-nav-height: calc(104px + var(--viewport-safe-bottom));
+  }
+
+  @supports (height: 100dvh) {
+    :root {
+      --mobile-viewport-height: 100dvh;
+    }
   }
 
   body {
@@ -5143,13 +5155,8 @@ body.reading-home-resize-active {
   .app-shell {
     display: block;
     height: auto;
-    min-height: 100svh;
-  }
-
-  @supports (height: 100dvh) {
-    .app-shell {
-      min-height: 100dvh;
-    }
+    min-height: var(--mobile-viewport-height);
+    padding-top: var(--viewport-safe-top);
   }
 
   .desktop-sidebar {
@@ -5157,21 +5164,15 @@ body.reading-home-resize-active {
   }
 
   .workspace {
-    min-height: 100svh;
+    min-height: calc(var(--mobile-viewport-height) - var(--viewport-safe-top));
     padding-bottom: calc(var(--mobile-bottom-nav-height) + 10px);
-  }
-
-  @supports (height: 100dvh) {
-    .workspace {
-      min-height: 100dvh;
-    }
   }
 
   .main-topbar {
     gap: 10px;
     padding: 0 14px;
     position: sticky;
-    top: 0;
+    top: var(--viewport-safe-top);
     z-index: 20;
   }
 
@@ -5417,13 +5418,13 @@ body.reading-home-resize-active {
     background: var(--bottom-nav-bg);
     border: 1px solid var(--bottom-nav-border);
     border-radius: 999px;
-    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--bottom-nav-offset) + var(--viewport-safe-bottom));
     box-shadow:
       inset 0 0 0 1px var(--bottom-nav-inset-border),
       var(--bottom-nav-shadow);
     display: flex;
     gap: 4px;
-    height: 62px;
+    height: var(--bottom-nav-shell-height);
     justify-content: space-around;
     left: 50%;
     max-width: 400px;
@@ -5441,7 +5442,7 @@ body.reading-home-resize-active {
   }
 
   .bottom-nav-hidden {
-    bottom: calc(-62px - 1.75rem - env(safe-area-inset-bottom, 0px));
+    bottom: calc(0px - var(--bottom-nav-shell-height) - var(--bottom-nav-offset) - var(--viewport-safe-bottom) - 8px);
     opacity: 0;
     pointer-events: none;
   }
@@ -7750,7 +7751,14 @@ body.is-run .stage-run .phase-card {
 
 @media (max-width: 900px) {
   :root {
-    --mobile-bottom-nav-height: calc(104px + env(safe-area-inset-bottom, 0px));
+    --mobile-viewport-height: 100svh;
+    --mobile-bottom-nav-height: calc(104px + var(--viewport-safe-bottom));
+  }
+
+  @supports (height: 100dvh) {
+    :root {
+      --mobile-viewport-height: 100dvh;
+    }
   }
 
   body {
@@ -7761,24 +7769,13 @@ body.is-run .stage-run .phase-card {
   .app-shell {
     display: block;
     height: auto;
-    min-height: 100svh;
-  }
-
-  @supports (height: 100dvh) {
-    .app-shell {
-      min-height: 100dvh;
-    }
+    min-height: var(--mobile-viewport-height);
+    padding-top: var(--viewport-safe-top);
   }
 
   .workspace {
-    min-height: 100svh;
+    min-height: calc(var(--mobile-viewport-height) - var(--viewport-safe-top));
     padding-bottom: calc(var(--mobile-bottom-nav-height) + 10px);
-  }
-
-  @supports (height: 100dvh) {
-    .workspace {
-      min-height: 100dvh;
-    }
   }
 
   .stage-wrap {
@@ -8445,6 +8442,11 @@ body.is-run .stage-run .phase-card {
 }
 
 @media (max-width: 480px) {
+  :root {
+    --bottom-nav-shell-height: 58px;
+    --bottom-nav-offset: 0.75rem;
+  }
+
   .main-topbar {
     height: 42px;
     padding: 0 12px;
@@ -8487,7 +8489,6 @@ body.is-run .stage-run .phase-card {
   }
 
   .bottom-nav {
-    height: 58px;
     width: min(400px, calc(100vw - 0.75rem));
   }
 
