@@ -11,6 +11,35 @@ function normaliseMetricName(value) {
   return String(value || 'primary').trim().toLowerCase().replace(/\s+/g, '_');
 }
 
+function metricNumber(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return null;
+  }
+
+  const number = Number(text.replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(number) ? number : null;
+}
+
+function metricDeltaValue(paperValue, observedValue) {
+  const paperNumber = metricNumber(paperValue);
+  const observedNumber = metricNumber(observedValue);
+  if (paperNumber === null || observedNumber === null) {
+    return null;
+  }
+  const delta = observedNumber - paperNumber;
+  return Math.round(delta * 1000) / 1000;
+}
+
+function metricDelta(paperValue, observedValue) {
+  const deltaValue = metricDeltaValue(paperValue, observedValue);
+  if (deltaValue === null) {
+    return observedValue ? 'Needs analysis' : 'Awaiting result';
+  }
+
+  return `${deltaValue > 0 ? '+' : ''}${deltaValue}`;
+}
+
 function parseRunnerMetrics(output) {
   const metrics = {};
   for (const line of String(output || '').split(/\r?\n/)) {
@@ -196,6 +225,68 @@ function missingExpectedMetrics(command, metrics) {
     const name = normaliseMetricName(metric);
     return !Object.hasOwn(metrics, name);
   });
+}
+
+function pickDossierMetric(runnerResult = {}) {
+  const expected = Array.isArray(runnerResult.command?.expectedMetrics) ? runnerResult.command.expectedMetrics : [];
+  const metric = expected.find((entry) => Object.hasOwn(runnerResult.metrics || {}, normaliseMetricName(entry)));
+  if (metric) {
+    return normaliseMetricName(metric);
+  }
+
+  return Object.keys(runnerResult.metrics || {})[0] || 'primary';
+}
+
+function baselineMetricValue(reproductionPlan = {}, metric = 'primary') {
+  const baseline = reproductionPlan.baseline && typeof reproductionPlan.baseline === 'object' ? reproductionPlan.baseline : {};
+  const value = baseline[metric] ?? baseline.metrics?.[metric] ?? baseline.primary ?? 'linked evidence';
+  if (value && typeof value === 'object') {
+    return value.value ?? value.paperValue ?? 'linked evidence';
+  }
+  return String(value || 'linked evidence');
+}
+
+function baselineMetricUnit(reproductionPlan = {}, metric = 'primary') {
+  const baseline = reproductionPlan.baseline && typeof reproductionPlan.baseline === 'object' ? reproductionPlan.baseline : {};
+  const value = baseline[metric] ?? baseline.metrics?.[metric];
+  if (value && typeof value === 'object') {
+    return String(value.unit || '');
+  }
+  return String(baseline.unit || '');
+}
+
+export function buildResultDossierFromRunnerResult({
+  paperId = '',
+  questionId = '',
+  reproductionPlan = {},
+  runId = '',
+  runnerResult = {},
+} = {}) {
+  const metric = pickDossierMetric(runnerResult);
+  const reproducedValue = String(runnerResult.metrics?.[metric] || '').trim();
+  const paperValue = baselineMetricValue(reproductionPlan, metric);
+  const delta = metricDelta(paperValue, reproducedValue);
+  const deltaValue = metricDeltaValue(paperValue, reproducedValue);
+  const comparison = {
+    delta,
+    deltaValue,
+    metric,
+    paperValue,
+    reproducedValue: reproducedValue || 'pending',
+    status: deltaValue === null ? 'needs-review' : 'measured',
+    summary: reproducedValue ? `Runner observed ${metric}: ${reproducedValue}` : `Runner did not report ${metric}.`,
+    unit: baselineMetricUnit(reproductionPlan, metric),
+  };
+
+  return {
+    comparisons: [comparison],
+    deltaSummary: comparison.delta,
+    evidenceLinkIds: Array.isArray(reproductionPlan.evidenceLinkIds) ? reproductionPlan.evidenceLinkIds : [],
+    experimentRunIds: [runId].filter(Boolean),
+    paperId,
+    questionId: questionId || reproductionPlan.questionId || '',
+    status: runnerResult.status === 'done' ? 'done' : 'draft',
+  };
 }
 
 export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {

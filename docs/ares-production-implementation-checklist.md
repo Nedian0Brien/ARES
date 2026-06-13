@@ -15,10 +15,10 @@
 - [x] P0. Auth, tenancy, access check
 - [x] P0. Migration, backup, file storage
 - [x] P0. Worker lease/recovery
-- [ ] P0. Runner sandbox safety
+- [x] P0. Runner sandbox safety
 - [ ] P1. Reader validation corpus
 - [ ] P1. Retrieval scorer 운영화
-- [ ] P1. Lab runner v1
+- [x] P1. Lab runner v1
 - [ ] P1. Observability and release gates
 - [ ] P2. Insight review workflow
 - [ ] P2. Citation/export pipeline
@@ -159,9 +159,9 @@
 - [x] typed failure result를 저장한다.
   - 산출물: timeout, non-zero exit, dependency missing, OOM categories
   - 검증: timeout/dependency/metric-missing failure matrix test in `services/backend/tests/lab-runner.test.mjs`
-- [ ] ResultDossier 자동 생성을 연결한다.
+- [x] ResultDossier 자동 생성을 연결한다.
   - 산출물: paper metric vs observed metric comparison
-  - 검증: successful run creates dossier test
+  - 검증: successful runner result creates dossier payload test in `services/backend/tests/lab-runner.test.mjs`
 
 ## Sprint 5. Insight review loop
 
@@ -225,6 +225,6 @@
 - [ ] PostgreSQL migration/e2e 검증 통과
 - [ ] worker recovery smoke 통과
 - [ ] Reader PDF corpus validation 통과
-- [ ] Lab runner fixture 통과
+- [x] Lab runner fixture 통과
 - [ ] export snapshot 검증 통과
 - [ ] 배포 smoke 또는 staging rehearsal 통과

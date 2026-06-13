@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 
-import { createLabRunnerAdapter } from '../lib/lab-runner.mjs';
+import { buildResultDossierFromRunnerResult, createLabRunnerAdapter } from '../lib/lab-runner.mjs';
 
 function createSpawn({ code = 0, stderr = '', stdout = '' } = {}) {
   const calls = [];
@@ -258,4 +258,50 @@ test('lab runner reports timeout as a typed failure and terminates the child', a
   assert.equal(result.status, 'error');
   assert.equal(result.failure.type, 'timeout');
   assert.deepEqual(killCalls, ['SIGTERM']);
+});
+
+test('lab runner builds a result dossier payload from a successful run', async () => {
+  const { spawnImpl } = createSpawn({ stdout: 'accuracy: 0.94\n' });
+  const runner = createLabRunnerAdapter({ rootDir: '/workspace', spawnImpl });
+  const runResult = await runner.run({
+    args: ['scripts/eval.py'],
+    command: 'python',
+    cwd: 'fixtures/repro',
+    expectedMetrics: ['accuracy'],
+  });
+
+  const dossier = buildResultDossierFromRunnerResult({
+    paperId: 'paper-1',
+    questionId: 'question-1',
+    reproductionPlan: {
+      baseline: {
+        accuracy: '0.90',
+      },
+      evidenceLinkIds: ['evidence-1'],
+      id: 'plan-1',
+    },
+    runId: 'run-1',
+    runnerResult: runResult,
+  });
+
+  assert.deepEqual(dossier, {
+    comparisons: [
+      {
+        delta: '+0.04',
+        deltaValue: 0.04,
+        metric: 'accuracy',
+        paperValue: '0.90',
+        reproducedValue: '0.94',
+        status: 'measured',
+        summary: 'Runner observed accuracy: 0.94',
+        unit: '',
+      },
+    ],
+    deltaSummary: '+0.04',
+    evidenceLinkIds: ['evidence-1'],
+    experimentRunIds: ['run-1'],
+    paperId: 'paper-1',
+    questionId: 'question-1',
+    status: 'done',
+  });
 });
