@@ -176,6 +176,80 @@ test('file store persists agent run lease fields', async () => {
   assert.equal(store.getAgentRun(run.id).leaseOwner, 'worker-b');
 });
 
+test('file store claims queued agent runs for competing workers once', async () => {
+  const store = await createDemoStore();
+  const older = await store.createAgentRun({
+    createdAt: '2026-06-14T00:00:00.000Z',
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'queue',
+  });
+  const newer = await store.createAgentRun({
+    createdAt: '2026-06-14T00:01:00.000Z',
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'queue',
+  });
+
+  const firstClaim = await store.claimNextAgentRun({
+    leaseMs: 30_000,
+    now: '2026-06-14T01:00:00.000Z',
+    stages: ['reading'],
+    workerId: 'worker-a',
+  });
+  const secondClaim = await store.claimNextAgentRun({
+    leaseMs: 30_000,
+    now: '2026-06-14T01:00:01.000Z',
+    stages: ['reading'],
+    workerId: 'worker-b',
+  });
+  const thirdClaim = await store.claimNextAgentRun({
+    leaseMs: 30_000,
+    now: '2026-06-14T01:00:02.000Z',
+    stages: ['reading'],
+    workerId: 'worker-c',
+  });
+
+  assert.equal(firstClaim.id, older.id);
+  assert.equal(firstClaim.status, 'running');
+  assert.equal(firstClaim.leaseOwner, 'worker-a');
+  assert.equal(firstClaim.leaseExpiresAt, '2026-06-14T01:00:30.000Z');
+  assert.equal(secondClaim.id, newer.id);
+  assert.equal(secondClaim.leaseOwner, 'worker-b');
+  assert.equal(thirdClaim, null);
+});
+
+test('file store releases agent runs only for the lease owner', async () => {
+  const store = await createDemoStore();
+  const run = await store.createAgentRun({
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'queue',
+  });
+  const claimed = await store.claimNextAgentRun({
+    leaseMs: 30_000,
+    now: '2026-06-14T01:00:00.000Z',
+    workerId: 'worker-a',
+  });
+
+  assert.equal(claimed.id, run.id);
+  await assert.rejects(
+    () => store.releaseAgentRun(run.id, { workerId: 'worker-b' }),
+    /owned by another worker/,
+  );
+
+  const released = await store.releaseAgentRun(run.id, {
+    now: '2026-06-14T01:00:05.000Z',
+    workerId: 'worker-a',
+  });
+
+  assert.equal(released.status, 'queue');
+  assert.equal(released.leaseOwner, '');
+  assert.equal(released.leaseExpiresAt, null);
+  assert.equal(released.heartbeatAt, null);
+  assert.equal(released.updatedAt, '2026-06-14T01:00:05.000Z');
+});
+
 test('file store removes deleted insight ids from draft section references', async () => {
   const store = await createDemoStore();
   const insight = await store.upsertProjectAsset('insightCards', {

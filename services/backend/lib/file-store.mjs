@@ -115,6 +115,31 @@ function sortByUpdatedDesc(left, right) {
   return rightStamp - leftStamp;
 }
 
+function sortByCreatedAsc(left, right) {
+  const leftStamp = Date.parse(left.createdAt || left.updatedAt || 0) || 0;
+  const rightStamp = Date.parse(right.createdAt || right.updatedAt || 0) || 0;
+  return leftStamp - rightStamp;
+}
+
+function normaliseTimestamp(value, fallback = nowIso()) {
+  const date = value instanceof Date ? value : new Date(value || fallback);
+  const stamp = date.getTime();
+  return Number.isFinite(stamp) ? date.toISOString() : fallback;
+}
+
+function claimExpiresAt(now, leaseMs) {
+  const duration = Number.isFinite(Number(leaseMs)) && Number(leaseMs) > 0 ? Number(leaseMs) : 60_000;
+  return new Date(Date.parse(now) + duration).toISOString();
+}
+
+function isLeaseExpired(run, now) {
+  if (!ensureText(run.leaseOwner)) {
+    return true;
+  }
+  const expiresAt = Date.parse(run.leaseExpiresAt || '');
+  return !Number.isFinite(expiresAt) || expiresAt <= Date.parse(now);
+}
+
 function removeAssetId(values, id) {
   if (!Array.isArray(values)) {
     return [];
@@ -605,6 +630,64 @@ export async function createFileStore({ seedFile, runtimeFile }) {
           stage: stage ? String(stage) : undefined,
         },
       });
+    },
+
+    async claimNextAgentRun({ workerId, leaseMs = 60_000, now = new Date(), stages = [] } = {}) {
+      const owner = ensureText(workerId);
+      if (!owner) {
+        throw new Error('workerId is required to claim an agent run.');
+      }
+
+      const nowValue = normaliseTimestamp(now);
+      const stageSet = new Set(ensureStringArray(stages, 32));
+      const run = state.agentRuns
+        .filter((entry) => normaliseStatus(entry.status, 'todo') === 'queue')
+        .filter((entry) => stageSet.size === 0 || stageSet.has(ensureText(entry.stage)))
+        .filter((entry) => isLeaseExpired(entry, nowValue))
+        .sort(sortByCreatedAsc)[0];
+
+      if (!run) {
+        return null;
+      }
+
+      const next = {
+        ...run,
+        heartbeatAt: nowValue,
+        leaseExpiresAt: claimExpiresAt(nowValue, leaseMs),
+        leaseOwner: owner,
+        startedAt: run.startedAt || nowValue,
+        status: 'running',
+        updatedAt: nowValue,
+      };
+
+      upsertBy('agentRuns', next, (entry) => entry.id === next.id);
+      await persist();
+      return clone(next);
+    },
+
+    async releaseAgentRun(runId, { workerId, status = 'queue', now = new Date() } = {}) {
+      const existing = state.agentRuns.find((entry) => entry.id === runId);
+      if (!existing) {
+        throw new Error(`Unknown agent run: ${runId}`);
+      }
+
+      const owner = ensureText(workerId);
+      if (owner && ensureText(existing.leaseOwner) && ensureText(existing.leaseOwner) !== owner) {
+        throw new Error('Agent run lease is owned by another worker.');
+      }
+
+      const next = {
+        ...existing,
+        heartbeatAt: null,
+        leaseExpiresAt: null,
+        leaseOwner: '',
+        status: normaliseStatus(status, existing.status),
+        updatedAt: normaliseTimestamp(now),
+      };
+
+      upsertBy('agentRuns', next, (entry) => entry.id === runId);
+      await persist();
+      return clone(next);
     },
 
     listProjectAssets(projectId, collectionName) {

@@ -18,3 +18,23 @@ test('postgres lookup index migration is registered and mirrored by SQL snapshot
     assert.ok(sql.includes(statement), `SQL snapshot is missing: ${statement}`);
   }
 });
+
+test('postgres agent run lease migration is registered and mirrored by SQL snapshot', async () => {
+  const leaseMigration = POSTGRES_MIGRATIONS.find((migration) => migration.id === '003_agent_run_leases');
+  assert.ok(leaseMigration, '003_agent_run_leases migration must be registered');
+
+  const sql = await fs.readFile(path.join(process.cwd(), 'migrations', '003_agent_run_leases.sql'), 'utf8');
+  const statements = leaseMigration.statements.map((statement) => `${statement};`);
+
+  assert.ok(statements.some((statement) => statement.includes('lease_owner')));
+  assert.ok(statements.some((statement) => statement.includes('ares_agent_runs_claim_idx')));
+  for (const statement of statements) {
+    assert.ok(sql.includes(statement), `SQL snapshot is missing: ${statement}`);
+  }
+});
+
+test('postgres store claims agent runs with row locks', async () => {
+  const source = await fs.readFile(path.join(process.cwd(), 'services', 'backend', 'lib', 'postgres-store.mjs'), 'utf8');
+
+  assert.match(source, /FOR UPDATE SKIP LOCKED/);
+});

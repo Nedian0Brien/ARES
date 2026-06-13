@@ -39,6 +39,15 @@ export const POSTGRES_MIGRATIONS = [
       'CREATE INDEX IF NOT EXISTS ares_project_assets_project_updated_idx ON ares_project_assets (project_id, updated_at DESC)',
     ],
   },
+  {
+    id: '003_agent_run_leases',
+    statements: [
+      "ALTER TABLE ares_agent_runs ADD COLUMN IF NOT EXISTS lease_owner TEXT NOT NULL DEFAULT ''",
+      'ALTER TABLE ares_agent_runs ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ NULL',
+      'ALTER TABLE ares_agent_runs ADD COLUMN IF NOT EXISTS heartbeat_at TIMESTAMPTZ NULL',
+      'CREATE INDEX IF NOT EXISTS ares_agent_runs_claim_idx ON ares_agent_runs (status, lease_expires_at, created_at ASC)',
+    ],
+  },
 ];
 const EVIDENCE_LINK_REFERENCE_COLLECTIONS = [
   'readingPackets',
@@ -131,6 +140,17 @@ function sortByUpdatedDesc(left, right) {
   const leftStamp = Date.parse(left.updatedAt || left.createdAt || 0) || 0;
   const rightStamp = Date.parse(right.updatedAt || right.createdAt || 0) || 0;
   return rightStamp - leftStamp;
+}
+
+function normaliseTimestamp(value, fallback = nowIso()) {
+  const date = value instanceof Date ? value : new Date(value || fallback);
+  const stamp = date.getTime();
+  return Number.isFinite(stamp) ? date.toISOString() : fallback;
+}
+
+function claimExpiresAt(now, leaseMs) {
+  const duration = Number.isFinite(Number(leaseMs)) && Number(leaseMs) > 0 ? Number(leaseMs) : 60_000;
+  return new Date(Date.parse(now) + duration).toISOString();
 }
 
 function removeAssetId(values, id) {
@@ -384,6 +404,9 @@ async function ensureSchema(pool) {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         started_at TIMESTAMPTZ NULL,
         finished_at TIMESTAMPTZ NULL,
+        lease_owner TEXT NOT NULL DEFAULT '',
+        lease_expires_at TIMESTAMPTZ NULL,
+        heartbeat_at TIMESTAMPTZ NULL,
         payload JSONB NOT NULL
       )
     `,
@@ -404,6 +427,7 @@ async function ensureSchema(pool) {
     'CREATE INDEX IF NOT EXISTS ares_reading_sessions_project_paper_idx ON ares_reading_sessions (project_id, paper_id)',
     'CREATE INDEX IF NOT EXISTS ares_agent_runs_project_updated_idx ON ares_agent_runs (project_id, updated_at DESC)',
     'CREATE INDEX IF NOT EXISTS ares_agent_runs_project_stage_idx ON ares_agent_runs (project_id, stage, updated_at DESC)',
+    'CREATE INDEX IF NOT EXISTS ares_agent_runs_claim_idx ON ares_agent_runs (status, lease_expires_at, created_at ASC)',
     'CREATE INDEX IF NOT EXISTS ares_project_assets_collection_project_updated_idx ON ares_project_assets (collection_name, project_id, updated_at DESC)',
     'CREATE INDEX IF NOT EXISTS ares_project_access_project_idx ON ares_project_access (project_id, user_id)',
     'CREATE INDEX IF NOT EXISTS ares_memberships_user_idx ON ares_memberships (user_id, organization_id)',
@@ -697,6 +721,24 @@ function inflatePayload(row, extra = {}) {
   };
 }
 
+function inflateAgentRunRow(row) {
+  return inflatePayload(row, {
+    createdAt: toIsoString(row.created_at),
+    finishedAt: toIsoString(row.finished_at),
+    heartbeatAt: toIsoString(row.heartbeat_at) || null,
+    id: ensureText(row.id),
+    leaseExpiresAt: toIsoString(row.lease_expires_at) || null,
+    leaseOwner: ensureText(row.lease_owner),
+    profileId: ensureText(row.payload?.profileId || ''),
+    projectId: ensureText(row.project_id),
+    stage: ensureText(row.stage),
+    startedAt: toIsoString(row.started_at),
+    status: normaliseStatus(row.status, 'todo'),
+    taskKind: ensureText(row.task_kind),
+    updatedAt: toIsoString(row.updated_at),
+  });
+}
+
 async function loadState(pool) {
   const usersResult = await pool.query(
     `
@@ -749,7 +791,7 @@ async function loadState(pool) {
   );
   const agentRunsResult = await pool.query(
     `
-      SELECT id, project_id, stage, task_kind, status, created_at, updated_at, started_at, finished_at, payload
+      SELECT id, project_id, stage, task_kind, status, created_at, updated_at, started_at, finished_at, lease_owner, lease_expires_at, heartbeat_at, payload
       FROM ares_agent_runs
       ORDER BY updated_at DESC
     `,
@@ -889,20 +931,7 @@ async function loadState(pool) {
   }
 
   for (const row of agentRunsResult.rows) {
-    state.agentRuns.push(
-      inflatePayload(row, {
-        createdAt: toIsoString(row.created_at),
-        finishedAt: toIsoString(row.finished_at),
-        id: ensureText(row.id),
-        profileId: ensureText(row.payload?.profileId || ''),
-        projectId: ensureText(row.project_id),
-        stage: ensureText(row.stage),
-        startedAt: toIsoString(row.started_at),
-        status: normaliseStatus(row.status, 'todo'),
-        taskKind: ensureText(row.task_kind),
-        updatedAt: toIsoString(row.updated_at),
-      }),
-    );
+    state.agentRuns.push(inflateAgentRunRow(row));
   }
 
   for (const row of projectAssetsResult.rows) {
@@ -987,9 +1016,12 @@ async function upsertAgentRunRow(pool, run) {
         updated_at,
         started_at,
         finished_at,
+        lease_owner,
+        lease_expires_at,
+        heartbeat_at,
         payload
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
       ON CONFLICT (id) DO UPDATE SET
         stage = EXCLUDED.stage,
         task_kind = EXCLUDED.task_kind,
@@ -997,6 +1029,9 @@ async function upsertAgentRunRow(pool, run) {
         updated_at = EXCLUDED.updated_at,
         started_at = EXCLUDED.started_at,
         finished_at = EXCLUDED.finished_at,
+        lease_owner = EXCLUDED.lease_owner,
+        lease_expires_at = EXCLUDED.lease_expires_at,
+        heartbeat_at = EXCLUDED.heartbeat_at,
         payload = EXCLUDED.payload
     `,
     [
@@ -1009,6 +1044,9 @@ async function upsertAgentRunRow(pool, run) {
       run.updatedAt || nowIso(),
       run.startedAt || null,
       run.finishedAt || null,
+      ensureText(run.leaseOwner),
+      run.leaseExpiresAt || null,
+      run.heartbeatAt || null,
       jsonPayload(run),
     ],
   );
@@ -1611,6 +1649,90 @@ export async function createPostgresStore({
           stage: stage ? String(stage) : undefined,
         },
       });
+    },
+
+    async claimNextAgentRun({ workerId, leaseMs = 60_000, now = new Date(), stages = [] } = {}) {
+      const owner = ensureText(workerId);
+      if (!owner) {
+        throw new Error('workerId is required to claim an agent run.');
+      }
+
+      const nowValue = normaliseTimestamp(now);
+      const leaseExpiresAt = claimExpiresAt(nowValue, leaseMs);
+      const stageValues = ensureStringArray(stages, 32);
+      const params = [owner, leaseExpiresAt, nowValue];
+      let stageClause = '';
+
+      if (stageValues.length > 0) {
+        params.push(stageValues);
+        stageClause = `AND stage = ANY($${params.length}::text[])`;
+      }
+
+      const result = await pool.query(
+        `
+          UPDATE ares_agent_runs
+          SET
+            status = 'running',
+            started_at = COALESCE(started_at, $3::timestamptz),
+            updated_at = $3::timestamptz,
+            lease_owner = $1,
+            lease_expires_at = $2::timestamptz,
+            heartbeat_at = $3::timestamptz,
+            payload = payload || jsonb_build_object(
+              'status', 'running',
+              'startedAt', COALESCE(payload->>'startedAt', $3::text),
+              'updatedAt', $3::text,
+              'leaseOwner', $1,
+              'leaseExpiresAt', $2::text,
+              'heartbeatAt', $3::text
+            )
+          WHERE id = (
+            SELECT id
+            FROM ares_agent_runs
+            WHERE status = 'queue'
+              ${stageClause}
+              AND (lease_owner = '' OR lease_expires_at IS NULL OR lease_expires_at <= $3::timestamptz)
+            ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+          )
+          RETURNING id, project_id, stage, task_kind, status, created_at, updated_at, started_at, finished_at, lease_owner, lease_expires_at, heartbeat_at, payload
+        `,
+        params,
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const claimed = inflateAgentRunRow(result.rows[0]);
+      upsertBy(state.agentRuns, claimed, (entry) => entry.id === claimed.id);
+      return clone(claimed);
+    },
+
+    async releaseAgentRun(runId, { workerId, status = 'queue', now = new Date() } = {}) {
+      const existing = state.agentRuns.find((entry) => entry.id === runId);
+      if (!existing) {
+        throw new Error(`Unknown agent run: ${runId}`);
+      }
+
+      const owner = ensureText(workerId);
+      if (owner && ensureText(existing.leaseOwner) && ensureText(existing.leaseOwner) !== owner) {
+        throw new Error('Agent run lease is owned by another worker.');
+      }
+
+      const next = {
+        ...existing,
+        heartbeatAt: null,
+        leaseExpiresAt: null,
+        leaseOwner: '',
+        status: normaliseStatus(status, existing.status),
+        updatedAt: normaliseTimestamp(now),
+      };
+
+      upsertBy(state.agentRuns, next, (entry) => entry.id === runId);
+      await upsertAgentRunRow(pool, next);
+      return clone(next);
     },
 
     listProjectAssets(projectId, collectionName) {

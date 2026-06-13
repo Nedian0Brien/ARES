@@ -95,9 +95,9 @@
 - [x] AgentRun lease schema를 추가한다.
   - 산출물: leaseOwner, leaseExpiresAt, heartbeatAt fields
   - 검증: store contract test in `services/backend/tests/asset-store.test.mjs`
-- [ ] queue run claim/release API를 store에 추가한다.
+- [x] queue run claim/release API를 store에 추가한다.
   - 산출물: atomic claim in Postgres, safe fallback in file store
-  - 검증: competing worker claim test
+  - 검증: competing worker claim test in `services/backend/tests/asset-store.test.mjs`, Postgres lock/migration checks in `services/backend/tests/postgres-schema.test.mjs`
 - [ ] durable cancel action을 worker loop와 연결한다.
   - 산출물: cancel request polling, subprocess termination
   - 검증: run cancel race test
