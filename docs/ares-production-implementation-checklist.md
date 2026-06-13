@@ -127,9 +127,9 @@
 - [x] multi-page table 처리 기준을 추가한다.
   - 산출물: extraction rule 또는 known limitation marker
   - 검증: multi-page table sample test in `services/backend/tests/reading-sample-validator.test.mjs`
-- [ ] retrieval scorer health validation을 배포 smoke에 연결한다.
+- [x] retrieval scorer health validation을 배포 smoke에 연결한다.
   - 산출물: scorer validation command in deploy/check script
-  - 검증: validation success/failure test
+  - 검증: validation success/failure and smoke script test in `services/backend/tests/retrieval-scorer.test.mjs`
 - [ ] unsupported answer policy를 강화한다.
   - 산출물: confidence threshold contract, UI warning
   - 검증: no-evidence chat test

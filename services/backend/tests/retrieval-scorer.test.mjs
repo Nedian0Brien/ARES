@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createConfiguredRetrievalScorer, createHttpRetrievalScorer } from '../lib/retrieval-scorer.mjs';
 import {
@@ -7,6 +10,9 @@ import {
   summariseRetrievalScorerScores,
   validateRetrievalScorerSummary,
 } from '../../../scripts/validate-retrieval-scorer.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, '..', '..', '..');
 
 test('configured retrieval scorer is disabled without an endpoint', () => {
   assert.equal(createConfiguredRetrievalScorer({ ARES_RETRIEVAL_SCORER_URL: '' }), null);
@@ -108,4 +114,33 @@ test('retrieval scorer validator reports ranking and score threshold failures', 
     'Expected top chunk method-adaptive-skipping, received baseline-results.',
     'Expected top score >= 0.8, received 0.71.',
   ]);
+});
+
+test('retrieval scorer validator reports passing health checks', () => {
+  const summary = summariseRetrievalScorerScores(
+    [
+      { chunkId: 'method-adaptive-skipping', score: 0.92 },
+      { chunkId: 'baseline-results', score: 0.33 },
+    ],
+    {
+      expectedTopChunkId: 'method-adaptive-skipping',
+      minTopScore: 0.8,
+      provider: 'test-reranker',
+    },
+  );
+
+  assert.equal(summary.status, 'passed');
+  assert.equal(summary.topChunkId, 'method-adaptive-skipping');
+  assert.equal(summary.topScore, 0.92);
+  assert.deepEqual(summary.failures, []);
+});
+
+test('deployment smoke script includes retrieval scorer health validation', async () => {
+  const packageJson = JSON.parse(await readFile(path.join(rootDir, 'package.json'), 'utf8'));
+
+  assert.equal(
+    packageJson.scripts['smoke:retrieval-scorer'],
+    'node scripts/validate-retrieval-scorer.mjs --min-top-score 0.8',
+  );
+  assert.match(packageJson.scripts['smoke:deploy'], /smoke:retrieval-scorer/);
 });
