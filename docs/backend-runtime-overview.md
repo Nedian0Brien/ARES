@@ -236,6 +236,9 @@ Reader retrieval scorer 운영 기본값은 `ARES_RETRIEVAL_SCORER_PROVIDER=loca
 실행 스크립트는 [package.json](/home/ubuntu/project/ARES/package.json:1)에 있다.
 
 - `npm start`
+- `npm run release:check`
+- `npm run smoke:worker-recovery`
+- `npm run validate:reading-corpus`
 - `npm run dev`
 - `npm test`
 

@@ -19,7 +19,7 @@
 - [x] P1. Reader validation corpus
 - [x] P1. Retrieval scorer 운영화
 - [x] P1. Lab runner v1
-- [ ] P1. Observability and release gates
+- [x] P1. Observability and release gates
 - [x] P2. Insight review workflow
 - [ ] P2. Citation/export pipeline
 - [ ] P2. Collaboration and project operations

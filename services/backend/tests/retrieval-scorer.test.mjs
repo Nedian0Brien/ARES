@@ -144,3 +144,26 @@ test('deployment smoke script includes retrieval scorer health validation', asyn
   );
   assert.match(packageJson.scripts['smoke:deploy'], /smoke:retrieval-scorer/);
 });
+
+test('release gate script combines observability and quality checks', async () => {
+  const [packageJson, runtimeDoc, runbook] = await Promise.all([
+    readFile(path.join(rootDir, 'package.json'), 'utf8').then(JSON.parse),
+    readFile(path.join(rootDir, 'docs', 'backend-runtime-overview.md'), 'utf8'),
+    readFile(path.join(rootDir, 'docs', 'production-release-runbook.md'), 'utf8'),
+  ]);
+
+  assert.match(packageJson.scripts['release:check'], /npm run lint/);
+  assert.match(packageJson.scripts['release:check'], /npm test/);
+  assert.match(packageJson.scripts['release:check'], /npm run test:e2e/);
+  assert.match(packageJson.scripts['release:check'], /npm run test:postgres/);
+  assert.match(packageJson.scripts['release:check'], /npm run smoke:worker-recovery/);
+  assert.match(packageJson.scripts['release:check'], /npm run validate:reading-corpus/);
+  assert.match(packageJson.scripts['release:check'], /npm run smoke:deploy/);
+  assert.match(packageJson.scripts['smoke:worker-recovery'], /agent-worker\.test\.mjs/);
+  assert.match(packageJson.scripts['validate:reading-corpus'], /reading-validation-samples\.json/);
+  assert.match(runtimeDoc, /npm run release:check/);
+  assert.match(runbook, /x-request-id/);
+  assert.match(runbook, /requestId/);
+  assert.match(runbook, /runId/);
+  assert.match(runbook, /Rollback/);
+});
