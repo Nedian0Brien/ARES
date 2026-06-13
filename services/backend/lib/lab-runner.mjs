@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { assessRunnerCommandRisk, normalizeReproductionCommand } from './lab-runner-safety.mjs';
 
 const METRIC_LINE_PATTERN = /^\s*([a-zA-Z][\w ./%-]{0,60})\s*[:=]\s*([-+]?\d+(?:\.\d+)?%?)\s*$/;
+const MAX_ARTIFACT_BYTES = 1_000_000;
 
 function normaliseMetricName(value) {
   return String(value || 'primary').trim().toLowerCase().replace(/\s+/g, '_');
@@ -63,6 +65,52 @@ function workspacePath(rootDir, relativePath) {
   return target;
 }
 
+function declaredArtifacts(input = {}) {
+  return Array.isArray(input.artifacts)
+    ? input.artifacts
+        .map((artifact) => ({
+          label: String(artifact?.label || artifact?.path || 'artifact').trim(),
+          path: String(artifact?.path || '').trim().replace(/\\/g, '/'),
+          type: String(artifact?.type || 'file').trim(),
+        }))
+        .filter((artifact) => artifact.path && !artifact.path.startsWith('/') && !artifact.path.includes('..'))
+        .slice(0, 16)
+    : [];
+}
+
+async function captureDeclaredArtifacts({ cwd, input }) {
+  const artifacts = [];
+
+  for (const artifact of declaredArtifacts(input)) {
+    const artifactPath = path.resolve(cwd, artifact.path);
+    if (artifactPath !== cwd && !artifactPath.startsWith(`${cwd}${path.sep}`)) {
+      continue;
+    }
+
+    let content = '';
+    try {
+      content = await readFile(artifactPath, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const sizeBytes = Buffer.byteLength(content);
+    if (sizeBytes > MAX_ARTIFACT_BYTES) {
+      continue;
+    }
+
+    artifacts.push({
+      content,
+      label: artifact.label,
+      path: artifact.path,
+      sizeBytes,
+      type: artifact.type,
+    });
+  }
+
+  return artifacts;
+}
+
 function buildPolicyBlockedResult({ approval, command, risk, type = 'policy' }) {
   return {
     approval: approvalState({ approval, command, risk }),
@@ -83,11 +131,11 @@ function buildPolicyBlockedResult({ approval, command, risk, type = 'policy' }) 
   };
 }
 
-function buildFailureResult({ approval, command, code, signal, stderr, stdout }) {
+function buildFailureResult({ approval, artifacts = [], command, code, signal, stderr, stdout }) {
   const message = String(stderr || stdout || `Runner exited with code ${code ?? signal ?? 'unknown'}`).trim();
   return {
     approval,
-    artifacts: [],
+    artifacts,
     command,
     exitCode: code,
     failure: {
@@ -164,11 +212,13 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
             status: 'error',
           });
         });
-        child.on('close', (code, signal) => {
+        child.on('close', async (code, signal) => {
+          const artifacts = await captureDeclaredArtifacts({ cwd, input });
+
           if (code === 0) {
             resolve({
               approval,
-              artifacts: [],
+              artifacts,
               command,
               completedAt: new Date().toISOString(),
               exitCode: code,
@@ -182,7 +232,7 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
             return;
           }
 
-          resolve(buildFailureResult({ approval, command, code, signal, stderr, stdout }));
+          resolve(buildFailureResult({ approval, artifacts, command, code, signal, stderr, stdout }));
         });
       });
     },

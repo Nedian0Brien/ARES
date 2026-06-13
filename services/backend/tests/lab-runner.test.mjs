@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { PassThrough } from 'node:stream';
 
 import { createLabRunnerAdapter } from '../lib/lab-runner.mjs';
@@ -134,4 +137,52 @@ test('lab runner executes approved medium-risk commands while preserving the app
   assert.equal(result.approval.approvedBy, 'researcher@example.com');
   assert.equal(result.metrics.accuracy, '0.93');
   assert.equal(calls.length, 1);
+});
+
+test('lab runner captures declared artifact files from the fixture workspace', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'ares-lab-runner-'));
+  await mkdir(path.join(rootDir, 'fixtures', 'repro'), { recursive: true });
+
+  const spawnImpl = (_command, _args, options) => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => {};
+
+    process.nextTick(async () => {
+      await writeFile(path.join(options.cwd, 'metrics.json'), '{"accuracy":0.94}\n');
+      child.stdout.write('accuracy: 0.94\n');
+      child.stdout.end();
+      child.stderr.end();
+      child.emit('close', 0, null);
+    });
+
+    return child;
+  };
+  const runner = createLabRunnerAdapter({ rootDir, spawnImpl });
+
+  try {
+    const result = await runner.run({
+      args: ['scripts/eval.py'],
+      artifacts: [{ label: 'metrics.json', path: 'metrics.json', type: 'json' }],
+      command: 'python',
+      cwd: 'fixtures/repro',
+      expectedMetrics: ['accuracy'],
+    });
+
+    assert.equal(result.status, 'done');
+    assert.deepEqual(result.artifacts, [
+      {
+        content: '{"accuracy":0.94}\n',
+        label: 'metrics.json',
+        path: 'metrics.json',
+        sizeBytes: 18,
+        type: 'json',
+      },
+    ]);
+    assert.equal(result.logs.stdout, 'accuracy: 0.94\n');
+    assert.equal(result.metrics.accuracy, '0.94');
+  } finally {
+    await rm(rootDir, { force: true, recursive: true });
+  }
 });

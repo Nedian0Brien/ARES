@@ -153,9 +153,9 @@
 - [x] human approval gate를 추가한다.
   - 산출물: command preview, risk score, approval state
   - 검증: unapproved medium-risk run blocked and approved medium-risk run allowed test in `services/backend/tests/lab-runner.test.mjs`
-- [ ] log/artifact/metric capture를 구현한다.
+- [x] log/artifact/metric capture를 구현한다.
   - 산출물: run log, artifact files, parsed metrics
-  - 검증: fixture repo run test
+  - 검증: fixture command log/metric/artifact capture test in `services/backend/tests/lab-runner.test.mjs`
 - [ ] typed failure result를 저장한다.
   - 산출물: timeout, non-zero exit, dependency missing, OOM categories
   - 검증: failure fixture tests
