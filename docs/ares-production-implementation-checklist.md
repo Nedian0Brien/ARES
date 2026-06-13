@@ -176,9 +176,9 @@
 - [x] contradiction trace를 저장한다.
   - 산출물: source quote/run log pointer, dismiss reason
   - 검증: model test in `services/backend/tests/asset-model.test.mjs`
-- [ ] insight quality report를 추가한다.
+- [x] insight quality report를 추가한다.
   - 산출물: evidence coverage, source diversity, unresolved contradiction count
-  - 검증: report calculation test
+  - 검증: report calculation test in `services/backend/tests/asset-model.test.mjs`
 - [ ] accepted insight gate를 Write에 적용한다.
   - 산출물: accepted insight만 기본 draft 후보로 노출
   - 검증: Write candidate filter test

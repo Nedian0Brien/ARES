@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   ASSET_COLLECTIONS,
+  buildInsightQualityReport,
   normaliseAsset,
   normaliseEvidenceLink,
   normaliseExperimentRun,
@@ -207,6 +208,43 @@ test('normaliseInsightCard stores contradiction traces and dismiss reasons', () 
       sourceRef: { id: 'evidence-1', label: 'Ablation table', type: 'evidenceLink' },
     },
   ]);
+});
+
+test('buildInsightQualityReport calculates evidence coverage, source diversity, and unresolved contradictions', () => {
+  const report = buildInsightQualityReport(
+    normaliseInsightCard(
+      {
+        claim: 'Dense reranking improves the final answer quality.',
+        contradictionTraces: [
+          {
+            dismissReason: '',
+            quote: 'Sparse retrieval performs better on the citation subset.',
+            sourceRef: { id: 'evidence-2', label: 'Citation subset', type: 'evidenceLink' },
+          },
+          {
+            dismissReason: 'Different corpus version.',
+            quote: 'A prior run showed no improvement.',
+            sourceRef: { id: 'run-1', label: 'Prior run', type: 'experimentRun' },
+          },
+        ],
+        evidenceLinkIds: ['evidence-1', 'evidence-2'],
+        sourceRefs: [
+          { id: 'evidence-1', label: 'Reader note', type: 'evidenceLink' },
+          { id: 'run-1', label: 'Lab run', type: 'experimentRun' },
+          { id: 'paper-1', label: 'Paper', type: 'paper' },
+        ],
+      },
+      { projectId: 'demo' },
+    ),
+  );
+
+  assert.deepEqual(report, {
+    evidenceCoverage: 'strong',
+    evidenceLinkCount: 2,
+    sourceDiversity: 3,
+    sourceTypes: ['evidenceLink', 'experimentRun', 'paper'],
+    unresolvedContradictionCount: 1,
+  });
 });
 
 test('normaliseExperimentRun preserves external import boundary metadata', () => {

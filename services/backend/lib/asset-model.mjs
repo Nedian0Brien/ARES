@@ -115,6 +115,37 @@ function normaliseClaimCluster(input = {}) {
   };
 }
 
+export function buildInsightQualityReport(card = {}) {
+  const evidenceLinkCount = ensureTextArray(card.evidenceLinkIds, 64).length;
+  const sourceTypes = Array.from(
+    new Set(
+      ensureObjectArray(card.sourceRefs, 64)
+        .map((sourceRef) => ensureText(sourceRef.type))
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+  const unresolvedContradictionCount = ensureObjectArray(card.contradictionTraces, 64).filter(
+    (trace) => !ensureText(trace.dismissReason),
+  ).length;
+  const explicitCoverage = ensureText(card.qualityCriteria?.evidenceCoverage);
+  const evidenceCoverage =
+    explicitCoverage && explicitCoverage !== 'unrated'
+      ? explicitCoverage
+      : evidenceLinkCount >= 2
+        ? 'strong'
+        : evidenceLinkCount === 1
+          ? 'partial'
+          : 'weak';
+
+  return {
+    evidenceCoverage,
+    evidenceLinkCount,
+    sourceDiversity: sourceTypes.length,
+    sourceTypes,
+    unresolvedContradictionCount,
+  };
+}
+
 function normaliseStatus(value, allowed, fallback) {
   const next = ensureText(value).toLowerCase();
   return allowed.has(next) ? next : fallback;
@@ -260,27 +291,35 @@ export function normaliseInsightCard(input = {}, options = {}) {
   const base = baseAsset(input, { ...options, fallbackStatus: 'candidate', prefix: 'insight' });
   const status = ensureText(input.status, base.status).toLowerCase();
   const type = ensureText(input.type || input.kind, 'claim').toLowerCase();
+  const draft = {
+    ...input,
+    contradictionTraces: ensureObjectArray(input.contradictionTraces, 32),
+    evidenceLinkIds: ensureTextArray(input.evidenceLinkIds, 64),
+    qualityCriteria: normaliseInsightQualityCriteria(input.qualityCriteria),
+    sourceRefs: ensureObjectArray(input.sourceRefs, 64),
+  };
 
   return {
     ...base,
     claimCluster: normaliseClaimCluster(input.claimCluster),
     claim: ensureText(input.claim || input.title, 'Untitled insight'),
     confidence: ensureText(input.confidence, 'medium'),
-    contradictionTraces: ensureObjectArray(input.contradictionTraces, 32),
+    contradictionTraces: draft.contradictionTraces,
     createdBy: ensureText(input.createdBy, 'user'),
-    evidenceLinkIds: ensureTextArray(input.evidenceLinkIds, 64),
+    evidenceLinkIds: draft.evidenceLinkIds,
     experimentRunIds: ensureTextArray(input.experimentRunIds, 32),
     failureCause: ensureText(input.failureCause),
     followUpExperiment: ensureText(input.followUpExperiment),
     implication: ensureText(input.implication),
     nextAction: ensureText(input.nextAction),
     questionId: ensureText(input.questionId),
-    qualityCriteria: normaliseInsightQualityCriteria(input.qualityCriteria),
+    qualityCriteria: draft.qualityCriteria,
+    qualityReport: buildInsightQualityReport(draft),
     resultDossierIds: ensureTextArray(input.resultDossierIds, 32),
     reviewDueAt: ensureText(input.reviewDueAt),
     reviewer: ensureText(input.reviewer),
     reviewNote: ensureText(input.reviewNote),
-    sourceRefs: ensureObjectArray(input.sourceRefs, 64),
+    sourceRefs: draft.sourceRefs,
     status: VALID_INSIGHT_REVIEW_STATUSES.has(status) ? status : 'candidate',
     type: VALID_INSIGHT_TYPES.has(type) ? type : 'claim',
   };
