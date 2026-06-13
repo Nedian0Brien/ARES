@@ -53,6 +53,17 @@ function parseProjectAssetItemRoute(requestPath) {
 
 export function createAssetRoutes({ json, parseProjectRoute, requireProjectAccess, readJsonBody, sendError, store }) {
   return async function handleAssetRoute(request, response, { requestPath }) {
+    if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/audit-events$/.test(requestPath)) {
+      const projectId = parseProjectRoute(requestPath, 'audit-events');
+      if (!requireProjectAccess(request, response, projectId, 'read')) {
+        return true;
+      }
+      json(response, 200, {
+        results: typeof store.listAuditEvents === 'function' ? store.listAuditEvents({ projectId }) : [],
+      });
+      return true;
+    }
+
     if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/graph$/.test(requestPath)) {
       const projectId = parseProjectRoute(requestPath, 'graph');
       if (!requireProjectAccess(request, response, projectId, 'read')) {
@@ -97,7 +108,8 @@ export function createAssetRoutes({ json, parseProjectRoute, requireProjectAcces
     if (request.method === 'DELETE' && /^\/api\/projects\/[^/]+\/[a-z-]+\/[^/]+$/.test(requestPath)) {
       const assetRoute = parseProjectAssetItemRoute(requestPath);
       if (assetRoute && assetRoute.collection !== 'readingSessions') {
-        if (!requireProjectAccess(request, response, assetRoute.projectId, 'destructive')) {
+        const access = requireProjectAccess(request, response, assetRoute.projectId, 'destructive');
+        if (!access) {
           return true;
         }
         if (typeof store.deleteProjectAsset !== 'function') {
@@ -115,17 +127,37 @@ export function createAssetRoutes({ json, parseProjectRoute, requireProjectAcces
         const deleted = await store.deleteProjectAsset(assetRoute.collection, assetRoute.id, {
           projectId: assetRoute.projectId,
         });
+        const audit =
+          typeof store.recordAuditEvent === 'function'
+            ? {
+                ...(await store.recordAuditEvent({
+                  action: 'deleteProjectAsset',
+                  actorUserId: access.user.id,
+                  metadata: {
+                    collection: assetRoute.collection,
+                    confirmed: true,
+                    deleted: deleted.deleted,
+                  },
+                  projectId: assetRoute.projectId,
+                  reason,
+                  targetId: assetRoute.id,
+                  targetType: assetRoute.collection,
+                })),
+                collection: assetRoute.collection,
+                confirmed: true,
+              }
+            : {
+                action: 'deleteProjectAsset',
+                collection: assetRoute.collection,
+                confirmed: true,
+                id: assetRoute.id,
+                projectId: assetRoute.projectId,
+                reason,
+                recordedAt: new Date().toISOString(),
+              };
         json(response, 200, {
           ...deleted,
-          audit: {
-            action: 'deleteProjectAsset',
-            collection: assetRoute.collection,
-            confirmed: true,
-            id: assetRoute.id,
-            projectId: assetRoute.projectId,
-            reason,
-            recordedAt: new Date().toISOString(),
-          },
+          audit,
         });
         return true;
       }

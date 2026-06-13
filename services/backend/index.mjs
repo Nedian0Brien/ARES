@@ -783,7 +783,7 @@ const server = http.createServer(async (request, response) => {
         notFound(response);
         return;
       }
-      if (!requireProjectAccess(request, response, payload.projectId, 'read')) {
+      if (!requireProjectAccess(request, response, payload.run.projectId, 'read')) {
         return;
       }
 
@@ -798,7 +798,7 @@ const server = http.createServer(async (request, response) => {
         notFound(response);
         return;
       }
-      if (!requireProjectAccess(request, response, payload.projectId, 'read')) {
+      if (!requireProjectAccess(request, response, payload.run.projectId, 'read')) {
         return;
       }
 
@@ -820,13 +820,29 @@ const server = http.createServer(async (request, response) => {
         notFound(response);
         return;
       }
-      if (!requireProjectAccess(request, response, currentRun.projectId, action === 'abort' ? 'destructive' : 'write')) {
+      const access = requireProjectAccess(request, response, currentRun.run.projectId, action === 'abort' ? 'destructive' : 'write');
+      if (!access) {
         return;
       }
 
       const payload =
         action === 'abort' ? await agentRunService.abortRun(runId) : await agentRunService.retryRun(runId);
-      json(response, 200, payload);
+      const audit =
+        action === 'abort' && typeof store.recordAuditEvent === 'function'
+          ? await store.recordAuditEvent({
+              action: 'abortAgentRun',
+              actorUserId: access.user.id,
+              metadata: {
+                stage: currentRun.run.stage,
+                status: payload.run.status,
+              },
+              projectId: currentRun.run.projectId,
+              reason: String(body.reason || 'User requested abort.'),
+              targetId: runId,
+              targetType: 'agentRun',
+            })
+          : null;
+      json(response, 200, audit ? { ...payload, audit } : payload);
       return;
     }
 
@@ -894,6 +910,62 @@ const server = http.createServer(async (request, response) => {
       });
       json(response, 200, {
         runs: accessibleProjectIds ? runs.filter((run) => accessibleProjectIds.has(run.projectId)) : runs,
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/project-access$/.test(requestPath)) {
+      const projectId = parseProjectRoute(requestPath, 'project-access');
+      if (!requireProjectAccess(request, response, projectId, 'read')) {
+        return;
+      }
+      json(response, 200, {
+        results: typeof store.listProjectAccess === 'function' ? store.listProjectAccess({ projectId }) : [],
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/project-access$/.test(requestPath)) {
+      const projectId = parseProjectRoute(requestPath, 'project-access');
+      const access = requireProjectAccess(request, response, projectId, 'destructive');
+      if (!access) {
+        return;
+      }
+      if (typeof store.upsertProjectAccess !== 'function') {
+        sendError(response, new Error('Project access updates are not supported by this store.'), 501);
+        return;
+      }
+      const body = await readJsonBody(request);
+      const userId = String(body.userId || '').trim();
+      const reason = String(body.reason || '').trim();
+      if (!userId || !reason) {
+        sendError(response, new Error('userId and reason are required to update project access.'), 400);
+        return;
+      }
+      const projectAccess = await store.upsertProjectAccess({
+        projectId,
+        role: body.role,
+        status: body.status,
+        userId,
+      });
+      const audit =
+        typeof store.recordAuditEvent === 'function'
+          ? await store.recordAuditEvent({
+              action: 'updateProjectAccess',
+              actorUserId: access.user.id,
+              metadata: {
+                role: projectAccess.role,
+                status: projectAccess.status,
+              },
+              projectId,
+              reason,
+              targetId: projectAccess.id,
+              targetType: 'projectAccess',
+            })
+          : null;
+      json(response, 200, {
+        audit,
+        projectAccess,
       });
       return;
     }

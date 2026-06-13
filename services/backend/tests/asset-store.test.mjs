@@ -129,6 +129,26 @@ test('file store persists users, organizations, memberships, project access, and
   assert.equal(store.getAuthSessionByToken(session.token), null);
 });
 
+test('file store records project audit events', async () => {
+  const store = await createDemoStore();
+  const event = await store.recordAuditEvent({
+    action: 'deleteProjectAsset',
+    actorUserId: 'owner-user',
+    metadata: { collection: 'insightCards' },
+    projectId: 'demo',
+    reason: 'Audit unit test.',
+    targetId: 'insight-1',
+    targetType: 'insightCards',
+  });
+
+  const events = store.listAuditEvents({ projectId: 'demo' });
+  assert.equal(events[0].id, event.id);
+  assert.equal(events[0].action, 'deleteProjectAsset');
+  assert.equal(events[0].actorUserId, 'owner-user');
+  assert.equal(events[0].reason, 'Audit unit test.');
+  assert.deepEqual(events[0].metadata, { collection: 'insightCards' });
+});
+
 test('file store removes deleted insight ids from draft section references', async () => {
   const store = await createDemoStore();
   const insight = await store.upsertProjectAsset('insightCards', {

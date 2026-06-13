@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import { Pool } from 'pg';
 
 import { ASSET_COLLECTIONS, normaliseAsset, normalisePaper } from './asset-model.mjs';
+import { normalizeAuditEvent } from './audit-model.mjs';
 import {
   normalizeAuthSession,
   normalizeMembership,
@@ -15,6 +16,7 @@ import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
 const IDENTITY_COLLECTIONS = ['users', 'organizations', 'memberships', 'projectAccess', 'authSessions'];
+const AUDIT_COLLECTIONS = ['auditEvents'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
 const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
 const MAX_AGENT_PROGRESS_EVENTS = 80;
@@ -57,6 +59,12 @@ function migrateStoreState(state) {
   }
 
   for (const key of IDENTITY_COLLECTIONS) {
+    if (!Array.isArray(state[key])) {
+      state[key] = [];
+      changed = true;
+    }
+  }
+  for (const key of AUDIT_COLLECTIONS) {
     if (!Array.isArray(state[key])) {
       state[key] = [];
       changed = true;
@@ -301,6 +309,19 @@ async function ensureSchema(pool) {
       )
     `,
     `
+      CREATE TABLE IF NOT EXISTS ares_audit_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL DEFAULT '',
+        actor_user_id TEXT NOT NULL DEFAULT '',
+        action TEXT NOT NULL DEFAULT '',
+        target_type TEXT NOT NULL DEFAULT '',
+        target_id TEXT NOT NULL DEFAULT '',
+        reason TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb
+      )
+    `,
+    `
       CREATE TABLE IF NOT EXISTS ares_library (
         project_id TEXT NOT NULL REFERENCES ares_projects(id) ON DELETE CASCADE,
         paper_id TEXT NOT NULL,
@@ -367,6 +388,7 @@ async function ensureSchema(pool) {
     'CREATE INDEX IF NOT EXISTS ares_project_access_project_idx ON ares_project_access (project_id, user_id)',
     'CREATE INDEX IF NOT EXISTS ares_memberships_user_idx ON ares_memberships (user_id, organization_id)',
     'CREATE INDEX IF NOT EXISTS ares_auth_sessions_token_idx ON ares_auth_sessions (token)',
+    'CREATE INDEX IF NOT EXISTS ares_audit_events_project_created_idx ON ares_audit_events (project_id, created_at DESC)',
   ];
 
   for (const statement of statements) {
@@ -733,6 +755,13 @@ async function loadState(pool) {
       ORDER BY created_at DESC
     `,
   );
+  const auditEventsResult = await pool.query(
+    `
+      SELECT id, project_id, actor_user_id, action, target_type, target_id, reason, created_at, payload
+      FROM ares_audit_events
+      ORDER BY created_at DESC
+    `,
+  );
 
   const state = migrateStoreState({
     projects: projectsResult.rows.map(inflateProject),
@@ -789,6 +818,18 @@ async function loadState(pool) {
       token: ensureText(row.token),
       updatedAt: toIsoString(row.updated_at),
       userId: ensureText(row.user_id),
+    }),
+  );
+  state.auditEvents = auditEventsResult.rows.map((row) =>
+    inflatePayload(row, {
+      action: ensureText(row.action),
+      actorUserId: ensureText(row.actor_user_id),
+      createdAt: toIsoString(row.created_at),
+      id: ensureText(row.id),
+      projectId: ensureText(row.project_id),
+      reason: ensureText(row.reason),
+      targetId: ensureText(row.target_id),
+      targetType: ensureText(row.target_type),
     }),
   );
 
@@ -1083,6 +1124,28 @@ async function upsertAuthSessionRow(pool, session) {
   );
 }
 
+async function insertAuditEventRow(pool, event) {
+  await pool.query(
+    `
+      INSERT INTO ares_audit_events (
+        id, project_id, actor_user_id, action, target_type, target_id, reason, created_at, payload
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+    `,
+    [
+      event.id,
+      event.projectId,
+      event.actorUserId,
+      event.action,
+      event.targetType,
+      event.targetId,
+      event.reason,
+      event.createdAt || nowIso(),
+      jsonPayload(event),
+    ],
+  );
+}
+
 export async function createPostgresStore({
   databaseSsl,
   databaseUrl,
@@ -1340,6 +1403,27 @@ export async function createPostgresStore({
 
     listUsers() {
       return clone(identityCollectionFor('users'));
+    },
+
+    listAuditEvents({ projectId, action, actorUserId } = {}) {
+      let values = state.auditEvents || [];
+      if (projectId) {
+        values = values.filter((entry) => entry.projectId === projectId);
+      }
+      if (action) {
+        values = values.filter((entry) => entry.action === action);
+      }
+      if (actorUserId) {
+        values = values.filter((entry) => entry.actorUserId === actorUserId);
+      }
+      return clone(values.slice().sort(sortByUpdatedDesc));
+    },
+
+    async recordAuditEvent(input) {
+      const event = normalizeAuditEvent(input);
+      state.auditEvents.unshift(event);
+      await insertAuditEventRow(pool, event);
+      return clone(event);
     },
 
     getUser(userId) {

@@ -187,6 +187,28 @@ test('required auth mode rejects anonymous API access and filters project lists'
     runsPayload.runs.map((run) => run.id),
     ['run-owned'],
   );
+
+  const abortResponse = await fetch(new URL('/api/agent-runs/run-owned/actions', server.url), {
+    body: JSON.stringify({
+      action: 'abort',
+      reason: 'Audit abort from test.',
+    }),
+    headers: {
+      ...userHeaders('owner-user'),
+      'content-type': 'application/json',
+    },
+    method: 'POST',
+  });
+  assert.equal(abortResponse.status, 200);
+
+  const auditResponse = await fetch(new URL('/api/projects/owned/audit-events', server.url), {
+    headers: userHeaders('owner-user'),
+  });
+  const auditPayload = await auditResponse.json();
+  assert.equal(auditResponse.status, 200);
+  assert.equal(auditPayload.results[0].action, 'abortAgentRun');
+  assert.equal(auditPayload.results[0].actorUserId, 'owner-user');
+  assert.equal(auditPayload.results[0].targetId, 'run-owned');
 });
 
 test('cookie login exposes current user and enforces CSRF on mutating requests', async (t) => {
@@ -350,4 +372,28 @@ test('project access guard separates read, write, and destructive permissions', 
     },
   );
   assert.equal(editorDeleteResponse.status, 403);
+
+  const updateAccessResponse = await fetch(new URL('/api/projects/owned/project-access', server.url), {
+    body: JSON.stringify({
+      reason: 'Promote viewer for audit coverage.',
+      role: 'editor',
+      userId: 'viewer-user',
+    }),
+    headers: {
+      ...userHeaders('owner-user'),
+      'content-type': 'application/json',
+    },
+    method: 'POST',
+  });
+  const updateAccessPayload = await updateAccessResponse.json();
+  assert.equal(updateAccessResponse.status, 200);
+  assert.equal(updateAccessPayload.projectAccess.role, 'editor');
+  assert.equal(updateAccessPayload.audit.action, 'updateProjectAccess');
+
+  const projectAccessResponse = await fetch(new URL('/api/projects/owned/project-access', server.url), {
+    headers: userHeaders('owner-user'),
+  });
+  const projectAccessPayload = await projectAccessResponse.json();
+  assert.equal(projectAccessResponse.status, 200);
+  assert.equal(projectAccessPayload.results.find((entry) => entry.userId === 'viewer-user').role, 'editor');
 });

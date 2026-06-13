@@ -48,9 +48,9 @@
 - [x] role 권한을 적용한다.
   - 산출물: owner/editor/viewer permission matrix
   - 검증: viewer write 차단, editor write 허용, editor destructive 제한 test in `services/backend/tests/auth-access.test.mjs`
-- [ ] destructive action audit log를 추가한다.
+- [x] destructive action audit log를 추가한다.
   - 산출물: audit event model/API
-  - 검증: asset delete, run cancel, permission change audit test
+  - 검증: asset delete, run cancel, permission change audit test in `services/backend/tests/asset-routes.test.mjs`, `services/backend/tests/auth-access.test.mjs`, `services/backend/tests/asset-store.test.mjs`
 
 ### 2. Production Storage, Migration, Backup
 

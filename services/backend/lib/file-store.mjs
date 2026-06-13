@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { ASSET_COLLECTIONS, normaliseAsset, normalisePaper } from './asset-model.mjs';
+import { normalizeAuditEvent } from './audit-model.mjs';
 import {
   normalizeAuthSession,
   normalizeMembership,
@@ -14,6 +15,7 @@ import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
 const IDENTITY_COLLECTIONS = ['users', 'organizations', 'memberships', 'projectAccess', 'authSessions'];
+const AUDIT_COLLECTIONS = ['auditEvents'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
 const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
 const MAX_AGENT_PROGRESS_EVENTS = 80;
@@ -57,12 +59,19 @@ function migrateStoreState(state) {
       changed = true;
     }
   }
+  for (const key of AUDIT_COLLECTIONS) {
+    if (!Array.isArray(state[key])) {
+      state[key] = [];
+      changed = true;
+    }
+  }
 
   state.users = state.users.map((entry) => normalizeUser(entry));
   state.organizations = state.organizations.map((entry) => normalizeOrganization(entry));
   state.memberships = state.memberships.map((entry) => normalizeMembership(entry));
   state.projectAccess = state.projectAccess.map((entry) => normalizeProjectAccess(entry));
   state.authSessions = state.authSessions.map((entry) => normalizeAuthSession(entry));
+  state.auditEvents = state.auditEvents.map((entry) => normalizeAuditEvent(entry));
 
   for (const key of PROJECT_MAP_COLLECTIONS) {
     changed = ensureArrayMap(state, key) || changed;
@@ -413,6 +422,27 @@ export async function createFileStore({ seedFile, runtimeFile }) {
 
     listUsers() {
       return clone(identityCollectionFor('users'));
+    },
+
+    listAuditEvents({ projectId, action, actorUserId } = {}) {
+      let values = state.auditEvents || [];
+      if (projectId) {
+        values = values.filter((entry) => entry.projectId === projectId);
+      }
+      if (action) {
+        values = values.filter((entry) => entry.action === action);
+      }
+      if (actorUserId) {
+        values = values.filter((entry) => entry.actorUserId === actorUserId);
+      }
+      return clone(values.slice().sort(sortByUpdatedDesc));
+    },
+
+    async recordAuditEvent(input) {
+      const event = normalizeAuditEvent(input);
+      state.auditEvents.unshift(event);
+      await persist();
+      return clone(event);
     },
 
     getUser(userId) {

@@ -223,6 +223,13 @@ test('asset graph routes expose project graph and create graph assets', async (t
   assert.equal(deletedEvidence.audit.confirmed, true);
   assert.match(deletedEvidence.audit.reason, /cascade cleanup/);
 
+  const auditResponse = await fetch(new URL('/api/projects/demo/audit-events', server.url));
+  const auditPayload = await auditResponse.json();
+  assert.equal(auditResponse.status, 200);
+  assert.equal(auditPayload.results[0].action, 'deleteProjectAsset');
+  assert.equal(auditPayload.results[0].targetId, evidence.asset.id);
+  assert.equal(auditPayload.results[0].reason, 'Route test deletes evidence to verify cascade cleanup.');
+
   const afterEvidenceDeleteInsightsResponse = await fetch(new URL('/api/projects/demo/insight-cards', server.url));
   const afterEvidenceDeleteInsights = await afterEvidenceDeleteInsightsResponse.json();
   const updatedInsight = afterEvidenceDeleteInsights.results.find((entry) => entry.id === created.asset.id);
