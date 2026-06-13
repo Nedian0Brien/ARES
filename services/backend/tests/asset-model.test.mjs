@@ -162,6 +162,26 @@ test('normaliseInsightCard stores quality criteria for review gates', () => {
   });
 });
 
+test('normaliseInsightCard stores review workflow status and reviewer assignment', () => {
+  const accepted = normaliseInsightCard(
+    {
+      claim: 'The reranker improves low-overlap retrieval.',
+      reviewDueAt: '2026-06-20',
+      reviewer: 'reviewer@example.com',
+      reviewNote: 'Check against the ablation table before drafting.',
+      status: 'accepted',
+    },
+    { projectId: 'demo' },
+  );
+  const fallback = normaliseInsightCard({ claim: 'Needs review', status: 'done' }, { projectId: 'demo' });
+
+  assert.equal(accepted.status, 'accepted');
+  assert.equal(accepted.reviewer, 'reviewer@example.com');
+  assert.equal(accepted.reviewDueAt, '2026-06-20');
+  assert.equal(accepted.reviewNote, 'Check against the ablation table before drafting.');
+  assert.equal(fallback.status, 'candidate');
+});
+
 test('normaliseExperimentRun preserves external import boundary metadata', () => {
   const run = normaliseExperimentRun(
     {

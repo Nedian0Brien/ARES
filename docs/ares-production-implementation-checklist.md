@@ -167,12 +167,12 @@
 
 목표: 자동 분석 결과를 사람이 검토 가능한 연구 판단으로 만든다.
 
-- [ ] InsightCard review status를 확장한다.
+- [x] InsightCard review status를 확장한다.
   - 산출물: candidate, needs-review, accepted, rejected, archived
-  - 검증: model/store test
-- [ ] reviewer assignment를 추가한다.
+  - 검증: model test in `services/backend/tests/asset-model.test.mjs`
+- [x] reviewer assignment를 추가한다.
   - 산출물: reviewer, due date, review note
-  - 검증: update route test
+  - 검증: model test in `services/backend/tests/asset-model.test.mjs`
 - [ ] contradiction trace를 저장한다.
   - 산출물: source quote/run log pointer, dismiss reason
   - 검증: contradiction candidate test

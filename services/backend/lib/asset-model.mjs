@@ -26,6 +26,7 @@ export const ASSET_COLLECTIONS = Array.from(new Set([...LEGACY_ASSET_COLLECTIONS
 
 const VALID_GENERIC_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'draft', 'archived']);
 const VALID_QUESTION_STATUSES = new Set(['active', 'paused', 'done', 'archived']);
+const VALID_INSIGHT_REVIEW_STATUSES = new Set(['candidate', 'needs-review', 'accepted', 'rejected', 'archived']);
 const VALID_INSIGHT_TYPES = new Set(['claim', 'hypothesis', 'decision', 'observation']);
 
 function clone(value) {
@@ -256,7 +257,8 @@ export function normaliseResultDossier(input = {}, options = {}) {
 }
 
 export function normaliseInsightCard(input = {}, options = {}) {
-  const base = baseAsset(input, { ...options, fallbackStatus: 'draft', prefix: 'insight' });
+  const base = baseAsset(input, { ...options, fallbackStatus: 'candidate', prefix: 'insight' });
+  const status = ensureText(input.status, base.status).toLowerCase();
   const type = ensureText(input.type || input.kind, 'claim').toLowerCase();
 
   return {
@@ -274,7 +276,11 @@ export function normaliseInsightCard(input = {}, options = {}) {
     questionId: ensureText(input.questionId),
     qualityCriteria: normaliseInsightQualityCriteria(input.qualityCriteria),
     resultDossierIds: ensureTextArray(input.resultDossierIds, 32),
+    reviewDueAt: ensureText(input.reviewDueAt),
+    reviewer: ensureText(input.reviewer),
+    reviewNote: ensureText(input.reviewNote),
     sourceRefs: ensureObjectArray(input.sourceRefs, 64),
+    status: VALID_INSIGHT_REVIEW_STATUSES.has(status) ? status : 'candidate',
     type: VALID_INSIGHT_TYPES.has(type) ? type : 'claim',
   };
 }
