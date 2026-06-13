@@ -1,9 +1,9 @@
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 import { PDFParse } from 'pdf-parse';
 
+import { createLocalArtifactStore } from './artifact-store.mjs';
 import { normaliseReadingPacket } from './asset-model.mjs';
 import { createAgentRuntime, DEFAULT_AGENT_TIMEOUT_MS } from './agent-runtime.mjs';
 import {
@@ -319,16 +319,6 @@ function decodeUploadedPdf({ contentBase64 = '', contentBuffer = null } = {}) {
   }
 
   return buffer;
-}
-
-function resolveSafePath(rootDir, relativePath) {
-  const next = path.resolve(rootDir, relativePath);
-  const safeRoot = path.resolve(rootDir);
-  if (!next.startsWith(safeRoot)) {
-    throw new Error('Unsafe runtime path requested.');
-  }
-
-  return next;
 }
 
 function buildChunkId(page, index) {
@@ -1030,18 +1020,10 @@ function buildRetrievalTrace({ rankedChunks, queryTerms, scorer }) {
   };
 }
 
-async function fileExists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function createReadingService({
   agentTimeoutMs = DEFAULT_AGENT_TIMEOUT_MS,
   agentRuntime = null,
+  artifactStore = null,
   enableDemoPdf = false,
   fetchImpl = globalThis.fetch,
   ocrEngine = createTesseractOcrEngine(),
@@ -1067,6 +1049,7 @@ export function createReadingService({
       cwd: rootDir,
       runtimeName,
     });
+  const artifacts = artifactStore || createLocalArtifactStore({ rootDir });
   const activeRetrievalScorer = retrievalScorer || createHeuristicRetrievalScorer();
   const retrievalScorerLabel = retrievalScorer
     ? ensureTrimmedString(retrievalScorer.provider || retrievalScorer.name, 'custom')
@@ -1126,53 +1109,33 @@ export function createReadingService({
     return normalized;
   }
 
-  async function ensureSessionDir(sessionId) {
-    const directory = resolveSafePath(rootDir, buildSessionRelativePath(sessionId, ''));
-    await fs.mkdir(directory, { recursive: true });
-    return directory;
-  }
-
   async function readParsedArtifact(session) {
     const relativePath = ensureTrimmedString(session.parsedArtifactPath, '');
     if (!relativePath) {
       return null;
     }
 
-    const filePath = resolveSafePath(rootDir, relativePath);
-    const content = await fs.readFile(filePath, 'utf8');
-    return JSON.parse(content);
+    return artifacts.readJson(relativePath);
   }
 
   async function writeParsedArtifact(sessionId, artifact) {
-    await ensureSessionDir(sessionId);
     const relativePath = buildSessionRelativePath(sessionId, 'parsed-artifact.json');
-    const filePath = resolveSafePath(rootDir, relativePath);
-    await fs.writeFile(filePath, JSON.stringify(artifact, null, 2), 'utf8');
-    return relativePath;
+    return artifacts.writeJson(relativePath, artifact);
   }
 
   async function writeJsonAsset(sessionId, name, payload) {
-    await ensureSessionDir(sessionId);
     const relativePath = buildSessionRelativePath(sessionId, name);
-    const filePath = resolveSafePath(rootDir, relativePath);
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf8');
-    return relativePath;
+    return artifacts.writeJson(relativePath, payload);
   }
 
   async function writeTextAsset(sessionId, name, payload) {
-    await ensureSessionDir(sessionId);
     const relativePath = buildSessionRelativePath(sessionId, name);
-    const filePath = resolveSafePath(rootDir, relativePath);
-    await fs.writeFile(filePath, payload, 'utf8');
-    return relativePath;
+    return artifacts.writeText(relativePath, payload);
   }
 
   async function writeBinaryAsset(sessionId, name, payload) {
-    await ensureSessionDir(sessionId);
     const relativePath = buildSessionRelativePath(sessionId, name);
-    const filePath = resolveSafePath(rootDir, relativePath);
-    await fs.writeFile(filePath, payload);
-    return relativePath;
+    return artifacts.writeBinary(relativePath, payload);
   }
 
   function buildDemoPdfForSession(session) {
@@ -1216,10 +1179,9 @@ export function createReadingService({
   async function ensurePdfCached(session) {
     const cachedRelativePath = ensureTrimmedString(session.pdfCachePath, '');
     if (cachedRelativePath) {
-      const cachedPath = resolveSafePath(rootDir, cachedRelativePath);
-      if (await fileExists(cachedPath)) {
+      if (await artifacts.exists(cachedRelativePath)) {
         return {
-          buffer: await fs.readFile(cachedPath),
+          buffer: await artifacts.readFile(cachedRelativePath),
           cachePath: cachedRelativePath,
         };
       }
@@ -1227,9 +1189,7 @@ export function createReadingService({
 
     const buffer = await fetchPdfBuffer(session);
     const relativePath = buildSessionRelativePath(session.id, 'source.pdf');
-    const filePath = resolveSafePath(rootDir, relativePath);
-    await ensureSessionDir(session.id);
-    await fs.writeFile(filePath, buffer);
+    await artifacts.writeBinary(relativePath, buffer);
 
     const nextSession = await store.upsertReadingSession(
       normaliseReadingSession(
@@ -1999,7 +1959,7 @@ Rules:
       }
 
       const pdfBuffer = session.pdfCachePath
-        ? await fs.readFile(resolveSafePath(rootDir, session.pdfCachePath)).catch(() => null)
+        ? await artifacts.readFile(session.pdfCachePath).catch(() => null)
         : null;
       const assets = await buildAssetsFromArtifact(sessionId, artifact, { pdfBuffer });
       const evidenceCoverage = buildEvidenceCoverageReport({
@@ -2042,7 +2002,7 @@ Rules:
 
       return {
         asset,
-        buffer: await fs.readFile(resolveSafePath(rootDir, relativePath)),
+        buffer: await artifacts.readFile(relativePath),
         contentType,
       };
     },
@@ -2309,8 +2269,7 @@ Rules:
     },
 
     async readRelativeFile(relativePath) {
-      const filePath = resolveSafePath(rootDir, relativePath);
-      return fs.readFile(filePath);
+      return artifacts.readFile(relativePath);
     },
   };
 }
