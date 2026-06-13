@@ -266,6 +266,7 @@ export function normaliseInsightCard(input = {}, options = {}) {
     claimCluster: normaliseClaimCluster(input.claimCluster),
     claim: ensureText(input.claim || input.title, 'Untitled insight'),
     confidence: ensureText(input.confidence, 'medium'),
+    contradictionTraces: ensureObjectArray(input.contradictionTraces, 32),
     createdBy: ensureText(input.createdBy, 'user'),
     evidenceLinkIds: ensureTextArray(input.evidenceLinkIds, 64),
     experimentRunIds: ensureTextArray(input.experimentRunIds, 32),

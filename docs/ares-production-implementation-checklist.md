@@ -173,9 +173,9 @@
 - [x] reviewer assignment를 추가한다.
   - 산출물: reviewer, due date, review note
   - 검증: model test in `services/backend/tests/asset-model.test.mjs`
-- [ ] contradiction trace를 저장한다.
+- [x] contradiction trace를 저장한다.
   - 산출물: source quote/run log pointer, dismiss reason
-  - 검증: contradiction candidate test
+  - 검증: model test in `services/backend/tests/asset-model.test.mjs`
 - [ ] insight quality report를 추가한다.
   - 산출물: evidence coverage, source diversity, unresolved contradiction count
   - 검증: report calculation test

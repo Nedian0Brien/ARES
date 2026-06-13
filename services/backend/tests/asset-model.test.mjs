@@ -182,6 +182,33 @@ test('normaliseInsightCard stores review workflow status and reviewer assignment
   assert.equal(fallback.status, 'candidate');
 });
 
+test('normaliseInsightCard stores contradiction traces and dismiss reasons', () => {
+  const insight = normaliseInsightCard(
+    {
+      claim: 'The method improves all retrieval settings.',
+      contradictionTraces: [
+        {
+          dismissReason: 'Different dataset split.',
+          quote: 'The sparse-only setting regressed by 2 points.',
+          runLogPointer: { line: 42, runId: 'run-1' },
+          sourceRef: { id: 'evidence-1', label: 'Ablation table', type: 'evidenceLink' },
+        },
+      ],
+      status: 'needs-review',
+    },
+    { projectId: 'demo' },
+  );
+
+  assert.deepEqual(insight.contradictionTraces, [
+    {
+      dismissReason: 'Different dataset split.',
+      quote: 'The sparse-only setting regressed by 2 points.',
+      runLogPointer: { line: 42, runId: 'run-1' },
+      sourceRef: { id: 'evidence-1', label: 'Ablation table', type: 'evidenceLink' },
+    },
+  ]);
+});
+
 test('normaliseExperimentRun preserves external import boundary metadata', () => {
   const run = normaliseExperimentRun(
     {
