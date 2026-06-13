@@ -14,7 +14,7 @@
 
 - [x] P0. Auth, tenancy, access check
 - [x] P0. Migration, backup, file storage
-- [ ] P0. Worker lease/recovery
+- [x] P0. Worker lease/recovery
 - [ ] P0. Runner sandbox safety
 - [ ] P1. Reader validation corpus
 - [ ] P1. Retrieval scorer 운영화
@@ -107,9 +107,9 @@
 - [x] stale running recovery를 구현한다.
   - 산출물: stale heartbeat detector, retry/error policy
   - 검증: stale lease recovery test in `services/backend/tests/agent-runs.test.mjs`
-- [ ] stage별 idempotency key를 적용한다.
+- [x] stage별 idempotency key를 적용한다.
   - 산출물: duplicate asset prevention
-  - 검증: retry creates no duplicate asset test
+  - 검증: retry creates no duplicate asset test in `services/backend/tests/agent-runs.test.mjs`
 
 ## Sprint 3. Reader 품질 게이트
 

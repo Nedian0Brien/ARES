@@ -182,6 +182,23 @@ function assetIdsFromOutputRefs(refs) {
   return uniqueStrings(ensureArray(refs).flatMap((ref) => ensureArray(ref?.ids)));
 }
 
+function runIdempotencyScope(context, run) {
+  return uniqueStrings([
+    run.projectId,
+    run.stage,
+    run.taskKind,
+    context.paper?.paperId,
+    context.readingSession?.id,
+    context.searchQuery,
+    ...(run.sourceAssetIds || []),
+    ...assetIdsFromRefs(run.assetRefs || []),
+  ]).join(':');
+}
+
+function outputIdempotencyKey({ collectionName, context, index, run }) {
+  return [runIdempotencyScope(context, run), collectionName, String(index)].filter(Boolean).join(':');
+}
+
 function toSearchPage(value) {
   const page = Number(value);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -528,13 +545,15 @@ async function persistTaskOutputs({ context, definition, output, run, store }) {
     const items = ensureArray(output[collectionName]);
     const ids = [];
 
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       const stored = await store.upsertProjectAsset(collectionName, {
         ...item,
+        idempotencyKey: item.idempotencyKey || outputIdempotencyKey({ collectionName, context, index, run }),
         projectId: run.projectId,
         runId: run.id,
         sourceRefs: uniqueSourceRefs(item.sourceRefs || run.assetRefs || []),
       }, {
+        matchBy: 'idempotencyKey',
         prefix: collectionName.replace(/s$/, ''),
       });
       ids.push(stored.id);

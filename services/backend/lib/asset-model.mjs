@@ -124,6 +124,7 @@ function baseAsset(input, { prefix, projectId, fallbackStatus = 'draft' } = {}) 
   return {
     createdAt,
     id: ensureText(input.id, createId(prefix)),
+    idempotencyKey: ensureText(input.idempotencyKey),
     projectId: ensureText(input.projectId, projectId),
     status: normaliseStatus(input.status, VALID_GENERIC_STATUSES, fallbackStatus),
     updatedAt: ensureText(input.updatedAt, createdAt),

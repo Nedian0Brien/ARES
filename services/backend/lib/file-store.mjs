@@ -797,10 +797,12 @@ export async function createFileStore({ seedFile, runtimeFile }) {
       }
 
       ensureProject(projectId);
-      const createdAt = input.createdAt || nowIso();
       const updatedAt = nowIso();
-      const id = String(input.id || createId(options.prefix || collectionName.replace(/s$/, '')));
       const matchBy = options.matchBy || 'id';
+      const collection = collectionFor(collectionName);
+      const existing = collection.find((entry) => entry[matchBy] && entry[matchBy] === input[matchBy]) || null;
+      const createdAt = input.createdAt || existing?.createdAt || nowIso();
+      const id = String(input.id || existing?.id || createId(options.prefix || collectionName.replace(/s$/, '')));
       const next = {
         ...normaliseAsset(collectionName, input, {
           prefix: options.prefix || collectionName.replace(/s$/, ''),

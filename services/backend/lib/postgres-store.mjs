@@ -1842,12 +1842,12 @@ export async function createPostgresStore({
       }
 
       ensureProject(projectId);
-      const createdAt = input.createdAt || nowIso();
       const updatedAt = nowIso();
-      const id = String(input.id || createId(options.prefix || collectionName.replace(/s$/, '')));
       const matchBy = options.matchBy || 'id';
       const collection = collectionFor(collectionName);
-      const previous = collection.find((entry) => entry[matchBy] === input[matchBy]) || null;
+      const previous = collection.find((entry) => entry[matchBy] && entry[matchBy] === input[matchBy]) || null;
+      const createdAt = input.createdAt || previous?.createdAt || nowIso();
+      const id = String(input.id || previous?.id || createId(options.prefix || collectionName.replace(/s$/, '')));
       const next = {
         ...normaliseAsset(collectionName, input, {
           prefix: options.prefix || collectionName.replace(/s$/, ''),

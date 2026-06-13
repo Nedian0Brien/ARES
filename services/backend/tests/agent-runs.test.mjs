@@ -388,6 +388,35 @@ test('agent run service recovers stale running leases without touching fresh or 
   assert.equal(store.getAgentRun(queued.id).status, 'queue');
 });
 
+test('agent run retry reuses idempotent stage output assets', async () => {
+  const store = await createDemoStore();
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+  const run = await service.createRun({
+    input: {
+      paper: paperFixture({ paperId: 'idempotent-retry-paper' }),
+    },
+    projectId: 'demo',
+    stage: 'research',
+  });
+  await waitForRun(store, run.id);
+
+  const firstExperimentIds = store.listProjectAssets('demo', 'experimentRuns').map((asset) => asset.id);
+  const firstChecklistIds = store.listProjectAssets('demo', 'reproChecklistItems').map((asset) => asset.id);
+  const retry = await service.retryRun(run.id);
+  await waitForRun(store, retry.run.id);
+  const secondExperimentAssets = store.listProjectAssets('demo', 'experimentRuns');
+  const secondChecklistAssets = store.listProjectAssets('demo', 'reproChecklistItems');
+
+  assert.deepEqual(secondExperimentAssets.map((asset) => asset.id), firstExperimentIds);
+  assert.deepEqual(secondChecklistAssets.map((asset) => asset.id), firstChecklistIds);
+  assert.ok(secondExperimentAssets.every((asset) => asset.idempotencyKey));
+  assert.ok(secondChecklistAssets.every((asset) => asset.idempotencyKey));
+});
+
 test('agent run service keeps canceled search runs from queueing late results', async () => {
   const store = await createDemoStore();
   let resolveSearch;
