@@ -54,9 +54,9 @@
 
 ### 2. Production Storage, Migration, Backup
 
-- [ ] versioned SQL migration 시스템을 도입한다.
+- [x] versioned SQL migration 시스템을 도입한다.
   - 산출물: `migrations/`, migration runner, migration table
-  - 검증: fresh DB migration test
+  - 검증: fresh DB migration runner test in `services/backend/tests/postgres-migrations.test.mjs`
 - [ ] 앱 기동 중 암묵적 운영 schema 변경을 제거하거나 dev-only로 제한한다.
   - 산출물: production migration-required guard
   - 검증: production mode without migration fails with clear error

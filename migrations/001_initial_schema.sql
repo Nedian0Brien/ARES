@@ -1,0 +1,9 @@
+-- ARES Postgres migration: 001_initial_schema
+-- Runtime registration: services/backend/lib/postgres-store.mjs:POSTGRES_MIGRATIONS
+-- The migration creates the initial SaaS schema:
+-- users, organizations, memberships, projects, project_access, auth_sessions,
+-- audit_events, library, reading_queue, reading_sessions, agent_runs,
+-- project_assets, and their current lookup indexes.
+--
+-- Keep this snapshot in sync with the executable 001_initial_schema migration
+-- until SQL-file loading replaces the current function-backed migration body.

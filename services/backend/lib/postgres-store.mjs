@@ -12,6 +12,7 @@ import {
   normalizeProjectAccess,
   normalizeUser,
 } from './identity-model.mjs';
+import { runPostgresMigrations } from './postgres-migrations.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
@@ -20,6 +21,12 @@ const AUDIT_COLLECTIONS = ['auditEvents'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
 const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
 const MAX_AGENT_PROGRESS_EVENTS = 80;
+const POSTGRES_MIGRATIONS = [
+  {
+    id: '001_initial_schema',
+    up: ensureSchema,
+  },
+];
 const EVIDENCE_LINK_REFERENCE_COLLECTIONS = [
   'readingPackets',
   'reproductionPlans',
@@ -1164,7 +1171,7 @@ export async function createPostgresStore({
     ssl: resolveSslConfig(databaseSsl),
   });
 
-  await ensureSchema(pool);
+  await runPostgresMigrations(pool, POSTGRES_MIGRATIONS);
   await seedDatabaseIfEmpty(pool, {
     runtimeFile,
     seedFile,
