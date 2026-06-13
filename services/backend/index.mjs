@@ -85,6 +85,10 @@ const LIVE_RELOAD_ENABLED = process.env.WATCH_REPORT_DEPENDENCIES === '1' || pro
 const DEMO_PDF_ENABLED = process.env.ARES_ENABLE_DEMO_PDF === '1' || process.env.ARES_ENABLE_DEMO_PDF === 'true';
 const REQUIRE_AGENT_RUNTIME = process.env.ARES_REQUIRE_AGENT_RUNTIME === '1' || process.env.ARES_REQUIRE_AGENT_RUNTIME === 'true';
 const OCR_MAX_PAGES = Math.max(1, Number(process.env.ARES_OCR_MAX_PAGES) || 12);
+const AUTO_MIGRATE =
+  process.env.ARES_AUTO_MIGRATE === undefined
+    ? process.env.NODE_ENV !== 'production'
+    : process.env.ARES_AUTO_MIGRATE === '1' || process.env.ARES_AUTO_MIGRATE === 'true';
 
 const liveReloadClients = new Set();
 let liveReloadTimer = null;
@@ -100,6 +104,7 @@ const store = await createStore({
   backend: STORE_BACKEND,
   databaseSsl: DATABASE_SSL,
   databaseUrl: DATABASE_URL,
+  migrate: AUTO_MIGRATE,
   seedFile: SEED_FILE,
   runtimeFile: RUNTIME_FILE,
 });

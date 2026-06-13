@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { runPostgresMigrations } from '../lib/postgres-migrations.mjs';
+import { assertPostgresMigrationsApplied, runPostgresMigrations } from '../lib/postgres-migrations.mjs';
 
 function createFakePool({ appliedIds = [] } = {}) {
   const queries = [];
@@ -24,6 +24,14 @@ function createFakePool({ appliedIds = [] } = {}) {
         applied.push(params[0]);
       }
       return { rows: [] };
+    },
+  };
+}
+
+function createMissingMigrationTablePool() {
+  return {
+    async query() {
+      throw new Error('relation "ares_schema_migrations" does not exist');
     },
   };
 }
@@ -93,4 +101,44 @@ test('postgres migration runner rolls back failed migrations', async () => {
   assert.ok(statements.includes('BEGIN'));
   assert.ok(statements.includes('ROLLBACK'));
   assert.deepEqual(pool.applied, []);
+});
+
+test('postgres migration guard fails clearly when migration table is missing', async () => {
+  await assert.rejects(
+    assertPostgresMigrationsApplied(createMissingMigrationTablePool(), [
+      {
+        id: '001_initial_schema',
+      },
+    ]),
+    /Postgres schema migrations have not been applied/,
+  );
+});
+
+test('postgres migration guard reports missing migration ids', async () => {
+  const pool = createFakePool({ appliedIds: ['001_initial_schema'] });
+
+  await assert.rejects(
+    assertPostgresMigrationsApplied(pool, [
+      {
+        id: '001_initial_schema',
+      },
+      {
+        id: '002_second_change',
+      },
+    ]),
+    /Postgres schema migrations are missing: 002_second_change/,
+  );
+});
+
+test('postgres migration guard accepts fully applied migrations', async () => {
+  const pool = createFakePool({ appliedIds: ['001_initial_schema', '002_second_change'] });
+
+  await assertPostgresMigrationsApplied(pool, [
+    {
+      id: '001_initial_schema',
+    },
+    {
+      id: '002_second_change',
+    },
+  ]);
 });

@@ -57,3 +57,26 @@ export async function runPostgresMigrations(pool, migrations = []) {
     }
   }
 }
+
+export async function assertPostgresMigrationsApplied(pool, migrations = []) {
+  if (!pool || typeof pool.query !== 'function') {
+    throw new Error('A Postgres pool is required to verify migrations.');
+  }
+
+  let appliedResult;
+  try {
+    appliedResult = await pool.query('SELECT id FROM ares_schema_migrations ORDER BY id');
+  } catch (error) {
+    throw new Error(
+      `Postgres schema migrations have not been applied. Run migrations before starting with ARES_AUTO_MIGRATE=false. ${error.message}`,
+    );
+  }
+
+  const applied = new Set((appliedResult.rows || []).map((row) => row.id));
+  const missing = migrations.map((migration) => normalizeMigrationId(migration.id)).filter((id) => !applied.has(id));
+  if (missing.length) {
+    throw new Error(
+      `Postgres schema migrations are missing: ${missing.join(', ')}. Run migrations before starting with ARES_AUTO_MIGRATE=false.`,
+    );
+  }
+}

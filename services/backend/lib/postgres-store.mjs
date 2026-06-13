@@ -12,7 +12,7 @@ import {
   normalizeProjectAccess,
   normalizeUser,
 } from './identity-model.mjs';
-import { runPostgresMigrations } from './postgres-migrations.mjs';
+import { assertPostgresMigrationsApplied, runPostgresMigrations } from './postgres-migrations.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
@@ -1158,6 +1158,7 @@ export async function createPostgresStore({
   databaseUrl,
   runtimeFile,
   seedFile,
+  migrate = true,
   poolConfig = {},
   PoolImpl = Pool,
 } = {}) {
@@ -1171,7 +1172,11 @@ export async function createPostgresStore({
     ssl: resolveSslConfig(databaseSsl),
   });
 
-  await runPostgresMigrations(pool, POSTGRES_MIGRATIONS);
+  if (migrate) {
+    await runPostgresMigrations(pool, POSTGRES_MIGRATIONS);
+  } else {
+    await assertPostgresMigrationsApplied(pool, POSTGRES_MIGRATIONS);
+  }
   await seedDatabaseIfEmpty(pool, {
     runtimeFile,
     seedFile,
