@@ -11,6 +11,21 @@ async function readProjectFile(relativePath) {
   return readFile(path.join(rootDir, relativePath), 'utf8');
 }
 
+const STYLE_FILES = [
+  'web/styles.css',
+  'web/styles/base.css',
+  'web/styles/lab.css',
+  'web/styles/insight.css',
+  'web/styles/writing.css',
+  'web/styles/reading.css',
+  'web/styles/search.css',
+];
+
+async function readProjectStyles() {
+  const chunks = await Promise.all(STYLE_FILES.map((relativePath) => readProjectFile(relativePath)));
+  return chunks.join('\n');
+}
+
 test('workflow navigation is driven by four product tabs while preserving six stages', async () => {
   const appJs = await readProjectFile('web/app.js');
 
@@ -67,6 +82,18 @@ test('desktop and mobile workflow chrome render the four tabs instead of raw sta
   assert.match(appJs, /workflow-stage-label">\$\{escapeHtml\(tab\.shortLabel \|\| tab\.label\)\}/);
   assert.match(appJs, /workflow-mode-title">\$\{escapeHtml\(tab\.shortLabel \|\| tab\.label\)\}/);
   assert.doesNotMatch(appJs, /topbar-stage-label-desktop/);
+});
+
+test('product surfaces do not fall back to the legacy generic placeholder stage', async () => {
+  const [appJs, stylesCss] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectStyles(),
+  ]);
+
+  assert.doesNotMatch(appJs, /function renderPlaceholderStage/);
+  assert.doesNotMatch(appJs, /function placeholderMeta/);
+  assert.doesNotMatch(appJs, /data-ares-surface="placeholder-stage"/);
+  assert.doesNotMatch(stylesCss, /\.placeholder-stage/);
 });
 
 test('keyboard shortcuts use four top-level tabs', async () => {

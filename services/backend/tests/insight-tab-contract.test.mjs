@@ -49,3 +49,55 @@ test('Insight cards can move forward to Writing or back to Lab follow-up work', 
   assert.match(appJs, /data-stage-id="writing"/);
   assert.match(appJs, /data-stage-id="research"/);
 });
+
+test('Insight cards can be selected, edited, and deleted as durable assets', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /activeInsightCardId/);
+  assert.match(appJs, /data-action="select-insight-card"/);
+  assert.match(appJs, /data-action="submit-insight-card-form"/);
+  assert.match(appJs, /name="insightClaim"/);
+  assert.match(appJs, /name="insightConfidence"/);
+  assert.match(appJs, /saveInsightCardEdit/);
+  assert.match(appJs, /data-action="delete-insight-card"/);
+  assert.match(appJs, /deleteInsightCard/);
+  assert.match(appJs, /confirmDelete: true/);
+  assert.match(appJs, /reason: `Delete insight card/);
+});
+
+test('Insight cards expose Lab failure analysis fields when present', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /card\.failureCause/);
+  assert.match(appJs, /card\.followUpExperiment/);
+  assert.match(appJs, /failure cause/);
+  assert.match(appJs, /follow-up/);
+});
+
+test('Insight cards persist and render quality review criteria', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /qualityCriteria/);
+  assert.match(appJs, /name="insightEvidenceCoverage"/);
+  assert.match(appJs, /name="insightContradictionFlag"/);
+  assert.match(appJs, /name="insightFollowUpExperimentId"/);
+  assert.match(appJs, /evidence coverage/);
+  assert.match(appJs, /contradiction/);
+  assert.match(appJs, /follow-up run/);
+  assert.match(appJs, /qualityCriteria:\s*\{/);
+});
+
+test('Insight surface automatically clusters claims and evaluates quality signals', async () => {
+  const [appJs, modelJs] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('services/backend/lib/asset-model.mjs'),
+  ]);
+
+  assert.match(modelJs, /claimCluster/);
+  assert.match(appJs, /function buildInsightClaimCluster/);
+  assert.match(appJs, /function evaluateInsightQuality/);
+  assert.match(appJs, /renderInsightClusterSummary/);
+  assert.match(appJs, /Claim clusters/);
+  assert.match(appJs, /related claims/);
+  assert.match(appJs, /auto quality/);
+});

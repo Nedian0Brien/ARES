@@ -1,0 +1,249 @@
+.insight-stage {
+  background: var(--bg);
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  width: 100%;
+}
+
+.insight-main {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 32px;
+}
+
+.insight-hero {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.insight-kicker {
+  align-items: center;
+  color: var(--insight);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 7px;
+}
+
+.insight-hero h1 {
+  color: var(--tx);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 6px 0 10px;
+}
+
+.insight-hero p {
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 1.7;
+  max-width: 72ch;
+}
+
+.insight-hero-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.insight-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.4fr) minmax(240px, 0.9fr);
+}
+
+.insight-panel,
+.insight-evidence-card,
+.insight-card,
+.insight-hypothesis-card,
+.insight-decision-box {
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: 8px;
+}
+
+.insight-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.insight-panel-head,
+.insight-card-top,
+.insight-evidence-meta,
+.insight-card-actions {
+  align-items: center;
+  display: flex;
+}
+
+.insight-panel-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.insight-card-label {
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.insight-evidence-list,
+.insight-hypothesis-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.insight-evidence-card,
+.insight-hypothesis-card {
+  padding: 12px 13px;
+}
+
+.insight-evidence-meta {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.insight-evidence-card p,
+.insight-hypothesis-card p,
+.insight-decision-box p {
+  color: var(--t2);
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.insight-empty-compact {
+  background: var(--s2);
+  border: 1px dashed var(--b1);
+  border-radius: 7px;
+  color: var(--t3);
+  font-size: 12px;
+  padding: 12px 13px;
+}
+
+.insight-card {
+  padding: 18px;
+}
+
+.insight-card.is-primary {
+  border-color: color-mix(in srgb, var(--insight) 34%, var(--b1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--insight) 16%, transparent);
+}
+
+.insight-card-top {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.insight-card h2 {
+  color: var(--tx);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  margin: 0 0 16px;
+}
+
+.insight-card dl {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 0 16px;
+}
+
+.insight-card dt {
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 650;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.insight-card dd {
+  color: var(--t2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.insight-card-actions {
+  gap: 8px;
+}
+
+.insight-edit-form {
+  border-top: 1px solid var(--b1);
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.insight-edit-form label,
+.insight-edit-row {
+  min-width: 0;
+}
+
+.insight-edit-form label {
+  display: grid;
+  gap: 4px;
+}
+
+.insight-edit-form label span {
+  color: var(--t3);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.insight-edit-form input,
+.insight-edit-form select,
+.insight-edit-form textarea {
+  background: var(--s2);
+  border: 1px solid var(--b1);
+  border-radius: 6px;
+  color: var(--tx);
+  font: inherit;
+  font-size: 12px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.insight-edit-form textarea {
+  resize: vertical;
+}
+
+.insight-edit-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.insight-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.insight-hypothesis-card {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 32px minmax(0, 1fr);
+}
+
+.insight-hypothesis-card .mono {
+  color: var(--insight);
+  font-size: 11px;
+}
+
+.insight-decision-box {
+  margin-top: 12px;
+  padding: 13px;
+}

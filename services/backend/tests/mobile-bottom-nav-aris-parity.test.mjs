@@ -11,6 +11,21 @@ async function readProjectFile(relativePath) {
   return readFile(path.join(rootDir, relativePath), 'utf8');
 }
 
+const STYLE_FILES = [
+  'web/styles.css',
+  'web/styles/base.css',
+  'web/styles/lab.css',
+  'web/styles/insight.css',
+  'web/styles/writing.css',
+  'web/styles/reading.css',
+  'web/styles/search.css',
+];
+
+async function readProjectStyles() {
+  const chunks = await Promise.all(STYLE_FILES.map((relativePath) => readProjectFile(relativePath)));
+  return chunks.join('\n');
+}
+
 test('mobile bottom nav ports ARIS auto-hide reducer thresholds', async () => {
   const { primeAutoHideScrollState, reduceAutoHideScrollState } = await import(
     pathToFileURL(path.join(rootDir, 'web/app/lib/mobile-scroll-auto-hide.js')).href
@@ -120,7 +135,7 @@ test('mobile bottom nav observes ARES nested scroll containers used by Discover'
 
 test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens', async () => {
   const [styles, designSystem, indexHtml] = await Promise.all([
-    readProjectFile('web/styles.css'),
+    readProjectStyles(),
     readProjectFile('design/ARES Design System.html'),
     readProjectFile('web/index.html'),
   ]);
@@ -142,7 +157,9 @@ test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens'
   assert.match(styles, /\.bottom-nav-indicator[\s\S]*cubic-bezier\(0\.175,\s*0\.885,\s*0\.32,\s*1\.275\)/);
   assert.match(styles, /width:\s*min\(400px,\s*calc\(100vw - 1rem\)\)/);
   assert.match(styles, /bottom:\s*calc\(var\(--bottom-nav-offset\) \+ var\(--viewport-bottom-occlusion\)\)/);
-  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*padding:\s*0 10px calc\(16px \+ var\(--viewport-bottom-occlusion\)\)/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*bottom:\s*calc\(var\(--mobile-bottom-nav-height\) \+ 4px\)/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*position:\s*fixed/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*padding:\s*0 10px 8px/);
   assert.match(styles, /\.search-preview-focal:not\(\.is-empty\)[\s\S]*bottom:\s*var\(--viewport-bottom-occlusion\)/);
   assert.match(styles, /\.bottom-nav[\s\S]*overflow:\s*visible/);
   assert.match(styles, /\.nav-item[\s\S]*min-height:\s*54px/);

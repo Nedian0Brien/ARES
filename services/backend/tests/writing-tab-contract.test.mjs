@@ -44,3 +44,31 @@ test('Writing actions cover generation, evidence insertion, suggestions, and exp
   assert.match(appJs, /data-action="export-writing-draft"/);
   assert.match(appJs, /Export/);
 });
+
+test('Writing draft sections can be selected, edited, and deleted before export', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /activeDraftSectionId/);
+  assert.match(appJs, /data-action="select-draft-section"/);
+  assert.match(appJs, /data-action="submit-draft-section-form"/);
+  assert.match(appJs, /name="draftSectionTitle"/);
+  assert.match(appJs, /name="draftSectionBody"/);
+  assert.match(appJs, /saveDraftSectionEdit/);
+  assert.match(appJs, /data-action="delete-draft-section"/);
+  assert.match(appJs, /deleteDraftSection/);
+  assert.match(appJs, /confirmDelete: true/);
+  assert.match(appJs, /reason: `Delete draft section/);
+});
+
+test('Writing export preserves citations and warns about broken sources', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /function buildWritingExportMarkdown/);
+  assert.match(appJs, /function writingEvidenceCitationLine/);
+  assert.match(appJs, /## Source appendix/);
+  assert.match(appJs, /## Broken source warnings/);
+  assert.match(appJs, /missingEvidenceLinkIds/);
+  assert.match(appJs, /\[\^src-\$\{index \+ 1\}\]/);
+  assert.match(appJs, /evidenceLinkIds/);
+  assert.match(appJs, /copyTextToClipboard\(buildWritingExportMarkdown\(\)/);
+});

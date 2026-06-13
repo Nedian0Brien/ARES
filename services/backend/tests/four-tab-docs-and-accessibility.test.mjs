@@ -11,6 +11,21 @@ async function readProjectFile(relativePath) {
   return readFile(path.join(rootDir, relativePath), 'utf8');
 }
 
+const STYLE_FILES = [
+  'web/styles.css',
+  'web/styles/base.css',
+  'web/styles/lab.css',
+  'web/styles/insight.css',
+  'web/styles/writing.css',
+  'web/styles/reading.css',
+  'web/styles/search.css',
+];
+
+async function readProjectStyles() {
+  const chunks = await Promise.all(STYLE_FILES.map((relativePath) => readProjectFile(relativePath)));
+  return chunks.join('\n');
+}
+
 test('specification documents four top-level tabs with six preserved workflow modes', async () => {
   const specification = await readProjectFile('docs/specification.md');
 
@@ -22,7 +37,7 @@ test('specification documents four top-level tabs with six preserved workflow mo
 });
 
 test('new four-tab controls keep explicit focus-visible affordances', async () => {
-  const styles = await readProjectFile('web/styles.css');
+  const styles = await readProjectStyles();
 
   assert.match(styles, /\.workflow-mode-btn:focus-visible/);
   assert.match(styles, /\.writing-section-row:focus-visible/);
