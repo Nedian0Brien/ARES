@@ -60,9 +60,9 @@
 - [x] 앱 기동 중 암묵적 운영 schema 변경을 제거하거나 dev-only로 제한한다.
   - 산출물: production migration-required guard
   - 검증: migration guard test in `services/backend/tests/postgres-migrations.test.mjs`
-- [ ] 자주 조회하는 JSONB 필드를 column/index로 승격한다.
+- [x] 자주 조회하는 JSONB 필드를 column/index로 승격한다.
   - 산출물: owner, org, status, updatedAt, projectId indexes
-  - 검증: schema snapshot/migration test
+  - 검증: schema snapshot/migration test in `services/backend/tests/postgres-schema.test.mjs`
 - [ ] file artifact 저장소 경계를 분리한다.
   - 산출물: artifact store adapter, local file adapter
   - 검증: PDF/thumbnail/table/export file route test
