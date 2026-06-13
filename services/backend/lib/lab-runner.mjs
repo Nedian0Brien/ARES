@@ -25,6 +25,35 @@ function parseRunnerMetrics(output) {
   return metrics;
 }
 
+function commandPreview(command) {
+  return [command.command, ...command.args].filter(Boolean).join(' ');
+}
+
+function riskScore(risk) {
+  if (risk.level === 'high') {
+    return 100;
+  }
+  if (risk.level === 'medium') {
+    return 50;
+  }
+  return 0;
+}
+
+function approvalState({ approval = {}, command, risk }) {
+  return {
+    approvedAt: approval.approvedAt || '',
+    approvedBy: approval.approvedBy || '',
+    commandPreview: commandPreview(command),
+    riskCategories: risk.categories,
+    riskScore: riskScore(risk),
+    state: approval.state === 'approved' ? 'approved' : risk.requiresApproval ? 'required' : 'not-required',
+  };
+}
+
+function isApproved(approval = {}) {
+  return approval.state === 'approved' && Boolean(approval.approvedBy);
+}
+
 function workspacePath(rootDir, relativePath) {
   const root = path.resolve(rootDir);
   const target = path.resolve(root, relativePath || '.');
@@ -34,14 +63,15 @@ function workspacePath(rootDir, relativePath) {
   return target;
 }
 
-function buildPolicyBlockedResult({ command, risk }) {
+function buildPolicyBlockedResult({ approval, command, risk, type = 'policy' }) {
   return {
+    approval: approvalState({ approval, command, risk }),
     artifacts: [],
     command,
     exitCode: null,
     failure: {
       message: risk.reasons.join(' ') || 'Runner command blocked by policy.',
-      type: 'policy',
+      type,
     },
     logs: {
       stderr: '',
@@ -53,9 +83,10 @@ function buildPolicyBlockedResult({ command, risk }) {
   };
 }
 
-function buildFailureResult({ command, code, signal, stderr, stdout }) {
+function buildFailureResult({ approval, command, code, signal, stderr, stdout }) {
   const message = String(stderr || stdout || `Runner exited with code ${code ?? signal ?? 'unknown'}`).trim();
   return {
+    approval,
     artifacts: [],
     command,
     exitCode: code,
@@ -81,12 +112,21 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
   return {
     name: 'local-safe',
 
-    async run(input = {}) {
+    async run(input = {}, options = {}) {
       const command = normalizeReproductionCommand(input);
       const risk = assessRunnerCommandRisk(input);
+      const approval = approvalState({ approval: options.approval, command, risk });
 
-      if (!risk.allowedToRun || risk.requiresApproval) {
-        return buildPolicyBlockedResult({ command, risk });
+      if (!risk.allowedToRun) {
+        return buildPolicyBlockedResult({ approval: options.approval, command, risk });
+      }
+      if (risk.requiresApproval && !isApproved(options.approval)) {
+        return buildPolicyBlockedResult({
+          approval: options.approval,
+          command,
+          risk,
+          type: 'approval_required',
+        });
       }
 
       const cwd = workspacePath(rootDir, command.cwd);
@@ -108,6 +148,7 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
         });
         child.on('error', (error) => {
           resolve({
+            approval,
             artifacts: [],
             command,
             exitCode: null,
@@ -126,6 +167,7 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
         child.on('close', (code, signal) => {
           if (code === 0) {
             resolve({
+              approval,
               artifacts: [],
               command,
               completedAt: new Date().toISOString(),
@@ -140,7 +182,7 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
             return;
           }
 
-          resolve(buildFailureResult({ command, code, signal, stderr, stdout }));
+          resolve(buildFailureResult({ approval, command, code, signal, stderr, stdout }));
         });
       });
     },

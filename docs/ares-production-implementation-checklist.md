@@ -150,9 +150,9 @@
 - [x] sandboxed runner adapter를 추가한다.
   - 산출물: local safe runner, Docker 또는 VM adapter boundary
   - 검증: fixture command success/failure/block test in `services/backend/tests/lab-runner.test.mjs`
-- [ ] human approval gate를 추가한다.
+- [x] human approval gate를 추가한다.
   - 산출물: command preview, risk score, approval state
-  - 검증: unapproved run blocked test
+  - 검증: unapproved medium-risk run blocked and approved medium-risk run allowed test in `services/backend/tests/lab-runner.test.mjs`
 - [ ] log/artifact/metric capture를 구현한다.
   - 산출물: run log, artifact files, parsed metrics
   - 검증: fixture repo run test

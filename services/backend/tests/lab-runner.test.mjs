@@ -89,3 +89,49 @@ test('lab runner blocks unsafe commands before spawning a process', async () => 
   assert.equal(result.failure.type, 'policy');
   assert.equal(calls.length, 0);
 });
+
+test('lab runner requires human approval for medium-risk commands', async () => {
+  const { calls, spawnImpl } = createSpawn();
+  const runner = createLabRunnerAdapter({ rootDir: '/workspace', spawnImpl });
+
+  const result = await runner.run({
+    args: ['scripts/eval.py'],
+    command: 'python',
+    cwd: 'fixtures/repro',
+    network: 'enabled',
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.failure.type, 'approval_required');
+  assert.equal(result.approval.state, 'required');
+  assert.equal(result.approval.riskScore, 50);
+  assert.match(result.approval.commandPreview, /python scripts\/eval\.py/);
+  assert.equal(calls.length, 0);
+});
+
+test('lab runner executes approved medium-risk commands while preserving the approval record', async () => {
+  const { calls, spawnImpl } = createSpawn({ stdout: 'accuracy: 0.93\n' });
+  const runner = createLabRunnerAdapter({ rootDir: '/workspace', spawnImpl });
+
+  const result = await runner.run(
+    {
+      args: ['scripts/eval.py'],
+      command: 'python',
+      cwd: 'fixtures/repro',
+      network: 'enabled',
+    },
+    {
+      approval: {
+        approvedAt: '2026-06-14T00:00:00.000Z',
+        approvedBy: 'researcher@example.com',
+        state: 'approved',
+      },
+    },
+  );
+
+  assert.equal(result.status, 'done');
+  assert.equal(result.approval.state, 'approved');
+  assert.equal(result.approval.approvedBy, 'researcher@example.com');
+  assert.equal(result.metrics.accuracy, '0.93');
+  assert.equal(calls.length, 1);
+});
