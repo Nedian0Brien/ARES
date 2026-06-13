@@ -89,9 +89,9 @@
 
 목표: agent run을 서버 메모리에서 떼어내고 복구 가능한 작업 단위로 만든다.
 
-- [ ] worker process entrypoint를 추가한다.
+- [x] worker process entrypoint를 추가한다.
   - 산출물: `services/backend/bin/agent-worker.mjs`
-  - 검증: worker boot smoke
+  - 검증: worker boot smoke in `services/backend/tests/agent-worker.test.mjs`
 - [ ] AgentRun lease schema를 추가한다.
   - 산출물: leaseOwner, leaseExpiresAt, heartbeatAt fields
   - 검증: store contract test
