@@ -17,7 +17,7 @@
 - [x] P0. Worker lease/recovery
 - [x] P0. Runner sandbox safety
 - [x] P1. Reader validation corpus
-- [ ] P1. Retrieval scorer 운영화
+- [x] P1. Retrieval scorer 운영화
 - [x] P1. Lab runner v1
 - [ ] P1. Observability and release gates
 - [x] P2. Insight review workflow

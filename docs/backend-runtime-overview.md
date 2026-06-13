@@ -229,7 +229,7 @@ AgentRun:
 - `SCOUT_AGENT_RUNTIME`
 - `ARES_AGENT_RUNTIME`
 
-Reader retrieval scorer 운영 기본값은 `ARES_RETRIEVAL_SCORER_PROVIDER=local-cross-encoder`다. 실제 모델은 ARES 프로세스 밖의 HTTP endpoint로 운영하고, 배포 전 `node scripts/validate-retrieval-scorer.mjs --min-top-score 0.8`로 expected top chunk와 score threshold를 확인한다.
+Reader retrieval scorer 운영 기본값은 `ARES_RETRIEVAL_SCORER_PROVIDER=local-cross-encoder`다. 실제 모델은 ARES 프로세스 밖의 HTTP endpoint로 운영하고, 배포 전 `npm run smoke:retrieval-scorer`로 expected top chunk와 score threshold를 확인한다. 통합 배포 smoke는 `npm run smoke:deploy`가 retrieval scorer health validation을 포함한다.
 - `SCOUT_AGENT_TIMEOUT_MS`
 - `ARES_LIVE_RELOAD`
 

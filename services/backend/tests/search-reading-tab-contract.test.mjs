@@ -304,7 +304,9 @@ test('Reader retrieval scorer can be configured through server environment', asy
   assert.match(envExample, /ARES_RETRIEVAL_SCORER_TIMEOUT_MS=2500/);
   assert.match(readme, /local-cross-encoder/);
   assert.match(readme, /validate-retrieval-scorer\.mjs/);
+  assert.match(readme, /npm run smoke:retrieval-scorer/);
   assert.match(runtimeDoc, /ARES_RETRIEVAL_SCORER_PROVIDER/);
+  assert.match(runtimeDoc, /npm run smoke:deploy/);
   assert.match(scorerJs, /ARES_RETRIEVAL_SCORER_URL/);
   assert.match(scorerJs, /ARES_RETRIEVAL_SCORER_API_KEY/);
   assert.match(scorerJs, /ARES_RETRIEVAL_SCORER_TIMEOUT_MS/);
