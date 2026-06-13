@@ -127,6 +127,17 @@ ARES는 워크스페이스 셸, 4개 상위 탭, 기존 6단계를 보존하는 
 - Result: `Analyst report`
 - Insight/Writing: 가설 생성 및 초안 생성 액션
 
+### 6.4 파괴적 작업 정책
+
+현재 제품은 project 또는 reading session 전체 삭제 API를 노출하지 않는다. 개별 asset 삭제만 허용하며, 이 경우에도 `confirmDelete=true`와 삭제 사유를 요구하고 audit payload를 반환해야 한다.
+
+향후 project, reading session, 대량 asset 삭제처럼 범위가 큰 파괴적 작업을 추가할 때는 다음 계약을 먼저 만족해야 한다.
+
+- 삭제 전 cascade preview를 제공한다.
+- 사용자가 명시적으로 확인한 `confirmDelete=true` 값을 요구한다.
+- 사람이 읽을 수 있는 삭제 사유를 audit 기록에 남긴다.
+- API 응답에 action, projectId, 대상 id, reason, recordedAt을 포함한다.
+
 ## 7. 화면별 기능 명세
 
 ### 7.1 Search
