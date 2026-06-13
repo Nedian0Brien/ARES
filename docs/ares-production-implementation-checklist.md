@@ -92,9 +92,9 @@
 - [x] worker process entrypoint를 추가한다.
   - 산출물: `services/backend/bin/agent-worker.mjs`
   - 검증: worker boot smoke in `services/backend/tests/agent-worker.test.mjs`
-- [ ] AgentRun lease schema를 추가한다.
+- [x] AgentRun lease schema를 추가한다.
   - 산출물: leaseOwner, leaseExpiresAt, heartbeatAt fields
-  - 검증: store contract test
+  - 검증: store contract test in `services/backend/tests/asset-store.test.mjs`
 - [ ] queue run claim/release API를 store에 추가한다.
   - 산출물: atomic claim in Postgres, safe fallback in file store
   - 검증: competing worker claim test

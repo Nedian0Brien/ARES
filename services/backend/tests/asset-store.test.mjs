@@ -149,6 +149,33 @@ test('file store records project audit events', async () => {
   assert.deepEqual(events[0].metadata, { collection: 'insightCards' });
 });
 
+test('file store persists agent run lease fields', async () => {
+  const store = await createDemoStore();
+  const run = await store.createAgentRun({
+    heartbeatAt: '2026-06-14T01:00:00.000Z',
+    leaseExpiresAt: '2026-06-14T01:05:00.000Z',
+    leaseOwner: 'worker-a',
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'queue',
+  });
+
+  assert.equal(run.leaseOwner, 'worker-a');
+  assert.equal(run.leaseExpiresAt, '2026-06-14T01:05:00.000Z');
+  assert.equal(run.heartbeatAt, '2026-06-14T01:00:00.000Z');
+
+  const updated = await store.updateAgentRun(run.id, {
+    heartbeatAt: '2026-06-14T01:01:00.000Z',
+    leaseExpiresAt: '2026-06-14T01:06:00.000Z',
+    leaseOwner: 'worker-b',
+  });
+
+  assert.equal(updated.leaseOwner, 'worker-b');
+  assert.equal(updated.leaseExpiresAt, '2026-06-14T01:06:00.000Z');
+  assert.equal(updated.heartbeatAt, '2026-06-14T01:01:00.000Z');
+  assert.equal(store.getAgentRun(run.id).leaseOwner, 'worker-b');
+});
+
 test('file store removes deleted insight ids from draft section references', async () => {
   const store = await createDemoStore();
   const insight = await store.upsertProjectAsset('insightCards', {
