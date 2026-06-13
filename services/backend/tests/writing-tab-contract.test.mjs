@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { createDraftFeatureModel } from '../../../web/app/features/draft.js';
+import { buildDraftExportBundle, createDraftFeatureModel } from '../../../web/app/features/draft.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..', '..');
@@ -80,14 +80,47 @@ test('Writing draft sections can be selected, edited, and deleted before export'
 });
 
 test('Writing export preserves citations and warns about broken sources', async () => {
-  const appJs = await readProjectFile('web/app.js');
+  const [appJs, draftJs] = await Promise.all([readProjectFile('web/app.js'), readProjectFile('web/app/features/draft.js')]);
 
   assert.match(appJs, /function buildWritingExportMarkdown/);
-  assert.match(appJs, /function writingEvidenceCitationLine/);
-  assert.match(appJs, /## Source appendix/);
-  assert.match(appJs, /## Broken source warnings/);
-  assert.match(appJs, /missingEvidenceLinkIds/);
-  assert.match(appJs, /\[\^src-\$\{index \+ 1\}\]/);
-  assert.match(appJs, /evidenceLinkIds/);
+  assert.match(appJs, /buildDraftExportBundle/);
+  assert.match(draftJs, /## Source appendix/);
+  assert.match(draftJs, /## Broken source warnings/);
+  assert.match(draftJs, /missingEvidenceLinkIds/);
+  assert.match(draftJs, /\[\^src-\$\{index \+ 1\}\]/);
+  assert.match(draftJs, /evidenceLinkIds/);
   assert.match(appJs, /copyTextToClipboard\(buildWritingExportMarkdown\(\)/);
+});
+
+test('Writing export builder creates Markdown, HTML, BibTeX, and CSL JSON snapshots', () => {
+  const bundle = buildDraftExportBundle({
+    draftTitle: 'Adaptive retrieval memo',
+    evidenceLinks: [
+      {
+        id: 'evidence-1',
+        page: 7,
+        paperId: 'paper-1',
+        quote: 'Adaptive retrieval reduced redundant chunks.',
+        sourceType: 'paper',
+        title: 'Adaptive Retrieval for Research Agents',
+        url: 'https://example.test/paper',
+      },
+    ],
+    sections: [
+      {
+        body: 'Adaptive retrieval should be the default scorer path.',
+        evidenceLinkIds: ['evidence-1', 'missing-evidence'],
+        title: 'Recommendation',
+      },
+    ],
+  });
+
+  assert.match(bundle.markdown, /## Recommendation/);
+  assert.match(bundle.markdown, /\[\^src-1\]/);
+  assert.match(bundle.markdown, /## Broken source warnings/);
+  assert.match(bundle.html, /<!doctype html>/);
+  assert.match(bundle.html, /<h2>Recommendation<\/h2>/);
+  assert.match(bundle.bibtex, /@misc\{paper-1/);
+  assert.match(bundle.cslJson, /"id": "paper-1"/);
+  assert.deepEqual(bundle.missingEvidenceLinkIds, ['missing-evidence']);
 });

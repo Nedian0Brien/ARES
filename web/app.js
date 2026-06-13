@@ -1,6 +1,6 @@
 import { createSearchFeature } from "./app/features/search.js";
 import { createReadingFeature } from "./app/features/reading.js";
-import { createDraftFeatureModel } from "./app/features/draft.js";
+import { buildDraftExportBundle, createDraftFeatureModel } from "./app/features/draft.js";
 import { graphEvidenceItems } from "./app/features/evidence.js";
 import { createLabFeatureModel } from "./app/features/lab.js";
 import { parseLabImportPayload as parseLabImportPayloadValue } from "./app/features/lab-import.js";
@@ -1808,51 +1808,10 @@ async function exportWritingDraft() {
   render();
 }
 
-function writingEvidenceCitationLine(evidence, index) {
-  const sourceType = evidence.sourceType || "evidence";
-  const page = evidence.page ? `, p.${evidence.page}` : "";
-  const quote = String(evidence.quote || "Linked evidence").replace(/\s+/g, " ").trim();
-  return `[^src-${index + 1}]: ${sourceType}${page}. ${quote}`;
-}
-
 function buildWritingExportMarkdown() {
   const sections = Array.isArray(state.projectGraph?.draftSections) ? state.projectGraph.draftSections : [];
   const evidenceLinks = Array.isArray(state.projectGraph?.evidenceLinks) ? state.projectGraph.evidenceLinks : [];
-  const evidenceById = new Map(evidenceLinks.map((entry) => [entry.id, entry]));
-  const usedEvidenceIds = [];
-  const missingEvidenceLinkIds = [];
-
-  const body = sections
-    .map((section) => {
-      const sectionEvidenceIds = Array.isArray(section.evidenceLinkIds) ? section.evidenceLinkIds : [];
-      const markers = sectionEvidenceIds
-        .map((id) => {
-          const evidence = evidenceById.get(id);
-          if (!evidence) {
-            missingEvidenceLinkIds.push(id);
-            return "";
-          }
-
-          if (!usedEvidenceIds.includes(id)) {
-            usedEvidenceIds.push(id);
-          }
-          return `[^src-${usedEvidenceIds.indexOf(id) + 1}]`;
-        })
-        .filter(Boolean)
-        .join(" ");
-      const suffix = markers ? `\n\n${markers}` : "";
-      return [`## ${section.title || "Untitled section"}`, "", `${section.body || ""}${suffix}`].join("\n");
-    })
-    .join("\n\n");
-
-  const appendix = usedEvidenceIds.length
-    ? ["## Source appendix", "", ...usedEvidenceIds.map((id, index) => writingEvidenceCitationLine(evidenceById.get(id), index))]
-    : ["## Source appendix", "", "_No linked sources._"];
-  const warnings = missingEvidenceLinkIds.length
-    ? ["", "## Broken source warnings", "", ...missingEvidenceLinkIds.map((id) => `- Missing evidence link: ${id}`)]
-    : [];
-
-  return [body, ...appendix, ...warnings].join("\n\n");
+  return buildDraftExportBundle({ evidenceLinks, sections }).markdown;
 }
 
 function readingCitationText(session) {

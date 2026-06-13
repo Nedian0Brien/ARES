@@ -196,9 +196,9 @@
 - [x] citation formatter를 추가한다.
   - 산출물: CSL 또는 최소 IEEE/APA formatter
   - 검증: IEEE/APA formatter snapshot test in `services/backend/tests/citation-model.test.mjs`
-- [ ] export format을 확장한다.
+- [x] export format을 확장한다.
   - 산출물: Markdown, HTML, DOCX 또는 PDF, BibTeX/CSL JSON
-  - 검증: export snapshot test
+  - 검증: Markdown/HTML/BibTeX/CSL JSON snapshot test in `services/backend/tests/writing-tab-contract.test.mjs`
 - [ ] broken source blocker/warning을 export에 적용한다.
   - 산출물: pre-export validation
   - 검증: missing evidence export test
