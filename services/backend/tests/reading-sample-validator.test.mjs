@@ -1,13 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   buildValidationReport,
   parseValidationArgs,
   parseValidationSampleSet,
   summariseReadingValidation,
+  validateValidationSampleCorpus,
   validateReadingSummary,
 } from '../../../scripts/validate-reading-sample.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, '..', '..', '..');
 
 test('reading sample validator defaults to the MixRAG arXiv sample', () => {
   const options = parseValidationArgs([]);
@@ -84,7 +91,10 @@ test('reading sample validator parses a sample set with per-sample thresholds', 
     },
     samples: [
       {
+        categories: ['table', 'multi-page-table'],
+        expectedFeatures: ['dense tables'],
         id: 'dense-table',
+        knownLimitations: ['requires table boundary review'],
         title: 'Dense Table Paper',
         pdfUrl: 'https://arxiv.org/pdf/2504.09554',
         thresholds: {
@@ -99,6 +109,21 @@ test('reading sample validator parses a sample set with per-sample thresholds', 
   assert.equal(sampleSet.samples[0].thresholds.minAssets, 3);
   assert.equal(sampleSet.samples[0].thresholds.minSourceBackedAssets, 2);
   assert.equal(sampleSet.samples[0].thresholds.minTables, 7);
+  assert.deepEqual(sampleSet.samples[0].categories, ['table', 'multi-page-table']);
+  assert.deepEqual(sampleSet.samples[0].expectedFeatures, ['dense tables']);
+  assert.deepEqual(sampleSet.samples[0].knownLimitations, ['requires table boundary review']);
+});
+
+test('reading validation corpus covers at least 20 PDFs and required categories', async () => {
+  const raw = await readFile(path.join(rootDir, 'scripts', 'reading-validation-samples.json'), 'utf8');
+  const corpus = parseValidationSampleSet(JSON.parse(raw));
+  const coverage = validateValidationSampleCorpus(corpus);
+
+  assert.equal(coverage.status, 'passed');
+  assert.equal(coverage.sampleCount >= 20, true);
+  assert.deepEqual(coverage.failures, []);
+  assert.equal(coverage.categories.includes('ocr'), true);
+  assert.equal(coverage.categories.includes('multi-page-table'), true);
 });
 
 test('reading sample validator builds an aggregate report across samples', () => {

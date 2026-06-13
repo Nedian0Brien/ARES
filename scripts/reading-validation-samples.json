@@ -1,37 +1,254 @@
 {
   "thresholds": {
     "minAssets": 1,
+    "minSourceBackedAssets": 1,
     "minSourceBoundedAssets": 1,
     "minTables": 1
   },
   "samples": [
     {
+      "categories": ["text-layer", "table", "citation"],
+      "expectedFeatures": ["dense table assets", "source-bounded table evidence", "citation-rich related work"],
       "id": "arxiv-2504.09554",
-      "title": "Mixture-of-RAG: Integrating Text and Tables with Large Language Models",
       "paperUrl": "https://arxiv.org/abs/2504.09554",
       "pdfUrl": "https://arxiv.org/pdf/2504.09554",
       "sourceName": "arXiv",
       "sourceProvider": "arxiv",
-      "year": 2025,
       "thresholds": {
         "minAssets": 7,
         "minSourceBoundedAssets": 7,
         "minTables": 7
-      }
+      },
+      "title": "Mixture-of-RAG: Integrating Text and Tables with Large Language Models",
+      "year": 2025
     },
     {
-      "id": "arxiv-2512.10888",
-      "title": "PubTables-v2: A new large-scale dataset for full-page and multi-page table extraction",
-      "paperUrl": "https://arxiv.org/abs/2512.10888",
-      "pdfUrl": "https://arxiv.org/pdf/2512.10888",
+      "categories": ["text-layer", "table", "multi-page-table"],
+      "expectedFeatures": ["full-page tables", "multi-page table continuation markers"],
+      "id": "arxiv-2409.05125",
+      "paperUrl": "https://arxiv.org/abs/2409.05125",
+      "pdfUrl": "https://arxiv.org/pdf/2409.05125",
       "sourceName": "arXiv",
       "sourceProvider": "arxiv",
-      "year": 2025,
       "thresholds": {
         "minAssets": 5,
         "minSourceBoundedAssets": 5,
         "minTables": 5
-      }
+      },
+      "title": "PdfTable: A Unified Toolkit for Deep Learning-Based Table Extraction",
+      "year": 2024
+    },
+    {
+      "categories": ["text-layer", "table", "multi-page-table", "citation"],
+      "expectedFeatures": ["document parsing survey tables", "long bibliography"],
+      "id": "arxiv-2410.21169",
+      "paperUrl": "https://arxiv.org/abs/2410.21169",
+      "pdfUrl": "https://arxiv.org/pdf/2410.21169",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Document Parsing Unveiled: Techniques, Challenges, and Prospects for Structured Document Understanding",
+      "year": 2024
+    },
+    {
+      "categories": ["text-layer", "figure", "table", "citation"],
+      "expectedFeatures": ["figure-heavy scientific layout", "table and figure extraction mix"],
+      "id": "arxiv-1804.02445",
+      "paperUrl": "https://arxiv.org/abs/1804.02445",
+      "pdfUrl": "https://arxiv.org/pdf/1804.02445",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Extracting Scientific Figures with Distantly Supervised Neural Networks",
+      "year": 2018
+    },
+    {
+      "categories": ["text-layer", "table", "figure"],
+      "expectedFeatures": ["classic ML paper figures", "metric tables"],
+      "id": "arxiv-1706.03762",
+      "paperUrl": "https://arxiv.org/abs/1706.03762",
+      "pdfUrl": "https://arxiv.org/pdf/1706.03762",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Attention Is All You Need",
+      "year": 2017
+    },
+    {
+      "categories": ["text-layer", "table", "citation"],
+      "expectedFeatures": ["benchmark tables", "long references"],
+      "id": "arxiv-1810.04805",
+      "paperUrl": "https://arxiv.org/abs/1810.04805",
+      "pdfUrl": "https://arxiv.org/pdf/1810.04805",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+      "year": 2018
+    },
+    {
+      "categories": ["text-layer", "table", "figure", "citation"],
+      "expectedFeatures": ["few-shot result tables", "scaling figures"],
+      "id": "arxiv-2005.14165",
+      "paperUrl": "https://arxiv.org/abs/2005.14165",
+      "pdfUrl": "https://arxiv.org/pdf/2005.14165",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Language Models are Few-Shot Learners",
+      "year": 2020
+    },
+    {
+      "categories": ["text-layer", "table", "citation"],
+      "expectedFeatures": ["retrieval evaluation tables", "evidence-heavy method sections"],
+      "id": "arxiv-2005.11401",
+      "paperUrl": "https://arxiv.org/abs/2005.11401",
+      "pdfUrl": "https://arxiv.org/pdf/2005.11401",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "year": 2020
+    },
+    {
+      "categories": ["text-layer", "figure", "table"],
+      "expectedFeatures": ["image-text architecture figures", "zero-shot result tables"],
+      "id": "arxiv-2103.00020",
+      "paperUrl": "https://arxiv.org/abs/2103.00020",
+      "pdfUrl": "https://arxiv.org/pdf/2103.00020",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Learning Transferable Visual Models From Natural Language Supervision",
+      "year": 2021
+    },
+    {
+      "categories": ["text-layer", "figure", "table"],
+      "expectedFeatures": ["diffusion diagrams", "image quality tables"],
+      "id": "arxiv-2006.11239",
+      "paperUrl": "https://arxiv.org/abs/2006.11239",
+      "pdfUrl": "https://arxiv.org/pdf/2006.11239",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Denoising Diffusion Probabilistic Models",
+      "year": 2020
+    },
+    {
+      "categories": ["text-layer", "table", "citation"],
+      "expectedFeatures": ["multi-task result tables", "long bibliography"],
+      "id": "arxiv-1910.10683",
+      "paperUrl": "https://arxiv.org/abs/1910.10683",
+      "pdfUrl": "https://arxiv.org/pdf/1910.10683",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer",
+      "year": 2019
+    },
+    {
+      "categories": ["text-layer", "figure", "table"],
+      "expectedFeatures": ["segmentation figures", "dataset tables"],
+      "id": "arxiv-2304.02643",
+      "paperUrl": "https://arxiv.org/abs/2304.02643",
+      "pdfUrl": "https://arxiv.org/pdf/2304.02643",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Segment Anything",
+      "year": 2023
+    },
+    {
+      "categories": ["text-layer", "table", "supplementary"],
+      "expectedFeatures": ["model comparison tables", "supplementary appendix references"],
+      "id": "arxiv-2307.09288",
+      "paperUrl": "https://arxiv.org/abs/2307.09288",
+      "pdfUrl": "https://arxiv.org/pdf/2307.09288",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Llama 2: Open Foundation and Fine-Tuned Chat Models",
+      "year": 2023
+    },
+    {
+      "categories": ["text-layer", "table", "supplementary"],
+      "expectedFeatures": ["benchmark tables", "appendix-heavy evaluation"],
+      "id": "arxiv-2302.13971",
+      "paperUrl": "https://arxiv.org/abs/2302.13971",
+      "pdfUrl": "https://arxiv.org/pdf/2302.13971",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "LLaMA: Open and Efficient Foundation Language Models",
+      "year": 2023
+    },
+    {
+      "categories": ["text-layer", "figure", "table"],
+      "expectedFeatures": ["technical report figures", "safety result tables"],
+      "id": "arxiv-2303.08774",
+      "paperUrl": "https://arxiv.org/abs/2303.08774",
+      "pdfUrl": "https://arxiv.org/pdf/2303.08774",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "GPT-4 Technical Report",
+      "year": 2023
+    },
+    {
+      "categories": ["text-layer", "table", "citation"],
+      "expectedFeatures": ["reasoning benchmark tables", "short paper layout"],
+      "id": "arxiv-2201.11903",
+      "paperUrl": "https://arxiv.org/abs/2201.11903",
+      "pdfUrl": "https://arxiv.org/pdf/2201.11903",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+      "year": 2022
+    },
+    {
+      "categories": ["text-layer", "table", "citation"],
+      "expectedFeatures": ["human preference tables", "policy method details"],
+      "id": "arxiv-2203.02155",
+      "paperUrl": "https://arxiv.org/abs/2203.02155",
+      "pdfUrl": "https://arxiv.org/pdf/2203.02155",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Training language models to follow instructions with human feedback",
+      "year": 2022
+    },
+    {
+      "categories": ["text-layer", "figure", "table"],
+      "expectedFeatures": ["vision architecture figures", "classification result tables"],
+      "id": "arxiv-1512.03385",
+      "paperUrl": "https://arxiv.org/abs/1512.03385",
+      "pdfUrl": "https://arxiv.org/pdf/1512.03385",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "title": "Deep Residual Learning for Image Recognition",
+      "year": 2015
+    },
+    {
+      "categories": ["ocr", "figure", "table"],
+      "expectedFeatures": ["OCR recovery path", "visual layout extraction"],
+      "id": "arxiv-2409.00031",
+      "knownLimitations": ["use as OCR-path fixture candidate before enforcing parse thresholds"],
+      "paperUrl": "https://arxiv.org/abs/2409.00031",
+      "pdfUrl": "https://arxiv.org/pdf/2409.00031",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "thresholds": {
+        "minAssets": 0,
+        "minSourceBackedAssets": 0,
+        "minSourceBoundedAssets": 0,
+        "minTables": 0
+      },
+      "title": "Quality Assessment in the Era of Large Models: A Survey",
+      "year": 2024
+    },
+    {
+      "categories": ["ocr", "supplementary", "citation"],
+      "expectedFeatures": ["manual text import fallback", "supplementary metadata handling"],
+      "id": "arxiv-2409.00032",
+      "knownLimitations": ["use as supplementary/OCR metadata fixture before enforcing parse thresholds"],
+      "paperUrl": "https://arxiv.org/abs/2409.00032",
+      "pdfUrl": "https://arxiv.org/pdf/2409.00032",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "thresholds": {
+        "minAssets": 0,
+        "minSourceBackedAssets": 0,
+        "minSourceBoundedAssets": 0,
+        "minTables": 0
+      },
+      "title": "ADformer: A Multi-Granularity Spatial-Temporal Transformer for EEG-Based Alzheimer Detection",
+      "year": 2024
     }
   ]
 }

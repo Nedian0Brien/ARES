@@ -52,6 +52,9 @@ function normaliseThresholds(input = {}, fallback = {}) {
 
 function normaliseValidationSample(input = {}, thresholds = {}) {
   const id = input.id || input.paperId || DEFAULT_SAMPLE.paperId;
+  const categories = Array.isArray(input.categories)
+    ? input.categories.map((category) => String(category || '').trim()).filter(Boolean)
+    : [];
   const paper = {
     ...DEFAULT_SAMPLE,
     abstract: input.abstract || DEFAULT_SAMPLE.abstract,
@@ -66,7 +69,14 @@ function normaliseValidationSample(input = {}, thresholds = {}) {
   };
 
   return {
+    categories,
+    expectedFeatures: Array.isArray(input.expectedFeatures)
+      ? input.expectedFeatures.map((feature) => String(feature || '').trim()).filter(Boolean)
+      : [],
     id,
+    knownLimitations: Array.isArray(input.knownLimitations)
+      ? input.knownLimitations.map((limitation) => String(limitation || '').trim()).filter(Boolean)
+      : [],
     paper,
     thresholds: normaliseThresholds(input.thresholds || {}, thresholds),
   };
@@ -101,6 +111,34 @@ export function parseValidationSampleSet(input = {}) {
   return {
     thresholds,
     samples: samples.map((sample) => normaliseValidationSample(sample, thresholds)),
+  };
+}
+
+export function validateValidationSampleCorpus(
+  sampleSet,
+  {
+    minSamples = 20,
+    requiredCategories = ['text-layer', 'ocr', 'table', 'figure', 'citation', 'supplementary', 'multi-page-table'],
+  } = {},
+) {
+  const samples = Array.isArray(sampleSet?.samples) ? sampleSet.samples : [];
+  const categories = new Set(samples.flatMap((sample) => (Array.isArray(sample.categories) ? sample.categories : [])));
+  const failures = [];
+  if (samples.length < minSamples) {
+    failures.push(`Expected at least ${minSamples} validation samples, received ${samples.length}.`);
+  }
+
+  for (const category of requiredCategories) {
+    if (!categories.has(category)) {
+      failures.push(`Expected validation corpus category "${category}".`);
+    }
+  }
+
+  return {
+    categories: Array.from(categories).sort(),
+    failures,
+    sampleCount: samples.length,
+    status: failures.length ? 'failed' : 'passed',
   };
 }
 

@@ -115,12 +115,12 @@
 
 목표: Reader를 검증 가능한 논문 처리 파이프라인으로 만든다.
 
-- [ ] PDF validation corpus를 20개 이상으로 확장한다.
+- [x] PDF validation corpus를 20개 이상으로 확장한다.
   - 산출물: `scripts/reading-validation-samples.json`
-  - 검증: validator aggregate pass
-- [ ] corpus를 category별로 분류한다.
+  - 검증: corpus coverage test in `services/backend/tests/reading-sample-validator.test.mjs`
+- [x] corpus를 category별로 분류한다.
   - 산출물: text layer, OCR, table, figure, citation, supplementary metadata
-  - 검증: sample schema test
+  - 검증: sample schema and category coverage test in `services/backend/tests/reading-sample-validator.test.mjs`
 - [ ] table/figure quality report를 추가한다.
   - 산출물: source-backed/partial/synthetic 비율 report
   - 검증: report snapshot test
