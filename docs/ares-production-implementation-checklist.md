@@ -66,9 +66,9 @@
 - [x] file artifact 저장소 경계를 분리한다.
   - 산출물: artifact store adapter, local file adapter
   - 검증: local artifact adapter test in `services/backend/tests/artifact-store.test.mjs`, PDF/thumbnail/table route tests in `services/backend/tests/reading-routes.test.mjs`
-- [ ] object storage adapter를 추가한다.
+- [x] object storage adapter를 추가한다.
   - 산출물: S3-compatible adapter 또는 provider 결정 문서
-  - 검증: signed URL/proxy test with mock adapter
+  - 검증: signed URL test with mock adapter in `services/backend/tests/artifact-store.test.mjs`, provider decision in `docs/object-storage-provider-decision.md`
 - [ ] backup/restore runbook과 rehearsal script를 추가한다.
   - 산출물: DB backup, object backup, restore script
   - 검증: staging 또는 temp DB restore dry-run
