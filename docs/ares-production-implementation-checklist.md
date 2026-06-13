@@ -98,9 +98,9 @@
 - [x] queue run claim/release API를 store에 추가한다.
   - 산출물: atomic claim in Postgres, safe fallback in file store
   - 검증: competing worker claim test in `services/backend/tests/asset-store.test.mjs`, Postgres lock/migration checks in `services/backend/tests/postgres-schema.test.mjs`
-- [ ] durable cancel action을 worker loop와 연결한다.
+- [x] durable cancel action을 worker loop와 연결한다.
   - 산출물: cancel request polling, subprocess termination
-  - 검증: run cancel race test
+  - 검증: durable cancel subprocess abort test in `services/backend/tests/agent-runs.test.mjs`, worker once-loop test in `services/backend/tests/agent-worker.test.mjs`
 - [ ] progress event replay를 추가한다.
   - 산출물: stored progressEvents, SSE replay
   - 검증: SSE reconnect test

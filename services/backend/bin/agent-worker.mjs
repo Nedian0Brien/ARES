@@ -38,10 +38,37 @@ async function ensureEnvLoaded(envFile) {
 function parseArgs(argv = []) {
   return {
     dryRun: argv.includes('--dry-run'),
+    idleMs: Number(argv.find((arg) => arg.startsWith('--idle-ms='))?.split('=')[1]) || 1000,
+    leaseMs: Number(argv.find((arg) => arg.startsWith('--lease-ms='))?.split('=')[1]) || 60_000,
+    once: argv.includes('--once'),
+    workerId: argv.find((arg) => arg.startsWith('--worker-id='))?.split('=')[1] || `agent-worker-${process.pid}`,
   };
 }
 
-export async function bootAgentWorker({ dryRun = false } = {}) {
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function runAgentWorkerLoop({ idleMs = 1000, leaseMs = 60_000, once = false, service, workerId }) {
+  let processedRunCount = 0;
+
+  while (true) {
+    const result = await service.processNextQueuedRun({ leaseMs, workerId });
+    if (result) {
+      processedRunCount += 1;
+    }
+
+    if (once) {
+      return { processedRunCount };
+    }
+
+    if (!result) {
+      await sleep(idleMs);
+    }
+  }
+}
+
+export async function bootAgentWorker({ dryRun = false, idleMs = 1000, leaseMs = 60_000, once = false, workerId } = {}) {
   await ensureEnvLoaded(path.join(ROOT_DIR, '.env'));
 
   const store = await createStore({
@@ -60,12 +87,23 @@ export async function bootAgentWorker({ dryRun = false } = {}) {
     runtimeName: process.env.ARES_AGENT_RUNTIME || process.env.SCOUT_AGENT_RUNTIME || 'codex',
     store,
   });
-  const recovered = await service.recoverInterruptedRuns();
+  const recovered = dryRun ? await service.recoverInterruptedRuns() : [];
+  const workerReport = dryRun
+    ? { processedRunCount: 0 }
+    : await runAgentWorkerLoop({
+        idleMs,
+        leaseMs,
+        once,
+        service,
+        workerId,
+      });
   const report = {
     dryRun,
     ok: true,
+    processedRunCount: workerReport.processedRunCount,
     recoveredRunCount: recovered.length,
     worker: 'agent-worker',
+    workerId,
   };
 
   await store.close?.();

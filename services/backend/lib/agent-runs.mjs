@@ -244,6 +244,9 @@ async function executeSearchRun({ context, run, searchService, store }) {
       ...payload.results.map((paper) => paper.paperId),
     ]),
     finishedAt: nowIso(),
+    heartbeatAt: null,
+    leaseExpiresAt: null,
+    leaseOwner: '',
     outputPayload,
     outputRef: [],
     outputSummary: searchOutputSummary(payload, query),
@@ -572,6 +575,7 @@ function hydrateOutputRef(store, outputRef) {
 }
 
 export function createAgentRunService({
+  cancelPollMs = 500,
   rootDir,
   runtimeName = 'codex',
   searchService,
@@ -616,6 +620,22 @@ export function createAgentRunService({
     notifyRun(runId);
     return updated;
   };
+  if (typeof store.claimNextAgentRun === 'function') {
+    notifyingStore.claimNextAgentRun = async (options = {}) => {
+      const claimed = await store.claimNextAgentRun(options);
+      if (claimed) {
+        notifyRun(claimed.id);
+      }
+      return claimed;
+    };
+  }
+  if (typeof store.releaseAgentRun === 'function') {
+    notifyingStore.releaseAgentRun = async (runId, options = {}) => {
+      const released = await store.releaseAgentRun(runId, options);
+      notifyRun(runId);
+      return released;
+    };
+  }
 
   async function markRunCanceled(runId, patch = {}) {
     return notifyingStore.updateAgentRun(runId, {
@@ -623,6 +643,9 @@ export function createAgentRunService({
       cancelRequestedAt: patch.cancelRequestedAt || nowIso(),
       error: 'Canceled by user.',
       finishedAt: nowIso(),
+      heartbeatAt: null,
+      leaseExpiresAt: null,
+      leaseOwner: '',
       status: 'canceled',
       ...patch,
     });
@@ -646,6 +669,9 @@ export function createAgentRunService({
       await notifyingStore.updateAgentRun(runId, {
         error: error.message,
         finishedAt: nowIso(),
+        heartbeatAt: null,
+        leaseExpiresAt: null,
+        leaseOwner: '',
         status: 'done',
       });
       return;
@@ -683,9 +709,22 @@ export function createAgentRunService({
         sandbox: profile.sandbox,
         timeoutMs: DEFAULT_TIMEOUTS[definition.stage],
       });
+      let cancelPoll = null;
 
       activeRuns.set(runId, task.abort);
-      const summary = await task.promise;
+      if (cancelPollMs > 0) {
+        cancelPoll = setInterval(() => {
+          if (isRunCancelRequested(notifyingStore, runId)) {
+            task.abort();
+          }
+        }, cancelPollMs);
+      }
+
+      const summary = await task.promise.finally(() => {
+        if (cancelPoll) {
+          clearInterval(cancelPoll);
+        }
+      });
       const payload = runtime.parseJsonFromMessages(summary);
       const output = normaliseAgentPayload(payload, definition);
 
@@ -705,6 +744,9 @@ export function createAgentRunService({
       await notifyingStore.updateAgentRun(runId, {
         createdAssetIds: uniqueStrings([...(run.createdAssetIds || []), ...persisted.createdAssetIds]),
         finishedAt: nowIso(),
+        heartbeatAt: null,
+        leaseExpiresAt: null,
+        leaseOwner: '',
         outputRef: persisted.outputRef,
         outputSummary: persisted.outputSummary,
         status: 'done',
@@ -722,6 +764,9 @@ export function createAgentRunService({
         await notifyingStore.updateAgentRun(runId, {
           error: message,
           finishedAt: nowIso(),
+          heartbeatAt: null,
+          leaseExpiresAt: null,
+          leaseOwner: '',
           outputRef: [],
           outputSummary: `Agentic search failed: ${message}`,
           status: 'error',
@@ -742,6 +787,9 @@ export function createAgentRunService({
       await notifyingStore.updateAgentRun(runId, {
         createdAssetIds: uniqueStrings([...(run.createdAssetIds || []), ...persisted.createdAssetIds]),
         finishedAt: nowIso(),
+        heartbeatAt: null,
+        leaseExpiresAt: null,
+        leaseOwner: '',
         outputRef: persisted.outputRef,
         outputSummary: persisted.outputSummary,
         status: 'done',
@@ -847,6 +895,20 @@ export function createAgentRunService({
     };
   }
 
+  async function processNextQueuedRun({ leaseMs = 60_000, stages = [], workerId = 'agent-worker' } = {}) {
+    if (typeof notifyingStore.claimNextAgentRun !== 'function') {
+      throw new Error('Store does not support agent run claiming.');
+    }
+
+    const claimed = await notifyingStore.claimNextAgentRun({ leaseMs, stages, workerId });
+    if (!claimed) {
+      return null;
+    }
+
+    await executeRun(claimed.id);
+    return getRun(claimed.id);
+  }
+
   async function recoverInterruptedRuns() {
     const activeStatuses = new Set(['queue', 'running']);
     const interrupted = store
@@ -858,6 +920,9 @@ export function createAgentRunService({
       const updated = await notifyingStore.updateAgentRun(run.id, {
         error: 'Agent run was interrupted by server restart. Retry the run to continue.',
         finishedAt: nowIso(),
+        heartbeatAt: null,
+        leaseExpiresAt: null,
+        leaseOwner: '',
         status: 'error',
         warning: combineWarnings(run.warning, 'interrupted by server restart'),
       });
@@ -879,6 +944,7 @@ export function createAgentRunService({
     abortRun,
     createRun,
     getRun,
+    processNextQueuedRun,
     recoverInterruptedRuns,
     retryRun,
     subscribeRun,

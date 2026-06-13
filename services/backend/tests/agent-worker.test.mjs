@@ -6,6 +6,8 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { promises as fs } from 'node:fs';
 
+import { runAgentWorkerLoop } from '../bin/agent-worker.mjs';
+
 async function createWorkerDataRoot() {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ares-agent-worker-'));
   const seedFile = path.join(rootDir, 'data', 'store.seed.json');
@@ -64,4 +66,22 @@ test('agent worker entrypoint boots in dry-run mode', async () => {
   assert.equal(report.dryRun, true);
   assert.equal(report.ok, true);
   assert.equal(report.recoveredRunCount, 0);
+});
+
+test('agent worker loop claims one queued run in once mode', async () => {
+  const calls = [];
+  const report = await runAgentWorkerLoop({
+    leaseMs: 5000,
+    once: true,
+    service: {
+      async processNextQueuedRun(input) {
+        calls.push(input);
+        return { run: { id: 'run-1', status: 'done' } };
+      },
+    },
+    workerId: 'worker-test',
+  });
+
+  assert.equal(report.processedRunCount, 1);
+  assert.deepEqual(calls, [{ leaseMs: 5000, workerId: 'worker-test' }]);
 });

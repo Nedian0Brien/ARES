@@ -61,6 +61,31 @@ function createDelayedFailingSpawn(delayMs = 30) {
   };
 }
 
+function createHangingSpawn(onTaskStart = () => {}) {
+  return function spawnImpl(_command, args) {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.exitCode = null;
+    child.kill = () => {
+      child.exitCode = 0;
+      child.emit('close', 0, null);
+    };
+
+    process.nextTick(() => {
+      if (args.includes('--version')) {
+        child.exitCode = 0;
+        child.emit('close', 0, null);
+        return;
+      }
+
+      onTaskStart(child);
+    });
+
+    return child;
+  };
+}
+
 function paperFixture(overrides = {}) {
   return {
     abstract: 'A paper about local inference serving.',
@@ -380,6 +405,55 @@ test('agent run service stops queued reading side effects when cancellation wins
   assert.equal(store.getReadingSessions('demo').length, 0);
   assert.equal(store.getProject('demo').queueCount, 0);
   assert.equal(runtimeCallCount, 0);
+});
+
+test('agent run worker processing aborts subprocess after durable cancel request', async () => {
+  const store = await createDemoStore();
+  let runtimeChild;
+  let runtimeStarted;
+  const runtimeReady = new Promise((resolve) => {
+    runtimeStarted = resolve;
+  });
+  const service = createAgentRunService({
+    cancelPollMs: 5,
+    rootDir: '/workspace',
+    spawnImpl: createHangingSpawn((child) => {
+      runtimeChild = child;
+      runtimeStarted();
+    }),
+    store,
+  });
+  const run = await store.createAgentRun({
+    agent: 'Reader agent',
+    input: {
+      paper: paperFixture({ paperId: 'durable-cancel-paper' }),
+    },
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'queue',
+    taskKind: 'create-reading-session',
+  });
+
+  const processing = service.processNextQueuedRun({
+    leaseMs: 30_000,
+    workerId: 'worker-a',
+  });
+  await runtimeReady;
+  await store.updateAgentRun(run.id, {
+    cancelReason: 'user',
+    cancelRequestedAt: '2026-06-14T02:00:00.000Z',
+  });
+
+  const result = await processing;
+  const finalRun = store.getAgentRun(run.id);
+
+  assert.equal(runtimeChild.exitCode, 0);
+  assert.equal(result.run.status, 'canceled');
+  assert.equal(finalRun.status, 'canceled');
+  assert.equal(finalRun.leaseOwner, '');
+  assert.equal(finalRun.leaseExpiresAt, null);
+  assert.equal(finalRun.heartbeatAt, null);
+  assert.match(finalRun.error, /canceled by user/i);
 });
 
 test('search agent run reports an error when Scout service is unavailable', async () => {
