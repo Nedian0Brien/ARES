@@ -22,6 +22,8 @@ export const GRAPH_ASSET_COLLECTIONS = [
   'draftSections',
   'draftRevisions',
   'commentThreads',
+  'activityEvents',
+  'notifications',
 ];
 
 export const ASSET_COLLECTIONS = Array.from(new Set([...LEGACY_ASSET_COLLECTIONS, ...GRAPH_ASSET_COLLECTIONS]));
@@ -31,6 +33,7 @@ const VALID_QUESTION_STATUSES = new Set(['active', 'paused', 'done', 'archived']
 const VALID_INSIGHT_REVIEW_STATUSES = new Set(['candidate', 'needs-review', 'accepted', 'rejected', 'archived']);
 const VALID_INSIGHT_TYPES = new Set(['claim', 'hypothesis', 'decision', 'observation']);
 const VALID_COMMENT_THREAD_STATUSES = new Set(['open', 'resolved', 'reopened']);
+const VALID_NOTIFICATION_STATUSES = new Set(['unread', 'read', 'archived']);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -446,6 +449,38 @@ export function normaliseCommentThread(input = {}, options = {}) {
   };
 }
 
+export function normaliseActivityEvent(input = {}, options = {}) {
+  const base = baseAsset(input, { ...options, fallbackStatus: 'done', prefix: 'activity' });
+
+  return {
+    ...base,
+    actorId: ensureText(input.actorId, 'system'),
+    eventType: ensureText(input.eventType || input.type, 'activity'),
+    metadata: input.metadata && typeof input.metadata === 'object' ? clone(input.metadata) : {},
+    occurredAt: ensureText(input.occurredAt, base.createdAt),
+    summary: ensureText(input.summary, 'Activity recorded.'),
+    targetId: ensureText(input.targetId),
+    targetType: ensureText(input.targetType, 'project'),
+  };
+}
+
+export function normaliseNotification(input = {}, options = {}) {
+  const base = baseAsset(input, { ...options, fallbackStatus: 'unread', prefix: 'notification' });
+  const status = ensureText(input.status, base.status).toLowerCase();
+
+  return {
+    ...base,
+    adapter: ensureText(input.adapter, 'in-app'),
+    channel: ensureText(input.channel, 'in-app'),
+    message: ensureText(input.message, 'Notification'),
+    readAt: ensureText(input.readAt),
+    recipientUserId: ensureText(input.recipientUserId),
+    relatedActivityEventId: ensureText(input.relatedActivityEventId),
+    status: VALID_NOTIFICATION_STATUSES.has(status) ? status : 'unread',
+    title: ensureText(input.title, 'ARES notification'),
+  };
+}
+
 export function normaliseAsset(collectionName, input = {}, options = {}) {
   switch (collectionName) {
     case 'researchQuestions':
@@ -470,6 +505,10 @@ export function normaliseAsset(collectionName, input = {}, options = {}) {
       return normaliseDraftRevision(input, options);
     case 'commentThreads':
       return normaliseCommentThread(input, options);
+    case 'activityEvents':
+      return normaliseActivityEvent(input, options);
+    case 'notifications':
+      return normaliseNotification(input, options);
     default:
       return {
         ...baseAsset(input, {

@@ -208,12 +208,12 @@
 - [x] comment/review request를 추가한다.
   - 산출물: comment thread, mention placeholder, resolve/reopen
   - 검증: comment thread model and API resolve test in `services/backend/tests/asset-model.test.mjs`, `services/backend/tests/asset-routes.test.mjs`
-- [ ] activity feed를 추가한다.
+- [x] activity feed를 추가한다.
   - 산출물: paper added, run completed, insight accepted, draft exported events
-  - 검증: activity event test
-- [ ] notification foundation을 추가한다.
+  - 검증: activity event model/API test in `services/backend/tests/asset-model.test.mjs`, `services/backend/tests/asset-routes.test.mjs`
+- [x] notification foundation을 추가한다.
   - 산출물: in-app notification, email adapter boundary
-  - 검증: notification creation test
+  - 검증: notification model/API test in `services/backend/tests/asset-model.test.mjs`, `services/backend/tests/asset-routes.test.mjs`
 
 ## Completion Gate
 

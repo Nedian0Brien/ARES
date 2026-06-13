@@ -1,4 +1,5 @@
 const PROJECT_ASSET_PATHS = {
+  'activity-events': 'activityEvents',
   'comment-threads': 'commentThreads',
   'draft-sections': 'draftSections',
   drafts: 'drafts',
@@ -6,6 +7,7 @@ const PROJECT_ASSET_PATHS = {
   'experiment-runs': 'experimentRuns',
   'insight-cards': 'insightCards',
   'insight-notes': 'insightNotes',
+  notifications: 'notifications',
   'reading-packets': 'readingPackets',
   'reading-sessions': 'readingSessions',
   'reproduction-plans': 'reproductionPlans',

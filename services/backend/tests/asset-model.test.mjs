@@ -6,11 +6,13 @@ import {
   buildInsightQualityReport,
   diffDraftRevisionSections,
   normaliseAsset,
+  normaliseActivityEvent,
   normaliseCommentThread,
   normaliseDraftRevision,
   normaliseEvidenceLink,
   normaliseExperimentRun,
   normaliseInsightCard,
+  normaliseNotification,
   normalisePaper,
   normaliseReadingPacket,
   normaliseReproductionPlan,
@@ -25,6 +27,8 @@ test('asset collection registry includes legacy and graph collections', () => {
   assert.ok(ASSET_COLLECTIONS.includes('draftSections'));
   assert.ok(ASSET_COLLECTIONS.includes('draftRevisions'));
   assert.ok(ASSET_COLLECTIONS.includes('commentThreads'));
+  assert.ok(ASSET_COLLECTIONS.includes('activityEvents'));
+  assert.ok(ASSET_COLLECTIONS.includes('notifications'));
 });
 
 test('normalisePaper maps legacy paper records into graph shape', () => {
@@ -378,4 +382,44 @@ test('normaliseCommentThread stores review request and resolve metadata', () => 
   assert.deepEqual(thread.assigneeIds, ['reviewer-1']);
   assert.equal(thread.messages[0].body, 'Please verify this citation.');
   assert.equal(thread.resolvedBy, 'reviewer-1');
+});
+
+test('normaliseActivityEvent records project feed events', () => {
+  const activity = normaliseActivityEvent(
+    {
+      actorId: 'user-1',
+      eventType: 'draft.exported',
+      metadata: { format: 'markdown' },
+      summary: 'Draft exported.',
+      targetId: 'draft-1',
+      targetType: 'draft',
+    },
+    { projectId: 'demo' },
+  );
+
+  assert.equal(activity.projectId, 'demo');
+  assert.equal(activity.eventType, 'draft.exported');
+  assert.equal(activity.targetType, 'draft');
+  assert.deepEqual(activity.metadata, { format: 'markdown' });
+});
+
+test('normaliseNotification stores in-app notification state and adapter boundary', () => {
+  const notification = normaliseNotification(
+    {
+      adapter: 'email-placeholder',
+      channel: 'in-app',
+      message: 'Review requested on Citation review.',
+      recipientUserId: 'reviewer-1',
+      relatedActivityEventId: 'activity-1',
+      status: 'read',
+      title: 'Review requested',
+    },
+    { projectId: 'demo' },
+  );
+
+  assert.equal(notification.projectId, 'demo');
+  assert.equal(notification.status, 'read');
+  assert.equal(notification.adapter, 'email-placeholder');
+  assert.equal(notification.recipientUserId, 'reviewer-1');
+  assert.equal(notification.relatedActivityEventId, 'activity-1');
 });

@@ -237,6 +237,44 @@ test('asset graph routes expose project graph and create graph assets', async (t
   const graphWithComment = await graphWithCommentResponse.json();
   assert.equal(graphWithComment.commentThreads[0].id, comment.asset.id);
 
+  const activityResponse = await fetch(new URL('/api/projects/demo/activity-events', server.url), {
+    body: JSON.stringify({
+      actorId: 'user-1',
+      eventType: 'draft.exported',
+      metadata: { format: 'markdown' },
+      summary: 'Draft exported.',
+      targetId: draft.asset.id,
+      targetType: 'draft',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const activity = await activityResponse.json();
+  assert.equal(activityResponse.status, 201);
+  assert.equal(activity.asset.eventType, 'draft.exported');
+
+  const notificationResponse = await fetch(new URL('/api/projects/demo/notifications', server.url), {
+    body: JSON.stringify({
+      adapter: 'email-placeholder',
+      channel: 'in-app',
+      message: 'Review requested on Citation review.',
+      recipientUserId: 'reviewer-1',
+      relatedActivityEventId: activity.asset.id,
+      title: 'Review requested',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const notification = await notificationResponse.json();
+  assert.equal(notificationResponse.status, 201);
+  assert.equal(notification.asset.status, 'unread');
+  assert.equal(notification.asset.relatedActivityEventId, activity.asset.id);
+
+  const graphWithOpsResponse = await fetch(new URL('/api/projects/demo/graph', server.url));
+  const graphWithOps = await graphWithOpsResponse.json();
+  assert.equal(graphWithOps.activityEvents[0].id, activity.asset.id);
+  assert.equal(graphWithOps.notifications[0].id, notification.asset.id);
+
   const unsafeDeleteResponse = await fetch(new URL(`/api/projects/demo/insight-cards/${created.asset.id}`, server.url), {
     method: 'DELETE',
   });
