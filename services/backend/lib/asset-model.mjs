@@ -20,6 +20,7 @@ export const GRAPH_ASSET_COLLECTIONS = [
   'insightCards',
   'drafts',
   'draftSections',
+  'draftRevisions',
 ];
 
 export const ASSET_COLLECTIONS = Array.from(new Set([...LEGACY_ASSET_COLLECTIONS, ...GRAPH_ASSET_COLLECTIONS]));
@@ -349,6 +350,70 @@ export function normaliseDraftSection(input = {}, options = {}) {
   };
 }
 
+function normaliseRevisionSection(input = {}) {
+  const value = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+
+  return {
+    body: ensureText(value.body),
+    evidenceLinkIds: ensureTextArray(value.evidenceLinkIds, 64),
+    id: ensureText(value.id),
+    insightCardIds: ensureTextArray(value.insightCardIds, 64),
+    title: ensureText(value.title, 'Untitled section'),
+  };
+}
+
+export function diffDraftRevisionSections(previousSections = [], nextSections = []) {
+  const previousById = new Map(ensureArray(previousSections).map((section) => [ensureText(section?.id), normaliseRevisionSection(section)]));
+  const nextById = new Map(ensureArray(nextSections).map((section) => [ensureText(section?.id), normaliseRevisionSection(section)]));
+  const ids = Array.from(new Set([...previousById.keys(), ...nextById.keys()])).filter(Boolean);
+
+  return ids
+    .map((id) => {
+      const previous = previousById.get(id);
+      const next = nextById.get(id);
+      if (!previous) {
+        return { id, nextTitle: next.title, type: 'added' };
+      }
+      if (!next) {
+        return { id, previousTitle: previous.title, type: 'removed' };
+      }
+
+      const changedFields = ['title', 'body', 'evidenceLinkIds', 'insightCardIds'].filter(
+        (field) => JSON.stringify(previous[field]) !== JSON.stringify(next[field]),
+      );
+      if (!changedFields.length) {
+        return null;
+      }
+
+      return {
+        changedFields,
+        id,
+        nextTitle: next.title,
+        previousTitle: previous.title,
+        type: 'changed',
+      };
+    })
+    .filter(Boolean);
+}
+
+export function normaliseDraftRevision(input = {}, options = {}) {
+  const base = baseAsset(input, { ...options, fallbackStatus: 'done', prefix: 'revision' });
+  const previousSections = ensureArray(input.previousSections).map(normaliseRevisionSection);
+  const sections = ensureArray(input.sections).map(normaliseRevisionSection);
+  const explicitDiff = ensureObjectArray(input.diff, 128);
+
+  return {
+    ...base,
+    authorId: ensureText(input.authorId),
+    changeSummary: ensureText(input.changeSummary),
+    diff: explicitDiff.length ? explicitDiff : diffDraftRevisionSections(previousSections, sections),
+    draftId: ensureText(input.draftId),
+    previousRevisionId: ensureText(input.previousRevisionId),
+    sections,
+    version: Math.max(1, ensureNumber(input.version, 1) || 1),
+  };
+}
+
 export function normaliseAsset(collectionName, input = {}, options = {}) {
   switch (collectionName) {
     case 'researchQuestions':
@@ -369,6 +434,8 @@ export function normaliseAsset(collectionName, input = {}, options = {}) {
       return normaliseDraft(input, options);
     case 'draftSections':
       return normaliseDraftSection(input, options);
+    case 'draftRevisions':
+      return normaliseDraftRevision(input, options);
     default:
       return {
         ...baseAsset(input, {

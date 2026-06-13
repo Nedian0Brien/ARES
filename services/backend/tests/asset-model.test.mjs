@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import {
   ASSET_COLLECTIONS,
   buildInsightQualityReport,
+  diffDraftRevisionSections,
   normaliseAsset,
+  normaliseDraftRevision,
   normaliseEvidenceLink,
   normaliseExperimentRun,
   normaliseInsightCard,
@@ -20,6 +22,7 @@ test('asset collection registry includes legacy and graph collections', () => {
   assert.ok(ASSET_COLLECTIONS.includes('evidenceLinks'));
   assert.ok(ASSET_COLLECTIONS.includes('resultDossiers'));
   assert.ok(ASSET_COLLECTIONS.includes('draftSections'));
+  assert.ok(ASSET_COLLECTIONS.includes('draftRevisions'));
 });
 
 test('normalisePaper maps legacy paper records into graph shape', () => {
@@ -283,4 +286,69 @@ test('normaliseAsset dispatches graph-specific contracts', () => {
   assert.equal(insight.type, 'hypothesis');
   assert.equal(insight.claim, 'Latency savings depend on calibration quality.');
   assert.deepEqual(insight.evidenceLinkIds, ['evidence-1']);
+});
+
+test('normaliseDraftRevision stores version snapshots and section diffs', () => {
+  const revision = normaliseDraftRevision(
+    {
+      authorId: 'user-1',
+      changeSummary: 'Tightened recommendation and added limitations.',
+      draftId: 'draft-1',
+      previousRevisionId: 'revision-1',
+      previousSections: [
+        {
+          body: 'Old body',
+          evidenceLinkIds: ['evidence-1'],
+          id: 'section-1',
+          title: 'Recommendation',
+        },
+        {
+          body: 'Removed body',
+          id: 'section-removed',
+          title: 'Removed',
+        },
+      ],
+      sections: [
+        {
+          body: 'New body',
+          evidenceLinkIds: ['evidence-1', 'evidence-2'],
+          id: 'section-1',
+          title: 'Recommendation',
+        },
+        {
+          body: 'New limitation',
+          id: 'section-added',
+          title: 'Limitations',
+        },
+      ],
+      version: '2',
+    },
+    { projectId: 'demo' },
+  );
+
+  assert.equal(revision.projectId, 'demo');
+  assert.equal(revision.draftId, 'draft-1');
+  assert.equal(revision.version, 2);
+  assert.equal(revision.previousRevisionId, 'revision-1');
+  assert.deepEqual(revision.diff, [
+    {
+      changedFields: ['body', 'evidenceLinkIds'],
+      id: 'section-1',
+      nextTitle: 'Recommendation',
+      previousTitle: 'Recommendation',
+      type: 'changed',
+    },
+    { id: 'section-removed', previousTitle: 'Removed', type: 'removed' },
+    { id: 'section-added', nextTitle: 'Limitations', type: 'added' },
+  ]);
+});
+
+test('diffDraftRevisionSections reports stable section changes', () => {
+  assert.deepEqual(
+    diffDraftRevisionSections([{ id: 'same', title: 'Same', body: 'Body' }], [{ id: 'same', title: 'Same', body: 'Body' }]),
+    [],
+  );
+  assert.deepEqual(diffDraftRevisionSections([], [{ id: 'new', title: 'New', body: 'Body' }]), [
+    { id: 'new', nextTitle: 'New', type: 'added' },
+  ]);
 });

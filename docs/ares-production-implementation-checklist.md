@@ -202,9 +202,9 @@
 - [x] broken source blocker/warning을 export에 적용한다.
   - 산출물: pre-export validation
   - 검증: missing evidence export validation test in `services/backend/tests/writing-tab-contract.test.mjs`
-- [ ] draft version history를 추가한다.
+- [x] draft version history를 추가한다.
   - 산출물: draft revision model
-  - 검증: revision diff test
+  - 검증: revision diff test in `services/backend/tests/asset-model.test.mjs`
 - [ ] comment/review request를 추가한다.
   - 산출물: comment thread, mention placeholder, resolve/reopen
   - 검증: comment API/UI test
