@@ -47,7 +47,14 @@ test('Insight cards can move forward to Writing or back to Lab follow-up work', 
   assert.match(appJs, /Create follow-up experiment/);
   assert.match(appJs, /data-action="create-insight-card"/);
   assert.match(appJs, /data-stage-id="writing"/);
-  assert.match(appJs, /data-stage-id="research"/);
+  assert.match(appJs, /data-action="create-follow-up-experiment"/);
+  assert.match(appJs, /data-insight-card-id=/);
+  assert.match(appJs, /createFollowUpExperimentFromInsight/);
+  assert.match(appJs, /\/experiment-runs/);
+  assert.match(appJs, /kind: "follow-up"/);
+  assert.match(appJs, /source: "insight-follow-up"/);
+  assert.match(appJs, /followUpExperimentId: runId/);
+  assert.match(appJs, /state\.activeStage = "research"/);
 });
 
 test('Insight cards can be selected, edited, and deleted as durable assets', async () => {

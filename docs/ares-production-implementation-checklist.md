@@ -20,7 +20,7 @@
 - [ ] P1. Retrieval scorer 운영화
 - [x] P1. Lab runner v1
 - [ ] P1. Observability and release gates
-- [ ] P2. Insight review workflow
+- [x] P2. Insight review workflow
 - [ ] P2. Citation/export pipeline
 - [ ] P2. Collaboration and project operations
 
@@ -182,9 +182,9 @@
 - [x] accepted insight gate를 Write에 적용한다.
   - 산출물: accepted insight만 기본 draft 후보로 노출
   - 검증: Write candidate filter test in `services/backend/tests/writing-tab-contract.test.mjs`
-- [ ] follow-up experiment handoff를 추가한다.
+- [x] follow-up experiment handoff를 추가한다.
   - 산출물: Insight -> Lab run candidate
-  - 검증: handoff E2E
+  - 검증: handoff contract test in `services/backend/tests/insight-tab-contract.test.mjs`
 
 ## Sprint 6. Production export and collaboration
 

@@ -1599,6 +1599,85 @@ async function deleteInsightCard(cardId) {
   }
 }
 
+async function createFollowUpExperimentFromInsight(cardId = state.activeInsightCardId) {
+  const project = activeProject();
+  if (!project) {
+    return;
+  }
+
+  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
+  const insightCard =
+    insightCards.find((entry) => entry.id === cardId) ||
+    insightCards.find((entry) => entry.id === state.activeInsightCardId) ||
+    insightCards[0] ||
+    null;
+  if (!insightCard?.id) {
+    state.error = "Select an insight card before creating a follow-up experiment.";
+    render();
+    return;
+  }
+
+  const plans = Array.isArray(state.projectGraph?.reproductionPlans) ? state.projectGraph.reproductionPlans : [];
+  const experimentRuns = Array.isArray(state.projectGraph?.experimentRuns) ? state.projectGraph.experimentRuns : [];
+  const linkedRun = experimentRuns.find((run) => (insightCard.experimentRunIds || []).includes(run.id));
+  const plan =
+    plans.find((entry) => entry.id === linkedRun?.reproductionPlanId) ||
+    plans.find((entry) => entry.questionId && entry.questionId === insightCard.questionId) ||
+    plans[0] ||
+    null;
+  if (!plan?.id) {
+    state.error = "Create a reproduction plan before follow-up experiments.";
+    render();
+    return;
+  }
+
+  const followUpNote =
+    String(insightCard.followUpExperiment || insightCard.nextAction || "").replace(/\s+/g, " ").trim() ||
+    `Follow up on insight: ${String(insightCard.claim || "Untitled insight").replace(/\s+/g, " ").slice(0, 160)}`;
+  const runPayload = await api(`api/projects/${encodeURIComponent(project.id)}/experiment-runs`, {
+    method: "POST",
+    body: JSON.stringify({
+      config: {
+        insightCardId: insightCard.id,
+        nextAction: followUpNote,
+        source: "insight-follow-up",
+        sourceExperimentRunIds: insightCard.experimentRunIds || [],
+        sourceResultDossierIds: insightCard.resultDossierIds || [],
+      },
+      kind: "follow-up",
+      metrics: { primary: "pending" },
+      notes: followUpNote,
+      reproductionPlanId: plan.id,
+      status: "queue",
+    }),
+  });
+
+  const runId = runPayload.asset?.id || "";
+  if (runId) {
+    const nextCard = enrichInsightCardForQuality(
+      {
+        ...insightCard,
+        experimentRunIds: Array.from(new Set([...(insightCard.experimentRunIds || []), runId])),
+        qualityCriteria: {
+          ...(insightCard.qualityCriteria || {}),
+          followUpExperimentId: runId,
+        },
+      },
+      insightCards,
+    );
+    await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
+      method: "POST",
+      body: JSON.stringify(nextCard),
+    });
+    state.activeInsightCardId = insightCard.id;
+  }
+
+  state.activeStage = "research";
+  saveStorage(STORAGE_KEYS.stage, state.activeStage);
+  await loadProjectGraph();
+  render();
+}
+
 async function createDraftSectionFromInsight() {
   const project = activeProject();
   if (!project) {
@@ -4266,7 +4345,7 @@ function renderInsightStage(project) {
                             : ""
                         }
                         <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
-                        <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
+                        <button type="button" class="btn-s" data-action="create-follow-up-experiment" data-insight-card-id="${escapeHtml(card.id || "")}" ${card.id ? "" : "disabled"}>Create follow-up experiment</button>
                       </div>
                       ${
                         isSelected
@@ -5991,6 +6070,16 @@ document.addEventListener("click", async (event) => {
   if (action === "select-insight-card") {
     state.activeInsightCardId = trigger.dataset.insightCardId || "";
     render();
+    return;
+  }
+
+  if (action === "create-follow-up-experiment") {
+    try {
+      await createFollowUpExperimentFromInsight(trigger.dataset.insightCardId || "");
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
     return;
   }
 
