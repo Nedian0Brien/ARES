@@ -21,8 +21,8 @@
 - [x] P1. Lab runner v1
 - [x] P1. Observability and release gates
 - [x] P2. Insight review workflow
-- [ ] P2. Citation/export pipeline
-- [ ] P2. Collaboration and project operations
+- [x] P2. Citation/export pipeline
+- [x] P2. Collaboration and project operations
 
 ## Sprint 1. 운영 기반 고정
 
@@ -219,12 +219,23 @@
 
 모든 체크리스트 완료 전에는 목표를 완료로 보지 않는다.
 
-- [ ] `npm run lint` 통과
-- [ ] `npm test` 통과
-- [ ] `npm run test:e2e` 통과
-- [ ] PostgreSQL migration/e2e 검증 통과
-- [ ] worker recovery smoke 통과
-- [ ] Reader PDF corpus validation 통과
+- [x] `npm run lint` 통과
+- [x] `npm test` 통과
+- [x] `npm run test:e2e` 통과
+- [x] PostgreSQL migration/e2e 검증 통과
+- [x] worker recovery smoke 통과
+- [x] Reader PDF corpus validation 통과
 - [x] Lab runner fixture 통과
-- [ ] export snapshot 검증 통과
-- [ ] 배포 smoke 또는 staging rehearsal 통과
+- [x] export snapshot 검증 통과
+- [x] 배포 smoke 또는 staging rehearsal 통과
+
+완료 검증:
+
+- `npm run lint`
+- `npm test`
+- `npm run test:e2e`
+- `ARES_POSTGRES_E2E_ADMIN_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres npm run test:postgres`
+- `npm run smoke:worker-recovery`
+- `npm run validate:reading-corpus`
+- `node --test services/backend/tests/writing-tab-contract.test.mjs`
+- `ARES_RETRIEVAL_SCORER_URL=http://127.0.0.1:3137 npm run smoke:deploy` with a local HTTP scorer fixture.

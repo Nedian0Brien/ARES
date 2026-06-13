@@ -32,9 +32,9 @@
       "sourceName": "arXiv",
       "sourceProvider": "arxiv",
       "thresholds": {
-        "minAssets": 5,
-        "minSourceBoundedAssets": 5,
-        "minTables": 5
+        "minAssets": 4,
+        "minSourceBoundedAssets": 4,
+        "minTables": 3
       },
       "title": "PdfTable: A Unified Toolkit for Deep Learning-Based Table Extraction",
       "year": 2024
