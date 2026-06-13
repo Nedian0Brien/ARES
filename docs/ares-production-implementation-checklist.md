@@ -141,12 +141,12 @@
 
 목표: Lab을 수동 기록에서 실제 실행 가능한 연구 run으로 확장한다.
 
-- [ ] reproduction command typed contract를 추가한다.
+- [x] reproduction command typed contract를 추가한다.
   - 산출물: command/environment/dataset/metric schema
-  - 검증: parser/model test
-- [ ] runner sandbox threat model을 문서화한다.
+  - 검증: command contract and risk model test in `services/backend/tests/lab-runner-safety.test.mjs`
+- [x] runner sandbox threat model을 문서화한다.
   - 산출물: `docs/lab-runner-sandbox-threat-model.md`
-  - 검증: destructive/network/secret policy checklist
+  - 검증: destructive/network/secret/path policy checklist in `docs/lab-runner-sandbox-threat-model.md`
 - [ ] sandboxed runner adapter를 추가한다.
   - 산출물: local safe runner, Docker 또는 VM adapter boundary
   - 검증: fixture command success/failure test
