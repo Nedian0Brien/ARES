@@ -1430,6 +1430,7 @@ export function createReadingService({
     const lowConfidenceChatCount = retrievalMessages.filter((message) => message.retrieval?.lowConfidence).length;
     const citedChatCount = assistantMessages.filter((message) => Array.isArray(message.citations) && message.citations.length).length;
     const lastRetrieval = retrievalMessages.at(-1)?.retrieval || previous?.lastRetrieval || null;
+    const ocrProvenance = artifact.importProvenance || previous?.ocrProvenance || null;
 
     return {
       assetCount: assets.length,
@@ -1440,6 +1441,10 @@ export function createReadingService({
       lastRetrievalConfidence: lastRetrieval?.confidence || previous?.lastRetrievalConfidence || '',
       lastRetrievalTopScore: Number(lastRetrieval?.topScore || previous?.lastRetrievalTopScore || 0),
       lowConfidenceChatCount,
+      ocrDurationMs: Number.isFinite(Number(ocrProvenance?.durationMs)) ? Number(ocrProvenance.durationMs) : null,
+      ocrPageCount: Number(ocrProvenance?.pageCount) || 0,
+      ocrProvenance,
+      ocrTool: ocrProvenance?.tool || '',
       retrievalReady: chunks.length > 0,
       sectionCount: sections.length,
       sourceBoundedAssetCount: assets.filter((asset) => asset.sourceBounds?.unit === 'page-ratio').length,
@@ -1766,19 +1771,25 @@ Rules:
         if (!pages.length || !ensureTrimmedString(textResult.text, '')) {
           const pageCount = Number(infoResult.total || textResult.total) || null;
           if (ocrEngine?.recognizePdf) {
+            const ocrStartedAtMs = Date.now();
             const ocrResult = await ocrEngine.recognizePdf({
               maxPages: ocrMaxPages,
               pageCount,
               pdfBuffer: cached.buffer,
               session: initial,
             });
+            const ocrDurationMs = Math.max(0, Date.now() - ocrStartedAtMs);
             const sourceLabel = 'Built-in OCR';
             const ocrPages = normaliseOcrPages(ocrResult?.pages, sourceLabel);
             if (ocrPages.length) {
+              const ocrPageCount = ocrPages.length;
               return materializeParsedSession(initial, {
                 artifactPatch: {
                   importProvenance: {
+                    durationMs: ocrDurationMs,
                     generatedAt: ocrResult?.generatedAt || null,
+                    maxPages: ocrMaxPages,
+                    pageCount: ocrPageCount,
                     sourceLabel,
                     textLength: ocrPages.reduce((sum, page) => sum + page.text.length, 0),
                     tool: ocrResult?.tool || ocrEngine.provider || 'built-in-ocr',
@@ -1791,8 +1802,11 @@ Rules:
                 pdfBuffer: cached.buffer,
                 sessionPatch: ({ artifact, parseFinishedAt }) => ({
                   ocrProvenance: {
+                    durationMs: artifact.importProvenance.durationMs,
                     generatedAt: ocrResult?.generatedAt || null,
                     importedAt: parseFinishedAt,
+                    maxPages: artifact.importProvenance.maxPages,
+                    pageCount: artifact.importProvenance.pageCount,
                     sourceLabel,
                     textLength: artifact.importProvenance.textLength,
                     tool: artifact.importProvenance.tool,
@@ -1846,14 +1860,17 @@ Rules:
 
       const label = clipText(ensureTrimmedString(sourceLabel, 'External OCR text'), 120);
       const importedAt = nowIso();
+      const pages = buildPagesFromImportedText(text, label);
       const ocrProvenance = {
+        durationMs: null,
         generatedAt,
         importedAt,
+        maxPages: null,
+        pageCount: pages.length,
         sourceLabel: label,
         textLength: ensureTrimmedString(text, '').length,
         tool: clipText(ensureTrimmedString(tool, ''), 120),
       };
-      const pages = buildPagesFromImportedText(text, label);
       return materializeParsedSession(initial, {
         artifactPatch: {
           importProvenance: ocrProvenance,

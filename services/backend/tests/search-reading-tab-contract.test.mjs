@@ -457,6 +457,8 @@ test('Reader exposes built-in OCR and manual text import recovery paths', async 
   assert.match(appJs, /readingTextImportTool/);
   assert.match(appJs, /readingTextImportGeneratedAt/);
   assert.match(appJs, /ocrProvenance/);
+  assert.match(appJs, /OCR pages/);
+  assert.match(appJs, /OCR latency/);
   assert.match(appJs, /readingSessionApiPath\(currentSession\.id, "import-text"\)/);
   assert.match(readingJs, /name="readingTextImport"/);
   assert.match(readingJs, /name="readingTextImportTool"/);
@@ -464,6 +466,8 @@ test('Reader exposes built-in OCR and manual text import recovery paths', async 
   assert.match(readingJs, /data-action="submit-reading-text-import-form"/);
   assert.match(readingJs, /Built-in OCR/);
   assert.match(readingJs, /External OCR/);
+  assert.match(readingJs, /OCR pages/);
+  assert.match(readingJs, /OCR latency/);
 });
 
 test('Reading DOM patching is isolated from the app shell', async () => {

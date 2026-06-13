@@ -16,7 +16,7 @@
 - [x] P0. Migration, backup, file storage
 - [x] P0. Worker lease/recovery
 - [x] P0. Runner sandbox safety
-- [ ] P1. Reader validation corpus
+- [x] P1. Reader validation corpus
 - [ ] P1. Retrieval scorer 운영화
 - [x] P1. Lab runner v1
 - [ ] P1. Observability and release gates
@@ -133,9 +133,9 @@
 - [x] unsupported answer policy를 강화한다.
   - 산출물: confidence threshold contract, UI warning
   - 검증: no-evidence chat threshold test in `services/backend/tests/reading-service.test.mjs`, UI warning contract in `services/backend/tests/search-reading-tab-contract.test.mjs`
-- [ ] OCR cost/latency metric을 추가한다.
+- [x] OCR cost/latency metric을 추가한다.
   - 산출물: OCR timing and page count telemetry
-  - 검증: OCR fixture test
+  - 검증: OCR fixture test in `services/backend/tests/reading-service.test.mjs`, UI telemetry contract in `services/backend/tests/search-reading-tab-contract.test.mjs`
 
 ## Sprint 4. Lab runner v1
 

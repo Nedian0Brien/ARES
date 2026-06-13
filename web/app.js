@@ -1902,6 +1902,8 @@ function readingOcrProvenanceLines(session) {
     `- OCR tool: ${provenance.tool || "not recorded"}`,
     `- OCR generated at: ${provenance.generatedAt || "not recorded"}`,
     `- OCR imported at: ${provenance.importedAt || "not recorded"}`,
+    `- OCR pages: ${provenance.pageCount || 0}`,
+    `- OCR latency: ${Number.isFinite(Number(provenance.durationMs)) ? `${provenance.durationMs}ms` : "not recorded"}`,
     `- OCR text length: ${provenance.textLength || 0}`,
   ];
 }

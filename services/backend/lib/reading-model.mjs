@@ -316,14 +316,20 @@ function normaliseOcrProvenance(input, previous = null) {
   const importedAt = ensureIso(source.importedAt, null);
   const sourceLabel = ensureTrimmedString(source.sourceLabel, '');
   const tool = ensureTrimmedString(source.tool, '');
+  const durationMs = source.durationMs === null ? null : Math.max(0, ensureNumber(source.durationMs, 0));
+  const maxPages = source.maxPages === null ? null : Math.max(0, ensureNumber(source.maxPages, 0));
+  const pageCount = Math.max(0, ensureNumber(source.pageCount, 0));
   const textLength = Math.max(0, ensureNumber(source.textLength, 0));
-  if (!generatedAt && !importedAt && !sourceLabel && !tool && !textLength) {
+  if (!generatedAt && !importedAt && !sourceLabel && !tool && !durationMs && !maxPages && !pageCount && !textLength) {
     return null;
   }
 
   return {
+    durationMs,
     generatedAt,
     importedAt,
+    maxPages,
+    pageCount,
     sourceLabel,
     textLength,
     tool,
@@ -345,6 +351,10 @@ function normaliseEvidenceCoverage(input, previous = null) {
     lastRetrievalConfidence: ensureTrimmedString(source.lastRetrievalConfidence, ''),
     lastRetrievalTopScore: ensureNumber(source.lastRetrievalTopScore, 0),
     lowConfidenceChatCount: ensureNumber(source.lowConfidenceChatCount, 0),
+    ocrDurationMs: source.ocrDurationMs === null ? null : Math.max(0, ensureNumber(source.ocrDurationMs, 0)),
+    ocrPageCount: Math.max(0, ensureNumber(source.ocrPageCount, 0)),
+    ocrProvenance: normaliseOcrProvenance(source.ocrProvenance, null),
+    ocrTool: ensureTrimmedString(source.ocrTool, ''),
     retrievalReady: ensureBoolean(source.retrievalReady, false),
     sectionCount: ensureNumber(source.sectionCount, 0),
     sourceBoundedAssetCount: ensureNumber(source.sourceBoundedAssetCount, 0),

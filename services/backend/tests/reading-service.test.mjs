@@ -340,7 +340,13 @@ test('reading service runs built-in OCR when a PDF has no text layer', async (t)
   assert.equal(parsed.session.summaryGeneratedBy, 'built-in-ocr');
   assert.equal(parsed.session.ocrProvenance.tool, 'Fake OCR 1.0');
   assert.equal(parsed.session.ocrProvenance.generatedAt, generatedAt);
+  assert.equal(parsed.session.ocrProvenance.pageCount, 2);
+  assert.equal(parsed.session.ocrProvenance.maxPages, 12);
+  assert.equal(parsed.session.ocrProvenance.durationMs >= 0, true);
+  assert.equal(parsed.session.evidenceCoverage.ocrPageCount, 2);
+  assert.equal(parsed.session.evidenceCoverage.ocrDurationMs >= 0, true);
   assert.equal(parsed.artifact.importSource, 'built-in-ocr');
+  assert.equal(parsed.artifact.importProvenance.pageCount, 2);
   assert.equal(parsed.artifact.pages.length, 2);
   assert.ok(parsed.session.notes.length >= 1);
 

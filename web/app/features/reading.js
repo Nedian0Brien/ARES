@@ -214,6 +214,8 @@ export function createReadingFeature({
       ["Source-bounded assets", coverage.sourceBoundedAssetCount || 0],
       ["Last retrieval", coverage.lastRetrievalConfidence || "none"],
       ["Cited chat turns", coverage.citedChatCount || 0],
+      ["OCR pages", coverage.ocrPageCount || 0],
+      ["OCR latency", Number.isFinite(Number(coverage.ocrDurationMs)) ? `${coverage.ocrDurationMs}ms` : "not recorded"],
     ];
 
     return `
