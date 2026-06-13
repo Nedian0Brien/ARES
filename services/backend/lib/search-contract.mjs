@@ -50,6 +50,7 @@ export function normaliseSearchScopes(scopes) {
 export function parseSearchPayload(payload = {}) {
   return {
     projectId: String(payload.projectId || '').trim(),
+    questionId: String(payload.questionId || '').trim(),
     q: String(payload.q || '').trim(),
     mode: normaliseSearchMode(payload.mode),
     scopes: normaliseSearchScopes(payload.scopes),

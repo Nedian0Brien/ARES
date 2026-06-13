@@ -1,3 +1,5 @@
+import { createReadingViewHelpers } from "./reading-view-helpers.js";
+
 // Reading-specific rendering and presentational helpers.
 export function createReadingFeature({
   state,
@@ -16,6 +18,16 @@ export function createReadingFeature({
   filterReadingHomeItems,
   readingHomeActionMeta,
 }) {
+  const {
+    clampValue,
+    readingCategoryMeta,
+    readingExcerpt,
+    readingMatchSectionIndex,
+    readingSectionPage,
+    readingSentence,
+    readingText,
+  } = createReadingViewHelpers({ TOKENS });
+
   function readingProgress(session) {
     const sections = Array.isArray(session?.sections) ? session.sections : [];
     if (session?.summaryStatus === "done" && session?.summaryRuntimeUsed) {
@@ -34,28 +46,6 @@ export function createReadingFeature({
     return Math.round((doneCount / sections.length) * 100);
   }
   
-  function clampValue(value, min, max) {
-    return Math.min(max, Math.max(min, value));
-  }
-  
-  function readingText(value, fallback = "") {
-    const text = String(value ?? "").trim();
-    return text || fallback;
-  }
-  
-  function readingExcerpt(value, fallback = "", limit = 220) {
-    const text = readingText(value, fallback).replace(/\s+/g, " ").trim();
-    if (!text) {
-      return "";
-    }
-  
-    if (text.length <= limit) {
-      return text;
-    }
-  
-    return `${text.slice(0, limit - 1).trimEnd()}…`;
-  }
-
   function readingSelectionLineCount(selection) {
     const explicit = Number(selection?.lineCount);
     if (Number.isFinite(explicit) && explicit > 0) {
@@ -76,6 +66,63 @@ export function createReadingFeature({
     }
 
     return Math.max(1, Math.ceil(text.replace(/\s+/g, " ").trim().length / 84));
+  }
+
+  function readingPdfSearchResults(session, query) {
+    const needle = readingText(query).toLowerCase();
+    if (!needle || needle.length < 2) {
+      return [];
+    }
+
+    const sections = Array.isArray(session?.sections) ? session.sections : [];
+    const notes = Array.isArray(session?.notes) ? session.notes : [];
+    const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
+    const sources = [
+      ...sections.map((section, index) => ({
+        label: section.label || `Section ${index + 1}`,
+        page: section.pageStart || section.page || readingSectionPage(index),
+        text: [section.label, section.summary].filter(Boolean).join(" "),
+        type: "section",
+      })),
+      ...notes.map((note, index) => ({
+        label: note.cat || note.section || `Note ${index + 1}`,
+        page: note.page || readingSectionPage(index),
+        text: [note.quote, note.memo, note.text, note.body].filter(Boolean).join(" "),
+        type: "note",
+      })),
+      ...highlights.map((highlight, index) => ({
+        label: highlight.cat || highlight.section || `Highlight ${index + 1}`,
+        page: highlight.page || readingSectionPage(index),
+        text: [highlight.quote, highlight.text, highlight.body].filter(Boolean).join(" "),
+        type: "highlight",
+      })),
+      {
+        label: "Paper",
+        page: 1,
+        text: [session?.title, session?.abstract, session?.summary].filter(Boolean).join(" "),
+        type: "paper",
+      },
+    ];
+
+    return sources
+      .map((source) => {
+        const text = readingText(source.text);
+        const haystack = text.toLowerCase();
+        const matchIndex = haystack.indexOf(needle);
+        if (matchIndex < 0) {
+          return null;
+        }
+
+        const start = Math.max(0, matchIndex - 42);
+        const snippet = text.slice(start, matchIndex + needle.length + 78);
+        return {
+          ...source,
+          page: Math.max(1, Number(source.page) || 1),
+          snippet: readingExcerpt(snippet, text, 132),
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 8);
   }
 
   function renderReadingMessageSelectionContext(message) {
@@ -101,32 +148,6 @@ export function createReadingFeature({
     `;
   }
   
-  function readingSentence(value, fallback = "") {
-    const text = readingText(value, fallback).replace(/\s+/g, " ").trim();
-    if (!text) {
-      return "";
-    }
-  
-    const match = text.match(/^(.{0,240}?[.!?])(?:\s|$)/);
-    return match ? match[1] : text;
-  }
-  
-  function readingCategoryMeta(type) {
-    const key = String(type || "note").trim().toLowerCase();
-    return {
-      claim: { label: "Claim", color: TOKENS.research },
-      method: { label: "Method", color: TOKENS.read },
-      result: { label: "Result", color: TOKENS.search },
-      limit: { label: "Limit", color: TOKENS.result },
-      note: { label: "Note", color: TOKENS.writing },
-      summary: { label: "Summary", color: TOKENS.read },
-    }[key] || { label: "Note", color: TOKENS.writing };
-  }
-  
-  function readingSectionPage(index) {
-    return Math.max(1, index + 1);
-  }
-  
   function readingRequestActive(kind, sessionId) {
     return state.readingRequest?.kind === kind && state.readingRequest?.sessionId === sessionId;
   }
@@ -143,6 +164,75 @@ export function createReadingFeature({
     return Boolean(session && (session.summaryStatus === "error" || session.summaryGeneratedBy === "fallback"));
   }
 
+  function renderReadingProvenancePill(source, kind = "summary") {
+    const generatedBy = source?.generatedBy || source?.summaryGeneratedBy || "";
+    if (!generatedBy) {
+      return "";
+    }
+
+    const fallbackReason = source?.fallbackReason || source?.summaryFallbackReason || "";
+    const kindClass = kind === "section" ? "is-section" : kind === "chat" ? "is-chat" : "is-summary";
+    return `
+      <div class="reading-provenance-pill ${escapeHtml(kindClass)}">
+        <span>${escapeHtml(generatedBy === "fallback" ? "Local fallback" : generatedBy === "external-ocr" ? "Imported text" : "Agent generated")}</span>
+        ${fallbackReason ? `<span class="mono">${escapeHtml(readingExcerpt(fallbackReason, "", 64))}</span>` : ""}
+      </div>
+    `;
+  }
+
+  function renderReadingRetrievalPill(message) {
+    const retrieval = message?.retrieval;
+    if (!retrieval?.mode) {
+      return "";
+    }
+
+    const confidence = readingText(retrieval.confidence, "none");
+    const score = Number(retrieval.topScore) || 0;
+    const label = retrieval.lowConfidence ? "Low confidence retrieval" : "Hybrid retrieval";
+    return `
+      <div class="reading-retrieval-pill ${retrieval.lowConfidence ? "is-low" : ""}">
+        <span>${escapeHtml(label)}</span>
+        <span class="mono">${escapeHtml(confidence)} · ${escapeHtml(String(score))}</span>
+        ${retrieval.scorer ? `<span class="mono">${escapeHtml(readingExcerpt(retrieval.scorer, "", 32))}</span>` : ""}
+      </div>
+    `;
+  }
+
+  function renderReadingEvidenceCoverage(session) {
+    const coverage = session?.evidenceCoverage;
+    if (!coverage) {
+      return "";
+    }
+
+    const rows = [
+      ["Retrieval ready", coverage.retrievalReady ? "yes" : "no"],
+      ["Chunks", coverage.chunkCount || 0],
+      ["Sections", coverage.sectionCount || 0],
+      ["Assets", coverage.assetCount || 0],
+      ["Source-bounded assets", coverage.sourceBoundedAssetCount || 0],
+      ["Last retrieval", coverage.lastRetrievalConfidence || "none"],
+      ["Cited chat turns", coverage.citedChatCount || 0],
+    ];
+
+    return `
+      <section class="reading-summary-block reading-evidence-coverage">
+        <div class="reading-summary-label">${icon("quote", { size: 11, color: TOKENS.read })}<span>Evidence coverage</span></div>
+        <div class="reading-evidence-coverage-grid">
+          ${rows
+            .map(
+              ([label, value]) => `
+                <div class="reading-evidence-coverage-item">
+                  <span>${escapeHtml(label)}</span>
+                  <strong class="mono">${escapeHtml(String(value))}</strong>
+                </div>
+              `,
+            )
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+
   function readingUnsupportedMeta(session) {
     const error = String(session?.parseError || "").trim();
     if (!session?.pdfUrl) {
@@ -154,8 +244,8 @@ export function createReadingFeature({
 
     if (/text layer|ocr|scanned/i.test(error)) {
       return {
-        copy: "이 PDF는 추출 가능한 텍스트 레이어를 제공하지 않습니다. OCR은 현재 Reading v1 범위 밖입니다.",
-        title: "OCR이 필요한 PDF입니다",
+        copy: "내장 OCR이 충분한 텍스트를 만들지 못했습니다. OCR 텍스트를 직접 붙여넣어 Reader artifact를 복구할 수 있습니다.",
+        title: "OCR 텍스트가 더 필요합니다",
       };
     }
 
@@ -195,19 +285,6 @@ export function createReadingFeature({
     }
   
     return Math.min(2, Math.max(sections.length - 1, 0));
-  }
-  
-  function readingMatchSectionIndex(sections = [], value = "") {
-    const lowered = String(value || "").trim().toLowerCase();
-    if (!lowered) {
-      return -1;
-    }
-  
-    return sections.findIndex((section) => {
-      const id = String(section.id || "").toLowerCase();
-      const label = String(section.label || "").toLowerCase();
-      return id === lowered || label === lowered || label.includes(lowered) || lowered.includes(id);
-    });
   }
   
   function deriveReadingSummary(session) {
@@ -347,46 +424,115 @@ export function createReadingFeature({
       </div>
     `;
   }
+
+  function renderReadingAssetSourceMap(asset) {
+    const bounds = asset?.sourceBounds;
+    if (!bounds || bounds.unit !== "page-ratio") {
+      return "";
+    }
+
+    const pct = (value) => `${Math.round(clampValue(Number(value) || 0, 0, 1) * 1000) / 10}%`;
+    return `
+      <div class="reading-asset-source-map" aria-label="Source region">
+        <div class="reading-asset-source-page">
+          <span
+            class="reading-asset-source-box"
+            style="left:${pct(bounds.x)};top:${pct(bounds.y)};width:${pct(bounds.width)};height:${pct(bounds.height)}"
+          ></span>
+        </div>
+        <div class="reading-asset-source-caption">
+          <span>Source region</span>
+          <strong class="mono">p.${escapeHtml(String(bounds.page || asset.page || "?"))}</strong>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderReadingAssetQuality(asset) {
+    const quality = asset?.quality && typeof asset.quality === "object" ? asset.quality : null;
+    if (!quality?.status) {
+      return "";
+    }
+
+    const label = String(quality.status)
+      .split("-")
+      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+      .join(" ");
+    const score = Number(quality.score);
+    const scoreLabel = Number.isFinite(score) && score > 0 ? `${Math.round(score * 100)}%` : "";
+
+    return `
+      <span class="reading-asset-quality is-${escapeHtml(String(quality.status).replace(/[^a-z0-9-]/gi, "").toLowerCase())}">
+        <span>${escapeHtml(label)}</span>
+        ${scoreLabel ? `<strong class="mono">${escapeHtml(scoreLabel)}</strong>` : ""}
+      </span>
+    `;
+  }
   
-  function renderReadingHomeMetricCard({ iconName, label, value, diagram }) {
-    const renderDiagram = () => {
-      if (diagram === "saved") {
-        return `
-          <svg class="reading-home-metric-svg" viewBox="0 0 88 42" preserveAspectRatio="none" aria-hidden="true">
-            <path class="reading-home-metric-axis" d="M2 34H86"></path>
-            <path class="reading-home-metric-fill" d="M2 34L2 25L14 24L26 21L38 17L50 19L62 14L74 12L86 9L86 34Z"></path>
-            <path class="reading-home-metric-line" d="M2 25L14 24L26 21L38 17L50 19L62 14L74 12L86 9"></path>
-          </svg>
-        `;
-      }
-  
-      if (diagram === "ready") {
-        return `
-          <div class="reading-home-band-stack" aria-hidden="true">
-            <span class="reading-home-band"><i style="width:78%"></i></span>
-            <span class="reading-home-band"><i style="width:62%;opacity:0.82"></i></span>
-            <span class="reading-home-band"><i style="width:44%;opacity:0.68"></i></span>
-          </div>
-        `;
-      }
-  
-      if (diagram === "running") {
-        return `
-          <div class="reading-home-bars" aria-hidden="true">
-            ${[12, 22, 16, 30, 18, 26]
-              .map((height, index) => `<span class="reading-home-bar ${index >= 2 ? "is-active" : ""}" style="height:${height}px"></span>`)
-              .join("")}
-          </div>
-        `;
-      }
-  
+  function renderReadingHomeMetricDiagram(diagram, counts = {}) {
+    const dataset = [
+      Number(counts.saved) || 0,
+      Number(counts.ready) || 0,
+      Number(counts.running) || 0,
+      Number(counts.done) || 0,
+    ];
+    const maxValue = Math.max(...dataset, 1);
+    const pct = (value, min = 0) => `${Math.round(clampValue((value / maxValue) * 100, min, 100))}%`;
+
+    if (diagram === "saved") {
+      const points = dataset.map((value, index) => {
+        const x = 2 + index * 28;
+        const y = 34 - clampValue((value / maxValue) * 25, 1, 25);
+        return `${x} ${Math.round(y)}`;
+      });
+      const line = `M${points.join("L")}`;
+      const fill = `${line}L86 34L2 34Z`;
       return `
-        <div class="reading-home-dot-grid" aria-hidden="true">
-          ${Array.from({ length: 12 }, (_, index) => `<span class="reading-home-dot ${index < 9 ? "is-active" : ""}"></span>`).join("")}
+        <svg class="reading-home-metric-svg" viewBox="0 0 88 42" preserveAspectRatio="none" aria-hidden="true">
+          <path class="reading-home-metric-axis" d="M2 34H86"></path>
+          <path class="reading-home-metric-fill" d="${fill}"></path>
+          <path class="reading-home-metric-line" d="${line}"></path>
+        </svg>
+      `;
+    }
+
+    if (diagram === "ready") {
+      return `
+        <div class="reading-home-band-stack" aria-hidden="true">
+          <span class="reading-home-band"><i style="width:${pct(counts.ready, 8)}"></i></span>
+          <span class="reading-home-band"><i style="width:${pct(counts.running, 8)};opacity:0.82"></i></span>
+          <span class="reading-home-band"><i style="width:${pct(counts.done, 8)};opacity:0.68"></i></span>
         </div>
       `;
-    };
-  
+    }
+
+    if (diagram === "running") {
+      const bars = [
+        counts.ready,
+        counts.running,
+        counts.done,
+        counts.saved,
+        counts.running + counts.done,
+        counts.ready + counts.running,
+      ].map((value) => Math.round(clampValue(((Number(value) || 0) / maxValue) * 30, 6, 30)));
+      return `
+        <div class="reading-home-bars" aria-hidden="true">
+          ${bars
+            .map((height, index) => `<span class="reading-home-bar ${index >= 2 ? "is-active" : ""}" style="height:${height}px"></span>`)
+            .join("")}
+        </div>
+      `;
+    }
+
+    const activeDots = Math.round(clampValue(((Number(counts.done) || 0) / maxValue) * 12, counts.done ? 1 : 0, 12));
+    return `
+      <div class="reading-home-dot-grid" aria-hidden="true">
+        ${Array.from({ length: 12 }, (_, index) => `<span class="reading-home-dot ${index < activeDots ? "is-active" : ""}"></span>`).join("")}
+      </div>
+    `;
+  }
+
+  function renderReadingHomeMetricCard({ iconName, label, value, diagram, counts }) {
     return `
       <article class="reading-home-metric">
         <div class="reading-home-metric-main">
@@ -397,7 +543,7 @@ export function createReadingFeature({
           <div class="reading-home-metric-value">${escapeHtml(String(value))}</div>
         </div>
         <div class="reading-home-metric-diagram">
-          ${renderDiagram()}
+          ${renderReadingHomeMetricDiagram(diagram, counts)}
         </div>
       </article>
     `;
@@ -405,7 +551,7 @@ export function createReadingFeature({
   
   function renderReadingHomeStatusPill(item) {
     return `
-      <span class="reading-home-status-pill is-${escapeHtml(item.status.bucket)}" style="background:${item.status.color}12;border-color:${item.status.color}30;color:${item.status.color}">
+      <span class="reading-home-status-pill is-${escapeHtml(item.status.bucket)}" style="background:color-mix(in srgb, ${item.status.color} 8%, transparent);border-color:color-mix(in srgb, ${item.status.color} 22%, transparent);color:${item.status.color}">
         <span class="dot"></span>
         <span>${escapeHtml(item.status.label)}</span>
       </span>
@@ -438,8 +584,44 @@ export function createReadingFeature({
               surface === "desktop"
                 ? `
                   <div class="reading-home-preview-icon-row">
-                    <button type="button" class="reading-home-preview-icon" aria-label="Add bookmark" title="Add bookmark">${icon("bookmark", { size: 14, color: TOKENS.t3 })}</button>
-                    <button type="button" class="reading-home-preview-icon" aria-label="More preview actions" title="More actions">${icon("moreH", { size: 14, color: TOKENS.t3 })}</button>
+                    <button
+                      type="button"
+                      class="reading-home-preview-icon"
+                      data-action="open-reading-home-source"
+                      data-reading-paper-id="${escapeHtml(item.paperId)}"
+                      aria-label="Open source"
+                      title="Open source"
+                      ${item.paper?.paperUrl || item.paper?.url || item.paper?.pdfUrl || item.session?.paperUrl || item.session?.pdfUrl ? "" : "disabled"}
+                    >${icon("ext", { size: 14, color: TOKENS.t3 })}</button>
+                    <button
+                      type="button"
+                      class="reading-home-preview-icon reading-context-trigger"
+                      data-action="toggle-reading-home-preview-menu"
+                      data-reading-paper-id="${escapeHtml(item.paperId)}"
+                      aria-label="More preview actions"
+                      aria-expanded="${state.readingHomePreviewMenuOpen ? "true" : "false"}"
+                      title="More actions"
+                    >${icon("moreH", { size: 14, color: TOKENS.t3 })}</button>
+                    ${
+                      state.readingHomePreviewMenuOpen
+                        ? `
+                            <div class="reading-context-menu" role="menu" aria-label="Paper actions">
+                              <button type="button" class="reading-context-menu-item" data-action="open-reading-detail" data-reading-paper-id="${escapeHtml(item.paperId)}" role="menuitem">
+                                ${icon(actionMeta.primaryIcon, { size: 13, color: "currentColor" })}
+                                <span>${escapeHtml(actionMeta.primaryLabel)}</span>
+                              </button>
+                              <button type="button" class="reading-context-menu-item" data-action="open-reading-home-source" data-reading-paper-id="${escapeHtml(item.paperId)}" role="menuitem">
+                                ${icon("ext", { size: 13, color: "currentColor" })}
+                                <span>Open source</span>
+                              </button>
+                              <button type="button" class="reading-context-menu-item" data-action="copy-reading-home-paper-link" data-reading-paper-id="${escapeHtml(item.paperId)}" role="menuitem">
+                                ${icon("share", { size: 13, color: "currentColor" })}
+                                <span>Copy paper link</span>
+                              </button>
+                            </div>
+                          `
+                        : ""
+                    }
                   </div>
                 `
                 : `
@@ -463,9 +645,14 @@ export function createReadingFeature({
               ${icon(actionMeta.primaryIcon, { size: 13, color: "#ffffff" })}
               <span>${escapeHtml(primaryLabel)}</span>
             </button>
-            <button type="button" class="btn-s" aria-label="Add bookmark" title="Add bookmark">
-              ${icon("bookmark", { size: 13, color: "currentColor" })}
-              <span>Add bookmark</span>
+            <button
+              type="button"
+              class="btn-s"
+              data-action="copy-reading-home-paper-link"
+              data-reading-paper-id="${escapeHtml(item.paperId)}"
+            >
+              ${icon("share", { size: 13, color: "currentColor" })}
+              <span>Copy link</span>
             </button>
           </div>
   
@@ -552,10 +739,10 @@ export function createReadingFeature({
               </section>
   
               <section class="reading-home-metrics">
-                ${renderReadingHomeMetricCard({ iconName: "bookmark", label: "Saved", value: 0, diagram: "saved" })}
-                ${renderReadingHomeMetricCard({ iconName: "sparkles", label: "Ready", value: 0, diagram: "ready" })}
-                ${renderReadingHomeMetricCard({ iconName: "clock", label: "In progress", value: 0, diagram: "running" })}
-                ${renderReadingHomeMetricCard({ iconName: "check", label: "Completed", value: 0, diagram: "done" })}
+                ${renderReadingHomeMetricCard({ iconName: "bookmark", label: "Saved", value: 0, diagram: "saved", counts })}
+                ${renderReadingHomeMetricCard({ iconName: "sparkles", label: "Ready", value: 0, diagram: "ready", counts })}
+                ${renderReadingHomeMetricCard({ iconName: "clock", label: "In progress", value: 0, diagram: "running", counts })}
+                ${renderReadingHomeMetricCard({ iconName: "check", label: "Completed", value: 0, diagram: "done", counts })}
               </section>
   
               <section class="reading-home-empty">
@@ -592,10 +779,10 @@ export function createReadingFeature({
             </section>
   
             <section class="reading-home-metrics">
-              ${renderReadingHomeMetricCard({ iconName: "bookmark", label: "Saved", value: counts.saved, diagram: "saved" })}
-              ${renderReadingHomeMetricCard({ iconName: "sparkles", label: "Ready", value: counts.ready, diagram: "ready" })}
-              ${renderReadingHomeMetricCard({ iconName: "clock", label: "In progress", value: counts.running, diagram: "running" })}
-              ${renderReadingHomeMetricCard({ iconName: "check", label: "Completed", value: counts.done, diagram: "done" })}
+              ${renderReadingHomeMetricCard({ iconName: "bookmark", label: "Saved", value: counts.saved, diagram: "saved", counts })}
+              ${renderReadingHomeMetricCard({ iconName: "sparkles", label: "Ready", value: counts.ready, diagram: "ready", counts })}
+              ${renderReadingHomeMetricCard({ iconName: "clock", label: "In progress", value: counts.running, diagram: "running", counts })}
+              ${renderReadingHomeMetricCard({ iconName: "check", label: "Completed", value: counts.done, diagram: "done", counts })}
             </section>
   
             <section
@@ -820,6 +1007,7 @@ export function createReadingFeature({
     const wbPaneStyle = `flex:0 0 calc(${100 - split}% - 2.5px)`;
     const progress = readingProgress(session);
     const parseBusy = readingRequestActive("parse", session?.id);
+    const textImportBusy = readingRequestActive("importText", session?.id);
     const summarizeBusy = readingRequestActive("summarize", session?.id);
     const extractBusy = readingRequestActive("extract", session?.id);
     const chatBusy = readingRequestActive("chat", session?.id);
@@ -989,7 +1177,7 @@ export function createReadingFeature({
                             ${categoryRows
                               .map(
                                 (entry) => `
-                                  <span class="reading-highlight-chip" style="background:${entry.color}12;color:${entry.color};border-color:${entry.color}30">
+                                  <span class="reading-highlight-chip" style="background:color-mix(in srgb, ${entry.color} 8%, transparent);color:${entry.color};border-color:color-mix(in srgb, ${entry.color} 22%, transparent)">
                                     <span class="dot" style="background:${entry.color}"></span>
                                     <span>${escapeHtml(entry.label)}</span>
                                     <span class="mono">${entry.count}</span>
@@ -1064,17 +1252,10 @@ export function createReadingFeature({
             <section class="reading-summary-block">
               <div class="reading-summary-label">${icon("sparkles", { size: 11, color: TOKENS.read })}<span>TL;DR</span></div>
               <div class="reading-summary-body">${escapeHtml(summary.tldr)}</div>
-              ${
-                session?.summaryGeneratedBy
-                  ? `
-                      <div class="reading-provenance-pill">
-                        <span>${escapeHtml(session.summaryGeneratedBy === "fallback" ? "Local fallback" : "Agent generated")}</span>
-                        ${session.summaryFallbackReason ? `<span class="mono">${escapeHtml(readingExcerpt(session.summaryFallbackReason, "", 64))}</span>` : ""}
-                      </div>
-                    `
-                  : ""
-              }
+              ${renderReadingProvenancePill(session, "summary")}
             </section>
+
+            ${renderReadingEvidenceCoverage(session)}
 
             <section class="reading-summary-block">
               <div class="reading-summary-label" style="color:${TOKENS.search}">${icon("dot", { size: 8, color: TOKENS.search })}<span>Key points</span></div>
@@ -1130,6 +1311,7 @@ export function createReadingFeature({
                           )
                           .join("")}
                       </ul>
+                      ${renderReadingProvenancePill(session, "section")}
                     </section>
                   `
                 : ""
@@ -1173,6 +1355,8 @@ export function createReadingFeature({
     const dockPanel = state.readingPdfDockPanel || "";
     const activeDockPage = Number(state.readingPdfSelection?.page || state.readingPdfTargetPage || 1) || 1;
     const dockTocItems = (sections.length ? sections : [{ label: "Document", page: 1 }]).slice(0, 8);
+    const pdfSearchQuery = readingText(state.readingPdfSearchQuery);
+    const pdfSearchResults = readingPdfSearchResults(session, pdfSearchQuery);
     const dockPageCount = Math.max(1, Number(session?.pageCount) || 1);
     const dockPreviewWidths = [
       [90, 70, 100, 60, 85, 100, 75, 90, 55, 80],
@@ -1236,6 +1420,19 @@ export function createReadingFeature({
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M2 5.5V3a1 1 0 011-1h2.5M11.5 2H13a1 1 0 011 1v2.5M14 10.5V13a1 1 0 01-1 1h-2.5M4.5 14H3a1 1 0 01-1-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
+          </button>
+
+          <div class="dock-div"></div>
+
+          <button
+            type="button"
+            class="dock-btn ${dockPanel === "search" ? "on" : ""}"
+            data-action="toggle-reading-pdf-dock-panel"
+            data-reading-pdf-dock-panel="search"
+            title="본문 검색"
+            aria-label="본문 검색"
+          >
+            ${icon("search", { size: 13, color: "currentColor" })}
           </button>
 
           <div class="dock-div"></div>
@@ -1310,6 +1507,47 @@ export function createReadingFeature({
           .join("")}
       </div>
 
+      <div class="popup-panel pdf-search-panel ${dockPanel === "search" ? "visible" : ""}">
+        <div class="popup-header">본문 검색</div>
+        <div class="pdf-search-box">
+          <input
+            type="search"
+            name="readingPdfSearchQuery"
+            data-action="set-reading-pdf-search-query"
+            value="${escapeHtml(pdfSearchQuery)}"
+            placeholder="Search PDF"
+            autocomplete="off"
+          />
+          <span class="mono">${escapeHtml(pdfSearchQuery ? `${pdfSearchResults.length}` : "0")}</span>
+        </div>
+        <div class="pdf-search-results">
+          ${
+            pdfSearchQuery.length < 2
+              ? `<div class="pdf-search-empty">두 글자 이상 입력</div>`
+              : pdfSearchResults.length
+                ? pdfSearchResults
+                    .map(
+                      (result) => `
+                        <button
+                          type="button"
+                          class="pdf-search-result"
+                          data-action="jump-reading-pdf-search-result"
+                          data-reading-page="${escapeHtml(String(result.page))}"
+                        >
+                          <span class="pdf-search-result-meta">
+                            <span>${escapeHtml(result.label)}</span>
+                            <span class="mono">p.${escapeHtml(String(result.page))}</span>
+                          </span>
+                          <span class="pdf-search-result-snippet">${escapeHtml(result.snippet)}</span>
+                        </button>
+                      `,
+                    )
+                    .join("")
+                : `<div class="pdf-search-empty">검색 결과 없음</div>`
+          }
+        </div>
+      </div>
+
       <div class="popup-panel page-grid-panel ${dockPanel === "pageGrid" ? "visible" : ""}">
         <div class="popup-header">페이지 미리보기</div>
         <div class="page-grid">
@@ -1333,12 +1571,39 @@ export function createReadingFeature({
         </div>
       </div>
     `;
+    const renderTextImportForm = () => `
+      <form class="reading-text-import-form" data-action="submit-reading-text-import-form">
+        <label>
+          <span>Source</span>
+          <input name="readingTextImportSource" value="External OCR import" ${textImportBusy ? "disabled" : ""} />
+        </label>
+        <div class="reading-text-import-meta">
+          <label>
+            <span>Tool</span>
+            <input name="readingTextImportTool" placeholder="OCRmyPDF, Tesseract" ${textImportBusy ? "disabled" : ""} />
+          </label>
+          <label>
+            <span>Generated</span>
+            <input name="readingTextImportGeneratedAt" type="datetime-local" ${textImportBusy ? "disabled" : ""} />
+          </label>
+        </div>
+        <label>
+          <span>Built-in OCR fallback</span>
+          <textarea name="readingTextImport" rows="5" placeholder="Paste extracted text" ${textImportBusy ? "disabled" : ""}></textarea>
+        </label>
+        <button type="submit" class="btn-p" ${textImportBusy ? "disabled" : ""}>
+          ${icon("dl", { size: 13, color: "#fff" })}
+          <span>${textImportBusy ? "Importing..." : "Import text"}</span>
+        </button>
+      </form>
+    `;
     const pdfBody = !session?.pdfUrl
       ? `
           <div class="reading-empty-view">
             <div class="reading-empty-icon">${icon("pdf", { size: 24, color: TOKENS.t3 })}</div>
             <div class="reading-empty-title">${escapeHtml(unsupportedMeta.title)}</div>
             <div class="reading-empty-copy">${escapeHtml(unsupportedMeta.copy)}</div>
+            ${renderTextImportForm()}
             <div class="reading-empty-actions">
               <button type="button" class="btn-s" data-action="open-reading-source" ${session?.paperUrl ? "" : "disabled"}>
                 ${icon("ext", { size: 13, color: "currentColor" })}
@@ -1360,6 +1625,7 @@ export function createReadingFeature({
                       <div>
                         <div class="reading-pdf-unsupported-title">${escapeHtml(unsupportedMeta.title)}</div>
                         <div class="reading-pdf-unsupported-copy">${escapeHtml(unsupportedMeta.copy)}</div>
+                        ${renderTextImportForm()}
                       </div>
                       <div class="reading-pdf-unsupported-actions">
                         <button type="button" class="btn-p" data-action="reading-parse-session">
@@ -1409,7 +1675,10 @@ export function createReadingFeature({
                         <div class="reading-asset-meta">
                           <div class="reading-asset-kind" style="color:${asset.kind === "Figure" ? TOKENS.research : TOKENS.writing}">${escapeHtml(asset.kind)} ${asset.number}</div>
                           <div class="reading-asset-caption">${escapeHtml(asset.caption)}</div>
-                          <div class="reading-asset-page mono">${asset.page ? `p.${escapeHtml(String(asset.page))}` : "page --"}</div>
+                          <div class="reading-asset-card-foot">
+                            <span class="reading-asset-page mono">${asset.page ? `p.${escapeHtml(String(asset.page))}` : "page --"}</span>
+                            ${renderReadingAssetQuality(asset)}
+                          </div>
                         </div>
                       </button>
                     `,
@@ -1440,6 +1709,7 @@ export function createReadingFeature({
                     <div class="reading-asset-detail-body">
                       <div class="reading-asset-detail-preview">
                         ${renderReadingAssetThumb(detailAsset, session)}
+                        ${renderReadingAssetSourceMap(detailAsset)}
                       </div>
                       <div class="reading-asset-detail-meta">
                         <div class="reading-asset-detail-row">
@@ -1450,6 +1720,25 @@ export function createReadingFeature({
                           <span>Type</span>
                           <strong>${escapeHtml(detailAsset.kind)}</strong>
                         </div>
+                        <div class="reading-asset-detail-row">
+                          <span>Quality</span>
+                          ${renderReadingAssetQuality(detailAsset) || "<strong>Unscored</strong>"}
+                        </div>
+                        ${
+                          detailAsset.sourceBounds
+                            ? `
+                                <div class="reading-asset-detail-row">
+                                  <span>Region</span>
+                                  <strong class="mono">${escapeHtml(`${Math.round((detailAsset.sourceBounds.x || 0) * 100)}:${Math.round((detailAsset.sourceBounds.y || 0) * 100)} / ${Math.round((detailAsset.sourceBounds.width || 0) * 100)}x${Math.round((detailAsset.sourceBounds.height || 0) * 100)}`)}</strong>
+                                </div>
+                              `
+                            : ""
+                        }
+                        ${
+                          detailAsset.sourceText
+                            ? `<div class="reading-asset-source-snippet">${escapeHtml(readingExcerpt(detailAsset.sourceText, "", 180))}</div>`
+                            : ""
+                        }
                         ${
                           detailAsset.rows?.length
                             ? `
@@ -1472,10 +1761,39 @@ export function createReadingFeature({
                         class="btn-p"
                         data-action="jump-reading-page"
                         data-reading-page="${escapeHtml(String(detailAsset.page || ""))}"
+                        data-reading-asset-id="${escapeHtml(detailAsset.id || "")}"
                         ${detailAsset.page ? "" : "disabled"}
                       >
                         ${icon("pdf", { size: 13, color: "#fff" })}
                         <span>Go to source page</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-s"
+                        data-action="open-reading-asset-data"
+                        data-reading-asset-id="${escapeHtml(detailAsset.id || "")}"
+                        ${detailAsset.dataPath ? "" : "disabled"}
+                      >
+                        ${icon("table", { size: 13, color: "currentColor" })}
+                        <span>Open data</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-s"
+                        data-action="copy-reading-asset-citation"
+                        data-reading-asset-id="${escapeHtml(detailAsset.id || "")}"
+                      >
+                        ${icon("share", { size: 13, color: "currentColor" })}
+                        <span>Copy citation</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-s"
+                        data-action="create-reading-asset-evidence"
+                        data-reading-asset-id="${escapeHtml(detailAsset.id || "")}"
+                      >
+                        ${icon("link", { size: 13, color: "currentColor" })}
+                        <span>Link evidence</span>
                       </button>
                       <button type="button" class="btn-s" data-action="close-reading-asset-detail">
                         ${icon("grid", { size: 13, color: "currentColor" })}
@@ -1553,10 +1871,16 @@ export function createReadingFeature({
                           }
                           ${
                             message.role === "assistant" && message.generatedBy
+                              ? renderReadingProvenancePill(message, "chat")
+                              : ""
+                          }
+                          ${message.role === "assistant" ? renderReadingRetrievalPill(message) : ""}
+                          ${
+                            message.role === "assistant" && !message.typing && !message.cites?.length
                               ? `
-                                  <div class="reading-provenance-pill is-chat">
-                                    <span>${escapeHtml(message.generatedBy === "fallback" ? "Local fallback" : "Agent generated")}</span>
-                                    ${message.fallbackReason ? `<span class="mono">${escapeHtml(readingExcerpt(message.fallbackReason, "", 54))}</span>` : ""}
+                                  <div class="reading-no-evidence-pill">
+                                    ${icon("alert", { size: 12, color: "currentColor" })}
+                                    <span>Insufficient evidence</span>
                                   </div>
                                 `
                               : ""
@@ -1604,7 +1928,7 @@ export function createReadingFeature({
             <button type="submit" class="reading-chat-send" aria-label="Send reading question" ${!parsed || chatBusy ? "disabled" : ""}>${icon("send", { size: 13, color: "#fff" })}</button>
           </div>
           <div class="reading-chat-footer">
-            <span>${parsed ? "Context: lexical retrieval top-K chunks" : "Context unavailable until parse completes"}</span>
+            <span>${parsed ? "Context: hybrid retrieval chunks" : "Context unavailable until parse completes"}</span>
             <span class="mono">${chatBusy ? "running" : "reader-agent"}</span>
           </div>
         </form>

@@ -11,6 +11,21 @@ async function readProjectFile(relativePath) {
   return readFile(path.join(rootDir, relativePath), 'utf8');
 }
 
+const STYLE_FILES = [
+  'web/styles.css',
+  'web/styles/base.css',
+  'web/styles/lab.css',
+  'web/styles/insight.css',
+  'web/styles/writing.css',
+  'web/styles/reading.css',
+  'web/styles/search.css',
+];
+
+async function readProjectStyles() {
+  const chunks = await Promise.all(STYLE_FILES.map((relativePath) => readProjectFile(relativePath)));
+  return chunks.join('\n');
+}
+
 test('mobile bottom nav ports ARIS auto-hide reducer thresholds', async () => {
   const { primeAutoHideScrollState, reduceAutoHideScrollState } = await import(
     pathToFileURL(path.join(rootDir, 'web/app/lib/mobile-scroll-auto-hide.js')).href
@@ -90,6 +105,24 @@ test('mobile bottom nav wires ARIS scroll auto-hide lifecycle without omitted ev
   assert.match(appJs, /window\.addEventListener\("orientationchange",\s*syncBottomNavIndicator\)/);
 });
 
+test('mobile viewport chrome syncs iOS Safari bottom UI into CSS variables', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /function getViewportBrowserBottomOcclusion\(\)/);
+  assert.match(appJs, /function isIosViewportBrowserChromeFallbackTarget\(\)/);
+  assert.match(appJs, /function getViewportBrowserBottomFallback\(\)/);
+  assert.match(appJs, /IOS_BROWSER_CHROME_FALLBACK_MIN/);
+  assert.match(appJs, /IOS_BROWSER_CHROME_FALLBACK_MAX/);
+  assert.match(appJs, /window\.visualViewport/);
+  assert.match(appJs, /viewport\.offsetTop \+ viewport\.height/);
+  assert.match(appJs, /Math\.ceil\(layoutHeight - visibleBottom\)/);
+  assert.match(appJs, /--viewport-browser-bottom/);
+  assert.match(appJs, /--viewport-browser-bottom-fallback/);
+  assert.match(appJs, /window\.visualViewport\.addEventListener\("resize",\s*scheduleViewportChromeSync\)/);
+  assert.match(appJs, /window\.visualViewport\.addEventListener\("scroll",\s*scheduleViewportChromeSync\)/);
+  assert.match(appJs, /bindViewportChromeLifecycle\(\)/);
+});
+
 test('mobile bottom nav observes ARES nested scroll containers used by Discover', async () => {
   const appJs = await readProjectFile('web/app.js');
 
@@ -101,17 +134,33 @@ test('mobile bottom nav observes ARES nested scroll containers used by Discover'
 });
 
 test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens', async () => {
-  const [styles, designSystem] = await Promise.all([
-    readProjectFile('web/styles.css'),
+  const [styles, designSystem, indexHtml] = await Promise.all([
+    readProjectStyles(),
     readProjectFile('design/ARES Design System.html'),
+    readProjectFile('web/index.html'),
   ]);
 
+  assert.match(indexHtml, /viewport-fit=cover/);
   assert.match(styles, /--bottom-nav-bg:\s*rgba\(255,\s*255,\s*255,\s*0\.78\)/);
-  assert.match(styles, /--mobile-bottom-nav-height:\s*calc\(104px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+  assert.match(styles, /--viewport-safe-top:\s*env\(safe-area-inset-top,\s*0px\)/);
+  assert.match(styles, /--viewport-safe-bottom:\s*env\(safe-area-inset-bottom,\s*0px\)/);
+  assert.match(styles, /--viewport-browser-bottom:\s*0px/);
+  assert.match(styles, /--viewport-browser-bottom-fallback:\s*0px/);
+  assert.match(styles, /--viewport-bottom-occlusion:\s*max\(\s*var\(--viewport-safe-bottom\),\s*var\(--viewport-browser-bottom\),\s*var\(--viewport-browser-bottom-fallback\)\s*\)/);
+  assert.match(styles, /--mobile-viewport-height:\s*100svh/);
+  assert.match(styles, /@supports\s*\(height:\s*100dvh\)[\s\S]*--mobile-viewport-height:\s*100dvh/);
+  assert.match(styles, /--mobile-bottom-nav-height:\s*calc\(\s*var\(--bottom-nav-shell-height\) \+ var\(--bottom-nav-offset\) \+ var\(--viewport-bottom-occlusion\) \+ var\(--bottom-nav-reserve-extra\)\s*\)/);
+  assert.match(styles, /\.app-shell[\s\S]*padding-top:\s*var\(--viewport-safe-top\)/);
+  assert.match(styles, /\.workspace[\s\S]*min-height:\s*calc\(var\(--mobile-viewport-height\) - var\(--viewport-safe-top\)\)/);
+  assert.match(styles, /\.main-topbar[\s\S]*top:\s*var\(--viewport-safe-top\)/);
   assert.match(styles, /\.bottom-nav-hidden[\s\S]*pointer-events:\s*none/);
   assert.match(styles, /\.bottom-nav-indicator[\s\S]*cubic-bezier\(0\.175,\s*0\.885,\s*0\.32,\s*1\.275\)/);
   assert.match(styles, /width:\s*min\(400px,\s*calc\(100vw - 1rem\)\)/);
-  assert.match(styles, /bottom:\s*calc\(1\.25rem \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+  assert.match(styles, /bottom:\s*calc\(var\(--bottom-nav-offset\) \+ var\(--viewport-bottom-occlusion\)\)/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*bottom:\s*calc\(var\(--mobile-bottom-nav-height\) \+ 4px\)/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*position:\s*fixed/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*padding:\s*0 10px 8px/);
+  assert.match(styles, /\.search-preview-focal:not\(\.is-empty\)[\s\S]*bottom:\s*var\(--viewport-bottom-occlusion\)/);
   assert.match(styles, /\.bottom-nav[\s\S]*overflow:\s*visible/);
   assert.match(styles, /\.nav-item[\s\S]*min-height:\s*54px/);
   assert.match(styles, /@media\s*\(max-width:\s*900px\)[\s\S]*\.bottom-nav/);

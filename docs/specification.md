@@ -63,6 +63,8 @@ ARES는 논문 탐색, 리딩, 재현 연구, 실험 비교, 인사이트 정리
 
 ARES는 워크스페이스 셸, 4개 상위 탭, 기존 6단계를 보존하는 하위 워크플로우 모드로 구성된다.
 
+현재 구현의 source of truth는 project asset graph다. 각 surface는 `/api/projects/:projectId/graph`로 읽은 자산을 기준으로 렌더링하고, 생성 action은 collection별 API에 저장 가능한 asset을 남긴다.
+
 ### 5.1 워크스페이스 셸
 
 모든 화면에서 공통으로 유지되는 상위 레이아웃은 다음 요소를 포함한다.
@@ -83,6 +85,17 @@ ARES는 워크스페이스 셸, 4개 상위 탭, 기존 6단계를 보존하는 
 - `Writing`: 아웃라인, 초안, 출처 기반 작성
 
 기존 6단계는 하위 모드 및 route alias로 유지된다. 따라서 기존 링크나 사용자의 인지 모델은 `Search`, `Reading`, `Research`, `Result`, `Insight`, `Writing` 흐름을 계속 사용할 수 있고, 모바일 내비게이션은 더 짧은 4개 목적지로 압축된다.
+
+### 5.3 Asset graph collections
+
+- `researchQuestions`: active question과 search context
+- `readingPackets`: 구조화된 Reader 결과
+- `evidenceLinks`: PDF quote, note, result delta의 source link
+- `reproductionPlans`: 재현 체크리스트와 metric 계획
+- `experimentRuns`: manual 또는 worker 실행 결과
+- `resultDossiers`: 원문 결과와 재현 결과 비교
+- `insightCards`: claim, hypothesis, decision
+- `drafts`, `draftSections`: source-linked writing output
 
 ## 6. 공통 UX 규칙
 
@@ -113,6 +126,17 @@ ARES는 워크스페이스 셸, 4개 상위 탭, 기존 6단계를 보존하는 
 - Research: `Reproduction agent`, `Experiment agent`, `Analyst agent`
 - Result: `Analyst report`
 - Insight/Writing: 가설 생성 및 초안 생성 액션
+
+### 6.4 파괴적 작업 정책
+
+현재 제품은 project 또는 reading session 전체 삭제 API를 노출하지 않는다. 개별 asset 삭제만 허용하며, 이 경우에도 `confirmDelete=true`와 삭제 사유를 요구하고 audit payload를 반환해야 한다.
+
+향후 project, reading session, 대량 asset 삭제처럼 범위가 큰 파괴적 작업을 추가할 때는 다음 계약을 먼저 만족해야 한다.
+
+- 삭제 전 cascade preview를 제공한다.
+- 사용자가 명시적으로 확인한 `confirmDelete=true` 값을 요구한다.
+- 사람이 읽을 수 있는 삭제 사유를 audit 기록에 남긴다.
+- API 응답에 action, projectId, 대상 id, reason, recordedAt을 포함한다.
 
 ## 7. 화면별 기능 명세
 

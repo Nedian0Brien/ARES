@@ -26,6 +26,7 @@ export function createSearchFeature({
   dashboardVenueBreakdown,
   dashboardPaperTags,
   actualReadingSessions,
+  activeResearchQuestion = () => null,
 }) {
   function uniqueValues(values = []) {
     return Array.from(new Set(values.filter(Boolean)));
@@ -483,6 +484,7 @@ export function createSearchFeature({
   }
   
   function renderSearchDashboard(project) {
+    const question = activeResearchQuestion();
     const library = dashboardLibraryItems();
     const totalCollected = library.length;
     const recentCount = dashboardRecentCount(library, 7, ["savedAt", "updatedAt", "createdAt"]);
@@ -569,9 +571,9 @@ export function createSearchFeature({
         <section class="search-dashboard" data-ares-surface="search-dashboard" data-ares-stage="search">
           <section class="dashboard-hero-wrap">
             <div class="search-home-hero">
-              <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Read</span></div>
-              <h1 class="search-home-title">Discover</h1>
-              <p class="search-home-copy">Collect papers, save candidates, move them to Reading.</p>
+              <div class="search-home-label">${icon("search", { size: 14, color: TOKENS.search })}<span>Queue</span></div>
+              <h1 class="search-home-title">Research Queue</h1>
+              <p class="search-home-copy">Collect candidates and move evidence into Reader.</p>
             </div>
   
             <form class="dashboard-hero ${escapeHtml(state.searchMode)}" data-action="submit-search">
@@ -589,7 +591,12 @@ export function createSearchFeature({
             </form>
   
             <div class="dashboard-scope-row">
-              <span class="dashboard-scope-label">Target</span>
+              <span class="dashboard-scope-label">Question</span>
+              ${
+                question
+                  ? `<span class="scope-chip is-active"><span class="scope-chip-type">RQ</span><span>${escapeHtml(question.title || question.prompt || "Research question")}</span></span>`
+                  : ""
+              }
               ${state.searchScopes.map((scope) => renderDashboardScopeChip(scope)).join("")}
               <button
                 type="button"
@@ -691,7 +698,7 @@ export function createSearchFeature({
                   <div class="dashboard-card-sub">기간별 수집 논문 수</div>
                 </div>
                 <div class="dashboard-toggle-group">
-                  <button type="button">7D</button><button type="button" class="active">30D</button><button type="button">90D</button><button type="button">ALL</button>
+                  <span>7D</span><span class="active">30D</span><span>90D</span><span>ALL</span>
                 </div>
               </div>
               <svg class="dashboard-chart-area" viewBox="0 0 640 170" preserveAspectRatio="none">
@@ -737,17 +744,17 @@ export function createSearchFeature({
           <div class="dashboard-tbl-head">
             <h2>Worklist</h2>
             <div class="dashboard-filter-chips">
-              <button type="button" class="dashboard-f-chip active">전체<span class="n">${escapeHtml(String(totalCollected))}</span></button>
-              <button type="button" class="dashboard-f-chip">폴더 미분류<span class="n">${escapeHtml(String(unclassifiedCount))}</span></button>
-              <button type="button" class="dashboard-f-chip">Reading 대기<span class="n">${escapeHtml(String(queueCount))}</span></button>
-              <button type="button" class="dashboard-f-chip">PDF 없음<span class="n">${escapeHtml(String(Math.max(totalCollected - pdfCount, 0)))}</span></button>
-              <button type="button" class="dashboard-f-chip">최근 수집<span class="n">${escapeHtml(String(recentWorkCount))}</span></button>
+              <span class="dashboard-f-chip active">전체<span class="n">${escapeHtml(String(totalCollected))}</span></span>
+              <span class="dashboard-f-chip">폴더 미분류<span class="n">${escapeHtml(String(unclassifiedCount))}</span></span>
+              <span class="dashboard-f-chip">Reading 대기<span class="n">${escapeHtml(String(queueCount))}</span></span>
+              <span class="dashboard-f-chip">PDF 없음<span class="n">${escapeHtml(String(Math.max(totalCollected - pdfCount, 0)))}</span></span>
+              <span class="dashboard-f-chip">최근 수집<span class="n">${escapeHtml(String(recentWorkCount))}</span></span>
             </div>
             <div class="dashboard-tool">
-              <button type="button" class="dashboard-tool-btn">
+              <span class="dashboard-tool-btn">
                 ${icon("filter", { size: 11, color: "currentColor" })}
                 최근 수집순
-              </button>
+              </span>
             </div>
           </div>
   
@@ -769,11 +776,11 @@ export function createSearchFeature({
             <div class="dashboard-tbl-foot">
               <span>${escapeHtml(worklistRangeLabel)}</span>
               <div class="dashboard-page-btns">
-                <button type="button" class="dashboard-page-btn">‹</button>
+                <span class="dashboard-page-btn">‹</span>
                 ${pageButtons
-                  .map((page) => `<button type="button" class="dashboard-page-btn ${page === 1 ? "active" : ""}">${page}</button>`)
+                  .map((page) => `<span class="dashboard-page-btn ${page === 1 ? "active" : ""}">${page}</span>`)
                   .join("")}
-                <button type="button" class="dashboard-page-btn">›</button>
+                <span class="dashboard-page-btn">›</span>
               </div>
             </div>
           </div>
@@ -1286,8 +1293,8 @@ export function createSearchFeature({
                   ${state.searchScopes.length ? `<span class="results-summary-sub">· scoped to ${state.searchScopes.length} target${state.searchScopes.length > 1 ? "s" : ""}</span>` : ""}
                 </div>
                 <div class="results-summary-actions">
-                  <button type="button" class="btn-g results-summary-btn">${icon("layers", { size: 12, color: "currentColor" })}<span>Group</span></button>
-                  <button type="button" class="btn-g results-summary-btn">${icon("dl", { size: 12, color: "currentColor" })}<span>Export</span></button>
+                  <span class="btn-g results-summary-btn">${icon("layers", { size: 12, color: "currentColor" })}<span>Group</span></span>
+                  <span class="btn-g results-summary-btn">${icon("dl", { size: 12, color: "currentColor" })}<span>Export</span></span>
                 </div>
               </div>
   

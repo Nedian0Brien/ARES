@@ -2,22 +2,20 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { ASSET_COLLECTIONS, normaliseAsset, normalisePaper } from './asset-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
-
-const ASSET_COLLECTIONS = [
-  'agentRuns',
-  'readingSessions',
-  'reproChecklistItems',
-  'experimentRuns',
-  'resultComparisons',
-  'insightNotes',
-  'writingDrafts',
-];
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
-const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error']);
+const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
 const MAX_AGENT_PROGRESS_EVENTS = 80;
+const EVIDENCE_LINK_REFERENCE_COLLECTIONS = [
+  'readingPackets',
+  'reproductionPlans',
+  'resultDossiers',
+  'insightCards',
+  'draftSections',
+];
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -85,6 +83,14 @@ function sortByUpdatedDesc(left, right) {
   const leftStamp = Date.parse(left.updatedAt || left.createdAt || 0) || 0;
   const rightStamp = Date.parse(right.updatedAt || right.createdAt || 0) || 0;
   return rightStamp - leftStamp;
+}
+
+function removeAssetId(values, id) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.filter((value) => value !== id);
 }
 
 function ensureText(value, fallback = '') {
@@ -281,6 +287,70 @@ export async function createFileStore({ seedFile, runtimeFile }) {
     return null;
   }
 
+  function listGraphPapers(projectId) {
+    const papers = new Map();
+
+    for (const paper of [...libraryFor(projectId), ...queueFor(projectId)]) {
+      const normalized = normalisePaper(paper, { projectId });
+      papers.set(normalized.paperId, normalized);
+    }
+
+    for (const session of listCollection('readingSessions', { projectId })) {
+      const normalized = normaliseReadingSession(session);
+      const paper = normalisePaper(
+        {
+          abstract: normalized.abstract,
+          authors: normalized.authors,
+          createdAt: normalized.createdAt,
+          keywords: normalized.keywords,
+          paperId: normalized.paperId,
+          paperUrl: normalized.paperUrl,
+          pdfUrl: normalized.pdfUrl,
+          sourceProvider: normalized.sourceProvider || 'reading',
+          status: normalized.status,
+          summary: normalized.summary,
+          title: normalized.title,
+          updatedAt: normalized.updatedAt,
+          venue: normalized.venue,
+          year: normalized.year,
+        },
+        { projectId },
+      );
+      papers.set(paper.paperId, { ...papers.get(paper.paperId), ...paper });
+    }
+
+    return Array.from(papers.values()).sort(sortByUpdatedDesc);
+  }
+
+  function getProjectGraph(projectId) {
+    const project = projectSummary(ensureProject(projectId));
+    const researchQuestions = listCollection('researchQuestions', { projectId });
+    return {
+      drafts: listCollection('drafts', { projectId }),
+      draftSections: listCollection('draftSections', { projectId }),
+      evidenceLinks: listCollection('evidenceLinks', { projectId }),
+      experimentRuns: listCollection('experimentRuns', { projectId }),
+      graphVersion: 1,
+      insightCards: listCollection('insightCards', { projectId }),
+      papers: listGraphPapers(projectId),
+      project,
+      readingPackets: listCollection('readingPackets', { projectId }),
+      reproductionPlans: listCollection('reproductionPlans', { projectId }),
+      researchQuestions: researchQuestions.length
+        ? researchQuestions
+        : [
+            normaliseAsset('researchQuestions', {
+              id: `question-${project.id}-default`,
+              projectId,
+              prompt: project.defaultQuery || project.focus || project.name,
+              status: 'active',
+              title: project.focus || project.defaultQuery || `${project.name} question`,
+            }),
+          ],
+      resultDossiers: listCollection('resultDossiers', { projectId }),
+    };
+  }
+
   return {
     backend: 'file',
 
@@ -301,6 +371,8 @@ export async function createFileStore({ seedFile, runtimeFile }) {
     getProject(projectId) {
       return projectSummary(ensureProject(projectId));
     },
+
+    getProjectGraph,
 
     getLibrary(projectId) {
       return clone(libraryFor(projectId));
@@ -454,17 +526,90 @@ export async function createFileStore({ seedFile, runtimeFile }) {
       const id = String(input.id || createId(options.prefix || collectionName.replace(/s$/, '')));
       const matchBy = options.matchBy || 'id';
       const next = {
-        ...clone(input),
+        ...normaliseAsset(collectionName, input, {
+          prefix: options.prefix || collectionName.replace(/s$/, ''),
+          projectId,
+        }),
         createdAt,
         id,
         projectId,
-        sourceRefs: ensureObjectArray(input.sourceRefs),
         updatedAt,
       };
 
       upsertBy(collectionName, next, (entry) => entry[matchBy] === next[matchBy]);
       await persist();
       return clone(next);
+    },
+
+    async deleteProjectAsset(collectionName, id, { projectId } = {}) {
+      if (!ASSET_COLLECTIONS.includes(collectionName) || collectionName === 'agentRuns' || collectionName === 'readingSessions') {
+        throw new Error(`Unsupported asset collection: ${collectionName}`);
+      }
+
+      const assetId = String(id || '').trim();
+      if (!assetId) {
+        throw new Error(`${collectionName} id is required.`);
+      }
+
+      const collection = collectionFor(collectionName);
+      const index = collection.findIndex((entry) => {
+        if (entry.id !== assetId) {
+          return false;
+        }
+
+        return !projectId || entry.projectId === projectId;
+      });
+
+      if (index < 0) {
+        return { deleted: false, id: assetId };
+      }
+
+      collection.splice(index, 1);
+      if (collectionName === 'insightCards') {
+        for (const section of collectionFor('draftSections')) {
+          if (projectId && section.projectId !== projectId) {
+            continue;
+          }
+
+          const nextInsightCardIds = removeAssetId(section.insightCardIds, assetId);
+          if (nextInsightCardIds.length !== (section.insightCardIds || []).length) {
+            section.insightCardIds = nextInsightCardIds;
+            section.updatedAt = nowIso();
+          }
+        }
+      }
+      if (collectionName === 'evidenceLinks') {
+        for (const referenceCollectionName of EVIDENCE_LINK_REFERENCE_COLLECTIONS) {
+          for (const asset of collectionFor(referenceCollectionName)) {
+            if (projectId && asset.projectId !== projectId) {
+              continue;
+            }
+
+            const nextEvidenceLinkIds = removeAssetId(asset.evidenceLinkIds, assetId);
+            if (nextEvidenceLinkIds.length !== (asset.evidenceLinkIds || []).length) {
+              asset.evidenceLinkIds = nextEvidenceLinkIds;
+              asset.updatedAt = nowIso();
+            }
+          }
+        }
+      }
+      if (collectionName === 'drafts') {
+        const draftSections = collectionFor('draftSections');
+        for (let draftSectionIndex = draftSections.length - 1; draftSectionIndex >= 0; draftSectionIndex -= 1) {
+          const section = draftSections[draftSectionIndex];
+          if (section.draftId !== assetId) {
+            continue;
+          }
+
+          if (projectId && section.projectId !== projectId) {
+            continue;
+          }
+
+          draftSections.splice(draftSectionIndex, 1);
+        }
+      }
+      await persist();
+      return { deleted: true, id: assetId };
     },
 
     async createAgentRun(input) {
@@ -478,7 +623,11 @@ export async function createFileStore({ seedFile, runtimeFile }) {
       const next = {
         agent: ensureText(input.agent, 'Agent'),
         assetRefs: ensureObjectArray(input.assetRefs),
+        candidateAssetIds: ensureStringArray(input.candidateAssetIds, 128),
+        cancelReason: ensureText(input.cancelReason),
+        cancelRequestedAt: input.cancelRequestedAt || null,
         createdAt,
+        createdAssetIds: ensureStringArray(input.createdAssetIds, 128),
         error: ensureText(input.error),
         finishedAt: input.finishedAt || null,
         id: String(input.id || createId('run')),
@@ -488,6 +637,7 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         progressEvents: ensureProgressEvents(input.progressEvents),
         profileId: ensureText(input.profileId),
         projectId,
+        sourceAssetIds: ensureStringArray(input.sourceAssetIds, 128),
         stage: ensureText(input.stage),
         startedAt: input.startedAt || null,
         status: normaliseStatus(input.status, 'todo'),
@@ -511,11 +661,19 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         ...existing,
         ...clone(patch),
         assetRefs: patch.assetRefs !== undefined ? ensureObjectArray(patch.assetRefs) : existing.assetRefs,
+        candidateAssetIds:
+          patch.candidateAssetIds !== undefined ? ensureStringArray(patch.candidateAssetIds, 128) : ensureStringArray(existing.candidateAssetIds, 128),
+        cancelReason: patch.cancelReason !== undefined ? ensureText(patch.cancelReason) : ensureText(existing.cancelReason),
+        cancelRequestedAt: patch.cancelRequestedAt !== undefined ? patch.cancelRequestedAt : existing.cancelRequestedAt || null,
+        createdAssetIds:
+          patch.createdAssetIds !== undefined ? ensureStringArray(patch.createdAssetIds, 128) : ensureStringArray(existing.createdAssetIds, 128),
         finishedAt: patch.finishedAt !== undefined ? patch.finishedAt : existing.finishedAt,
         input: patch.input !== undefined ? clone(patch.input) : existing.input,
         outputRef: patch.outputRef !== undefined ? clone(patch.outputRef) : existing.outputRef,
         outputSummary: patch.outputSummary !== undefined ? clone(patch.outputSummary) : existing.outputSummary,
         progressEvents: patch.progressEvents !== undefined ? ensureProgressEvents(patch.progressEvents) : ensureProgressEvents(existing.progressEvents),
+        sourceAssetIds:
+          patch.sourceAssetIds !== undefined ? ensureStringArray(patch.sourceAssetIds, 128) : ensureStringArray(existing.sourceAssetIds, 128),
         status: patch.status !== undefined ? normaliseStatus(patch.status, existing.status) : existing.status,
         updatedAt: nowIso(),
       };

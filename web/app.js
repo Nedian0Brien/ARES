@@ -1,31 +1,31 @@
 import { createSearchFeature } from "./app/features/search.js";
 import { createReadingFeature } from "./app/features/reading.js";
+import { createDraftFeatureModel } from "./app/features/draft.js";
+import { graphEvidenceItems } from "./app/features/evidence.js";
+import { createLabFeatureModel } from "./app/features/lab.js";
+import { parseLabImportPayload as parseLabImportPayloadValue } from "./app/features/lab-import.js";
+import { createReadingViewHelpers } from "./app/features/reading-view-helpers.js";
 import {
-  appendReadingPdfDockWithAnimation,
   captureStableReadingPdfHost,
-  patchReadingSplitPreservingPdf,
-  patchStableReadingPdfDocPane,
-  replaceReadingNodeIfChanged,
   restoreStableReadingPdfHost,
-  syncReadingPdfDockState,
-  syncReadingPopupPanelState,
-  transplantStableReadingPdfHost,
 } from "./app/features/reading-dom-patch.js";
 import { createReadingPdfController } from "./app/features/reading-pdf-controller.js";
+import { createReadingStagePatchController } from "./app/features/reading-stage-patch.js";
+import { SURFACE_ROUTE_ALIASES, createSurfaceRouteNormalizer } from "./app/features/surface-router.js";
 import { primeAutoHideScrollState, reduceAutoHideScrollState } from "./app/lib/mobile-scroll-auto-hide.js";
 
 const TOKENS = {
-  bg: "#fbfbfa",
-  sb: "#f5f5f4",
-  s1: "#ffffff",
-  s2: "#f7f7f6",
-  s3: "#f0efed",
-  b1: "#e8e8e6",
-  b2: "#d4d4d2",
-  tx: "#0a0a0b",
-  t2: "#4a4a50",
-  t3: "#8a8a92",
-  t4: "#b0b0b8",
+  bg: "var(--bg)",
+  sb: "var(--sb)",
+  s1: "var(--s1)",
+  s2: "var(--s2)",
+  s3: "var(--s3)",
+  b1: "var(--b1)",
+  b2: "var(--b2)",
+  tx: "var(--tx)",
+  t2: "var(--t2)",
+  t3: "var(--t3)",
+  t4: "var(--t4)",
   search: "#5e9c6f",
   read: "#5e6ad2",
   research: "#8957c9",
@@ -33,6 +33,16 @@ const TOKENS = {
   insight: "#c04e68",
   writing: "#3aa3a3",
 };
+
+const {
+  clampValue,
+  readingCategoryMeta,
+  readingExcerpt,
+  readingMatchSectionIndex,
+  readingSectionPage,
+  readingSentence,
+  readingText,
+} = createReadingViewHelpers({ TOKENS });
 
 const SEARCH_MODES = {
   scout: {
@@ -206,25 +216,20 @@ const WORKFLOW_STAGES = [
   },
 ];
 
-const STAGE_ALIASES = {
-  papers: "reading",
-  lab: "research",
-  search: "search",
-  reading: "reading",
-  research: "research",
-  result: "result",
-  insight: "insight",
-  writing: "writing",
-  read: "reading",
-  results: "result",
-  insights: "insight",
-};
+const STAGE_ALIASES = SURFACE_ROUTE_ALIASES;
+const normalizeSurfaceStage = createSurfaceRouteNormalizer({
+  aliases: STAGE_ALIASES,
+  fallback: "search",
+  stages: WORKFLOW_STAGES,
+});
 
 const STORAGE_KEYS = {
   stage: "ares.stage",
   project: "ares.project",
   sidebarCollapsed: "ares.sidebar.collapsed",
+  themeMode: "ares.theme.mode",
 };
+const THEME_MODES = ["light", "dark", "system"];
 
 const SEARCH_MODE_TRANSITION_MS = 280;
 const AGENTIC_SEARCH_PRESS_MS = 780;
@@ -250,6 +255,9 @@ const SEARCH_LAYOUT_BREAKPOINTS = {
   mobileMax: 900,
   tabletMax: 1279,
 };
+const IOS_BROWSER_CHROME_FALLBACK_MIN = 56;
+const IOS_BROWSER_CHROME_FALLBACK_MAX = 82;
+const IOS_BROWSER_CHROME_FALLBACK_RATIO = 0.096;
 const READING_ORIENTATION_BREAKPOINT = 1180;
 
 function defaultReadingOrientation(width = window.innerWidth) {
@@ -323,20 +331,30 @@ const state = {
   error: "",
   activeStage: normalizeStage(INITIAL_ROUTE_STATE.activeStage || loadStorage(STORAGE_KEYS.stage, "search")),
   activeProjectId: INITIAL_ROUTE_STATE.projectId || loadStorage(STORAGE_KEYS.project, ""),
+  activeQuestionId: "",
   searchInput: "",
   projects: [],
+  projectGraph: null,
   projectLibrary: [],
   results: [],
   availableVenues: [],
   readingSessions: [],
   activeReadingSessionId: INITIAL_ROUTE_STATE.activeReadingSessionId || "",
   activeReadingRunId: "",
+  labSavingRunId: "",
+  labImporting: false,
+  activeInsightCardId: "",
+  insightSavingCardId: "",
+  activeDraftSectionId: "",
+  draftSavingSectionId: "",
   readingView: INITIAL_ROUTE_STATE.readingView || "home",
   readingDocumentTab: normalizeReadingDocumentTab(INITIAL_ROUTE_STATE.readingDocumentTab || "pdf"),
   readingPdfTargetPage: null,
   readingPdfDockPanel: "",
   readingPdfDockSelectionActive: false,
+  readingPdfSearchQuery: "",
   readingPdfSelection: null,
+  readingPdfSourceHighlight: null,
   readingPdfZoom: 100,
   readingContextMenuOpen: false,
   readingWorkbenchTab: normalizeReadingWorkbenchTab(INITIAL_ROUTE_STATE.readingWorkbenchTab || "chat"),
@@ -353,6 +371,7 @@ const state = {
   readingHomeFilter: "all",
   readingHomeSelectedPaperId: "",
   readingHomePreviewOpen: false,
+  readingHomePreviewMenuOpen: false,
   readingHomePreviewWidth: 420,
   readingHomeLayout: INITIAL_READING_HOME_LAYOUT,
   selectedPaperId: "",
@@ -374,6 +393,7 @@ const state = {
   },
   workflowOpen: true,
   sidebarCollapsed: loadStorage(STORAGE_KEYS.sidebarCollapsed, "false") === "true",
+  themeMode: normalizeThemeMode(loadStorage(STORAGE_KEYS.themeMode, "system")),
   openWorkflowMenu: "",
   searchMeta: {
     provider: "seed",
@@ -392,6 +412,7 @@ const state = {
     savedOnly: false,
   },
 };
+applyThemeMode(state.themeMode);
 
 const app = document.querySelector("#app");
 let modalClosing = false;
@@ -408,6 +429,8 @@ let bottomNavAutoHideState = null;
 let bottomNavHidden = false;
 let bottomNavScrollFrame = 0;
 let bottomNavLifecycleBound = false;
+let viewportChromeFrame = 0;
+let viewportChromeLifecycleBound = false;
 
 function loadStorage(key, fallback) {
   try {
@@ -425,9 +448,57 @@ function saveStorage(key, value) {
   }
 }
 
+function normalizeThemeMode(mode) {
+  return THEME_MODES.includes(mode) ? mode : "system";
+}
+
+function resolvedThemeMode(mode = state.themeMode) {
+  const normalized = normalizeThemeMode(mode);
+  if (normalized !== "system") {
+    return normalized;
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyThemeMode(mode = state.themeMode) {
+  const normalized = normalizeThemeMode(mode);
+  const resolved = resolvedThemeMode(normalized);
+  const root = document.documentElement;
+  root.dataset.themeMode = normalized;
+  root.dataset.theme = resolved;
+  root.style.colorScheme = resolved;
+}
+
+function setThemeMode(mode) {
+  const nextMode = normalizeThemeMode(mode);
+  if (nextMode === state.themeMode) {
+    applyThemeMode(nextMode);
+    return false;
+  }
+
+  state.themeMode = nextMode;
+  saveStorage(STORAGE_KEYS.themeMode, nextMode);
+  applyThemeMode(nextMode);
+  return true;
+}
+
+function bindThemeModeListener() {
+  const mediaQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+  if (!mediaQuery) {
+    return;
+  }
+
+  mediaQuery.addEventListener?.("change", () => {
+    if (state.themeMode === "system") {
+      applyThemeMode("system");
+      render();
+    }
+  });
+}
+
 function normalizeStage(stageId) {
-  const resolved = STAGE_ALIASES[stageId] || stageId;
-  return WORKFLOW_STAGES.some((stage) => stage.id === resolved) ? resolved : "search";
+  return normalizeSurfaceStage(stageId);
 }
 
 function normalizeReadingDocumentTab(tabId) {
@@ -675,6 +746,12 @@ function icon(name, { size = 16, color = "currentColor", className = "" } = {}) 
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path></svg>',
     sidebar:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18"></path></svg>',
+    sun:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="M6.34 17.66l-1.41 1.41"></path><path d="M19.07 4.93l-1.41 1.41"></path></svg>',
+    moon:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.6A8.2 8.2 0 0 1 9.4 3.5a7 7 0 1 0 11.1 11.1Z"></path></svg>',
+    monitor:
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"></rect><path d="M8 21h8"></path><path d="M12 17v4"></path></svg>',
     settings:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>',
     moreH:
@@ -736,7 +813,9 @@ function renderKbd(value) {
 }
 
 function renderTag(label, color, dot = false) {
-  const style = color ? ` style="background:${color}12;color:${color};border-color:${color}30"` : "";
+  const style = color
+    ? ` style="background:color-mix(in srgb, ${color} 8%, transparent);color:${color};border-color:color-mix(in srgb, ${color} 22%, transparent)"`
+    : "";
   const dotMarkup = dot ? `<span class="tag-dot" style="background:${color || TOKENS.t3}"></span>` : "";
   return `<span class="tag"${style}>${dotMarkup}${escapeHtml(label)}</span>`;
 }
@@ -809,11 +888,47 @@ async function handoffReadingToResearch({ noteId = "" } = {}) {
     return;
   }
 
+  const readingNotes = Array.isArray(session.notes) ? session.notes : [];
   const noteIds = noteId
     ? [noteId]
-    : (Array.isArray(session.notes) ? session.notes : []).map((note) => note.id).filter(Boolean);
-  const assetIds = (Array.isArray(session.assets) ? session.assets : []).map((asset) => asset.id).filter(Boolean);
-  const sectionIds = (Array.isArray(session.sections) ? session.sections : []).map((section) => section.id).filter(Boolean);
+    : readingNotes.map((note) => note.id).filter(Boolean);
+  const selectedNotes = noteIds.length ? readingNotes.filter((note) => noteIds.includes(note.id)) : readingNotes;
+  const readingAssets = Array.isArray(session.assets) ? session.assets : [];
+  const readingSections = Array.isArray(session.sections) ? session.sections : [];
+  const assetIds = readingAssets.map((asset) => asset.id).filter(Boolean);
+  const sectionIds = readingSections.map((section) => section.id).filter(Boolean);
+  const graph = state.projectGraph?.project?.id === project.id ? state.projectGraph : null;
+  const readingPacket =
+    graph?.readingPackets?.find((packet) => packet.id === `packet-${session.id}` || packet.paperId === session.paperId) || null;
+  const evidenceLinkIds = Array.from(new Set([
+    ...(Array.isArray(readingPacket?.evidenceLinkIds) ? readingPacket.evidenceLinkIds : []),
+    ...selectedNotes.map((note) => note.evidenceLinkId).filter(Boolean),
+  ]));
+  const handoff = {
+    assetIds,
+    noteIds,
+    readingSessionId: session.id,
+    sectionIds,
+  };
+  const sourceRefLabel = (value, fallback) => String(value || fallback).trim().slice(0, 120);
+  const sourceRefs = [
+    { type: "readingSession", id: session.id, label: sourceRefLabel(session.title, "Reading session") },
+    ...selectedNotes.map((note) => ({
+      type: "readingNote",
+      id: note.id,
+      label: sourceRefLabel(note.quote || note.memo || note.note || note.text, "Reading note"),
+    })),
+    ...readingAssets.map((asset) => ({
+      type: "readingAsset",
+      id: asset.id,
+      label: sourceRefLabel(asset.title || asset.label || asset.fileName || asset.type, "Reading asset"),
+    })),
+    ...readingSections.map((section) => ({
+      type: "readingSection",
+      id: section.id,
+      label: sourceRefLabel(section.title || section.heading || section.label, "Reading section"),
+    })),
+  ].filter((entry) => entry.id);
   const paper = readingPaperFromSession(session) || {
     abstract: session.abstract || session.summary || "",
     authors: session.authors || [],
@@ -827,21 +942,47 @@ async function handoffReadingToResearch({ noteId = "" } = {}) {
     year: session.year ?? null,
   };
 
+  const planPayload = await api(`api/projects/${encodeURIComponent(project.id)}/reproduction-plans`, {
+    method: "POST",
+    body: JSON.stringify({
+      checklist: [
+        { category: "repo", status: "queue", title: "Confirm code availability" },
+        { category: "env", status: "todo", title: "Validate environment setup" },
+        { category: "eval", status: "todo", title: "Lock evaluation protocol" },
+      ],
+      evidenceLinkIds,
+      handoff,
+      metrics: ["primary score"],
+      questionId: activeResearchQuestion()?.id || "",
+      readingPacketId: readingPacket?.id || `packet-${session.id}`,
+      sourceRefs,
+      status: "draft",
+    }),
+  });
+
   const payload = await api("api/agent-runs", {
     method: "POST",
     body: JSON.stringify({
       assetRefs: [
         { type: "paper", id: session.paperId, label: session.title || "Paper" },
         { type: "readingSession", id: session.id, label: session.title || "Reading session" },
+        { type: "readingPacket", id: readingPacket?.id || `packet-${session.id}`, label: session.title || "Reading packet" },
+        { type: "reproductionPlan", id: planPayload.asset?.id || "", label: "Reproduction plan" },
+        ...sourceRefs,
       ],
       input: {
         assetIds,
+        evidenceLinkIds,
+        handoff,
         handoffSource: "reading",
         noteIds,
         paper,
         paperId: session.paperId,
+        readingPacketId: readingPacket?.id || `packet-${session.id}`,
         readingSessionId: session.id,
+        reproductionPlanId: planPayload.asset?.id || "",
         sectionIds,
+        sourceRefs,
       },
       projectId: project.id,
       stage: "research",
@@ -851,11 +992,787 @@ async function handoffReadingToResearch({ noteId = "" } = {}) {
   state.activeStage = "research";
   state.scopePicker = null;
   saveStorage(STORAGE_KEYS.stage, state.activeStage);
+  await loadProjectGraph();
   if (payload?.run?.id) {
     state.activeReadingRunId = payload.run.id;
     subscribeAgentRun(payload.run.id);
   }
   renderWithViewTransition();
+}
+
+async function createManualExperimentRun() {
+  const project = activeProject();
+  if (!project) {
+    return;
+  }
+
+  const plans = Array.isArray(state.projectGraph?.reproductionPlans) ? state.projectGraph.reproductionPlans : [];
+  const plan = plans[0] || null;
+  if (!plan?.id) {
+    state.error = "Create a reproduction plan from Reader first.";
+    render();
+    return;
+  }
+
+  const runPayload = await api(`api/projects/${encodeURIComponent(project.id)}/experiment-runs`, {
+    method: "POST",
+    body: JSON.stringify({
+      config: { source: "manual" },
+      kind: "manual",
+      metrics: { primary: "pending" },
+      notes: "Manual result entry initialized from Lab.",
+      reproductionPlanId: plan.id,
+      status: "queue",
+    }),
+  });
+
+  await api(`api/projects/${encodeURIComponent(project.id)}/result-dossiers`, {
+    method: "POST",
+    body: JSON.stringify({
+      comparisons: [
+        normaliseLabMetricComparison({
+          metricName: "primary",
+          metricUnit: "",
+          paperMetricValue: "linked evidence",
+          reproducedValue: "pending",
+          summary: "Manual run created; attach observed metrics after execution.",
+        }),
+      ],
+      evidenceLinkIds: plan.evidenceLinkIds || [],
+      experimentRunIds: [runPayload.asset?.id].filter(Boolean),
+      paperId: selectedReadingSession()?.paperId || "",
+      questionId: plan.questionId || activeResearchQuestion()?.id || "",
+      status: "draft",
+    }),
+  });
+
+  await loadProjectGraph();
+  render();
+}
+
+function labMetricNumber(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return null;
+  }
+
+  const number = Number(text.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(number) ? number : null;
+}
+
+function labMetricDeltaValue(paperValue, observedValue) {
+  const paperNumber = labMetricNumber(paperValue);
+  const observedNumber = labMetricNumber(observedValue);
+  if (paperNumber === null || observedNumber === null) {
+    return null;
+  }
+
+  const delta = observedNumber - paperNumber;
+  return Math.round(delta * 1000) / 1000;
+}
+
+function labMetricDelta(paperValue, observedValue) {
+  const deltaValue = labMetricDeltaValue(paperValue, observedValue);
+  if (deltaValue === null) {
+    return observedValue ? "Needs analysis" : "Awaiting result";
+  }
+
+  return `${deltaValue > 0 ? "+" : ""}${deltaValue}`;
+}
+
+function normaliseLabMetricComparison({ metricName, metricUnit, paperMetricValue, reproducedValue, summary }) {
+  const metric = String(metricName || "primary").trim() || "primary";
+  const unit = String(metricUnit || "").trim();
+  const paperValue = String(paperMetricValue || "linked evidence").trim() || "linked evidence";
+  const observedValue = String(reproducedValue || "").trim();
+  const deltaValue = labMetricDeltaValue(paperValue, observedValue);
+
+  return {
+    delta: labMetricDelta(paperValue, observedValue),
+    deltaValue,
+    metric,
+    paperValue,
+    reproducedValue: observedValue || "pending",
+    status: deltaValue === null ? "needs-review" : "measured",
+    summary,
+    unit,
+  };
+}
+
+function parseLabImportPayload(payload) {
+  return parseLabImportPayloadValue(payload);
+}
+
+function buildFailedRunInsightCandidate({ comparison, dossierId, notes, plan, run, runId }) {
+  const failureCause = String(notes || run?.notes || run?.error || "Run failed without a recorded cause.")
+    .replace(/\s+/g, " ")
+    .slice(0, 220);
+  const metric = comparison?.metric || Object.keys(run?.metrics || {})[0] || "primary";
+  const followUpExperiment = `Fix failure cause and rerun ${metric}.`;
+
+  return {
+    claim: `Run failed: ${failureCause}`,
+    confidence: "unrated",
+    createdBy: "lab",
+    evidenceLinkIds: Array.isArray(plan?.evidenceLinkIds) ? plan.evidenceLinkIds : [],
+    experimentRunIds: [runId],
+    failureCause,
+    followUpExperiment,
+    nextAction: followUpExperiment,
+    questionId: plan?.questionId || activeResearchQuestion()?.id || "",
+    resultDossierIds: [dossierId].filter(Boolean),
+    sourceRefs: [
+      { id: runId, label: run?.title || `${run?.kind || "Manual"} run`, type: "experimentRun" },
+      { id: dossierId, label: "Result dossier", type: "resultDossier" },
+    ].filter((ref) => ref.id),
+    status: "draft",
+    type: "hypothesis",
+  };
+}
+
+const INSIGHT_CLUSTER_STOPWORDS = new Set([
+  "about",
+  "after",
+  "before",
+  "between",
+  "claim",
+  "could",
+  "from",
+  "into",
+  "that",
+  "their",
+  "there",
+  "these",
+  "this",
+  "with",
+  "would",
+]);
+
+function insightClaimTerms(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣\s-]/g, " ")
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 4 && !INSIGHT_CLUSTER_STOPWORDS.has(term))
+    .slice(0, 12);
+}
+
+function buildInsightClaimCluster(card = {}, insightCards = []) {
+  const terms = Array.from(new Set(insightClaimTerms(card.claim))).slice(0, 3);
+  const sharedTerms = terms.length ? terms : ["general"];
+  const relatedInsightCardIds = (Array.isArray(insightCards) ? insightCards : [])
+    .filter((entry) => {
+      if (!entry?.id) {
+        return false;
+      }
+
+      const entryTerms = new Set(insightClaimTerms(entry.claim));
+      return sharedTerms.some((term) => entryTerms.has(term));
+    })
+    .map((entry) => entry.id)
+    .slice(0, 12);
+  const evidenceLinkCount = new Set(
+    (Array.isArray(insightCards) ? insightCards : [])
+      .filter((entry) => relatedInsightCardIds.includes(entry.id))
+      .flatMap((entry) => (Array.isArray(entry.evidenceLinkIds) ? entry.evidenceLinkIds : [])),
+  ).size;
+  const label = sharedTerms.slice(0, 2).join(" ");
+  return {
+    evidenceLinkCount,
+    id: `cluster-${label.replace(/[^a-z0-9가-힣]+/gi, "-").replace(/(^-|-$)/g, "") || "general"}`,
+    label,
+    relatedInsightCardIds,
+    sharedTerms,
+  };
+}
+
+function evaluateInsightQuality(card = {}, cluster = null) {
+  const existing = card.qualityCriteria || {};
+  const evidenceCount = Array.isArray(card.evidenceLinkIds) ? card.evidenceLinkIds.length : 0;
+  const relatedCount = Array.isArray(cluster?.relatedInsightCardIds) ? cluster.relatedInsightCardIds.length : 0;
+  const evidenceCoverage =
+    existing.evidenceCoverage && existing.evidenceCoverage !== "unrated"
+      ? existing.evidenceCoverage
+      : evidenceCount >= 2 || cluster?.evidenceLinkCount >= 3
+        ? "strong"
+        : evidenceCount === 1
+          ? "partial"
+          : "weak";
+  const contradictionFlag =
+    existing.contradictionFlag && existing.contradictionFlag !== "unchecked"
+      ? existing.contradictionFlag
+      : relatedCount > 1 && card.type === "decision"
+        ? "possible"
+        : "unchecked";
+
+  return {
+    contradictionFlag,
+    evidenceCoverage,
+    followUpExperimentId: existing.followUpExperimentId || card.experimentRunIds?.[0] || "",
+  };
+}
+
+function enrichInsightCardForQuality(card, insightCards = []) {
+  const cluster = buildInsightClaimCluster(card, insightCards);
+  return {
+    ...card,
+    claimCluster: cluster,
+    qualityCriteria: evaluateInsightQuality(card, cluster),
+  };
+}
+
+function buildInsightClusters(insightCards = []) {
+  const clusters = new Map();
+  for (const card of insightCards) {
+    const cluster = card.claimCluster || buildInsightClaimCluster(card, insightCards);
+    if (!cluster?.id) {
+      continue;
+    }
+
+    const previous = clusters.get(cluster.id) || {
+      evidenceLinkCount: 0,
+      id: cluster.id,
+      label: cluster.label,
+      relatedInsightCardIds: [],
+      sharedTerms: cluster.sharedTerms || [],
+    };
+    const relatedIds = Array.from(new Set([...previous.relatedInsightCardIds, ...(cluster.relatedInsightCardIds || []), card.id].filter(Boolean)));
+    clusters.set(cluster.id, {
+      ...previous,
+      evidenceLinkCount: Math.max(previous.evidenceLinkCount, cluster.evidenceLinkCount || 0),
+      relatedInsightCardIds: relatedIds,
+      sharedTerms: Array.from(new Set([...previous.sharedTerms, ...(cluster.sharedTerms || [])])).slice(0, 8),
+    });
+  }
+
+  return [...clusters.values()].sort(
+    (left, right) =>
+      right.relatedInsightCardIds.length - left.relatedInsightCardIds.length ||
+      right.evidenceLinkCount - left.evidenceLinkCount ||
+      left.label.localeCompare(right.label),
+  );
+}
+
+function renderInsightClusterSummary(clusters = []) {
+  return `
+    <div class="insight-cluster-summary">
+      <div class="insight-panel-head">
+        <span class="insight-card-label">Claim clusters</span>
+        ${renderTag(`${clusters.length} groups`, TOKENS.insight, true)}
+      </div>
+      ${
+        clusters.length
+          ? clusters
+              .slice(0, 4)
+              .map(
+                (cluster) => `
+                  <article class="insight-cluster-card">
+                    <strong>${escapeHtml(cluster.label || "general")}</strong>
+                    <span>${escapeHtml(String(cluster.relatedInsightCardIds.length))} related claims · ${escapeHtml(String(cluster.evidenceLinkCount || 0))} sources</span>
+                  </article>
+                `,
+              )
+              .join("")
+          : '<div class="insight-empty-compact">No claim clusters</div>'
+      }
+    </div>
+  `;
+}
+
+async function createFailedRunInsightCandidate({ comparison, dossier, notes, plan, project, run, runId }) {
+  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
+  const existingCard = insightCards.find((card) => Array.isArray(card.experimentRunIds) && card.experimentRunIds.includes(runId));
+  const dossierId = dossier?.id || "";
+  const candidate = buildFailedRunInsightCandidate({ comparison, dossierId, notes, plan, run, runId });
+  const payload = await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
+    method: "POST",
+    body: JSON.stringify({
+      ...(existingCard || {}),
+      ...candidate,
+    }),
+  });
+  state.activeInsightCardId = payload.asset?.id || existingCard?.id || state.activeInsightCardId;
+}
+
+async function importExternalExperimentRun(form) {
+  const project = activeProject();
+  if (!project || !form) {
+    return;
+  }
+
+  const plans = Array.isArray(state.projectGraph?.reproductionPlans) ? state.projectGraph.reproductionPlans : [];
+  const plan = plans[0] || null;
+  if (!plan?.id) {
+    state.error = "Create a reproduction plan from Reader first.";
+    render();
+    return;
+  }
+
+  const formData = new FormData(form);
+  const parsed = parseLabImportPayload({
+    artifactLabel: formData.get("labImportArtifactLabel"),
+    artifactUrl: formData.get("labImportArtifactUrl"),
+    command: formData.get("labImportCommand"),
+    log: formData.get("labImportLog"),
+  });
+  if (!parsed.observedMetric) {
+    state.error = "Paste a run log with at least one metric line.";
+    render();
+    return;
+  }
+
+  const metricUnit = String(formData.get("labImportMetricUnit") || "").trim();
+  const paperValue = String(formData.get("labImportPaperMetricValue") || "").trim() || "linked evidence";
+  const comparison = normaliseLabMetricComparison({
+    metricName: parsed.metricName,
+    metricUnit,
+    paperMetricValue: paperValue,
+    reproducedValue: parsed.observedMetric,
+    summary: `Imported ${parsed.metricName}: ${parsed.observedMetric}`,
+  });
+
+  state.labImporting = true;
+  render();
+  try {
+    const runPayload = await api(`api/projects/${encodeURIComponent(project.id)}/experiment-runs`, {
+      method: "POST",
+      body: JSON.stringify({
+        artifacts: parsed.artifacts,
+        config: {
+          ...parsed.config,
+          importSource: "external-paste",
+        },
+        kind: "external-import",
+        metrics: parsed.metrics,
+        notes: parsed.config.rawLog.slice(0, 600),
+        reproductionPlanId: plan.id,
+        status: parsed.status,
+      }),
+    });
+    const run = runPayload?.asset || null;
+    const runId = run?.id || "";
+    const dossierPayload = await api(`api/projects/${encodeURIComponent(project.id)}/result-dossiers`, {
+      method: "POST",
+      body: JSON.stringify({
+        comparisons: [comparison],
+        deltaSummary: comparison.delta,
+        evidenceLinkIds: plan.evidenceLinkIds || [],
+        experimentRunIds: [runId].filter(Boolean),
+        paperId: selectedReadingSession()?.paperId || "",
+        questionId: plan.questionId || activeResearchQuestion()?.id || "",
+        status: parsed.status === "done" ? "done" : "draft",
+      }),
+    });
+
+    if (parsed.status === "error" && runId) {
+      await createFailedRunInsightCandidate({
+        comparison,
+        dossier: dossierPayload?.asset || null,
+        notes: parsed.config.rawLog,
+        plan,
+        project,
+        run,
+        runId,
+      });
+    }
+
+    await loadProjectGraph();
+  } finally {
+    state.labImporting = false;
+    render();
+  }
+}
+
+async function saveLabExperimentResult(form) {
+  const project = activeProject();
+  if (!project || !form) {
+    return;
+  }
+
+  const formData = new FormData(form);
+  const runId = String(formData.get("labRunId") || "").trim();
+  const observedMetric = String(formData.get("labObservedMetric") || "").trim();
+  const status = String(formData.get("labRunStatus") || "queue").trim();
+  const notes = String(formData.get("labRunNotes") || "").trim();
+  const metricName = String(formData.get("labMetricName") || "primary").trim() || "primary";
+  const metricUnit = String(formData.get("labMetricUnit") || "").trim();
+  const paperMetricValue = String(formData.get("labPaperMetricValue") || "").trim();
+  if (!runId) {
+    return;
+  }
+  if (!observedMetric) {
+    state.error = "Enter an observed result before saving.";
+    render();
+    return;
+  }
+
+  const experimentRuns = Array.isArray(state.projectGraph?.experimentRuns) ? state.projectGraph.experimentRuns : [];
+  const dossiers = Array.isArray(state.projectGraph?.resultDossiers) ? state.projectGraph.resultDossiers : [];
+  const plans = Array.isArray(state.projectGraph?.reproductionPlans) ? state.projectGraph.reproductionPlans : [];
+  const run = experimentRuns.find((entry) => entry.id === runId);
+  if (!run) {
+    state.error = "Unknown experiment run.";
+    render();
+    return;
+  }
+
+  const plan = plans.find((entry) => entry.id === run.reproductionPlanId) || plans[0] || null;
+  const existingDossier = dossiers.find((entry) => Array.isArray(entry.experimentRunIds) && entry.experimentRunIds.includes(runId));
+  const existingComparison = Array.isArray(existingDossier?.comparisons) ? existingDossier.comparisons[0] : null;
+  const paperValue = paperMetricValue || existingComparison?.paperValue || "linked evidence";
+  const comparison = normaliseLabMetricComparison({
+    metricName,
+    metricUnit: metricUnit || existingComparison?.unit || "",
+    paperMetricValue: paperValue,
+    reproducedValue: observedMetric,
+    summary: notes || "Observed metric saved from Lab.",
+  });
+
+  state.labSavingRunId = runId;
+  render();
+  try {
+    await api(`api/projects/${encodeURIComponent(project.id)}/experiment-runs`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...run,
+        metrics: {
+          ...(run.metrics || {}),
+          [metricName]: observedMetric,
+          primary: observedMetric,
+        },
+        notes,
+        status,
+      }),
+    });
+
+    const dossierPayload = await api(`api/projects/${encodeURIComponent(project.id)}/result-dossiers`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...(existingDossier || {}),
+        comparisons: [comparison],
+        deltaSummary: notes || `Observed ${metricName}: ${observedMetric}`,
+        evidenceLinkIds: existingDossier?.evidenceLinkIds || plan?.evidenceLinkIds || [],
+        experimentRunIds: [runId],
+        paperId: existingDossier?.paperId || selectedReadingSession()?.paperId || "",
+        questionId: existingDossier?.questionId || plan?.questionId || activeResearchQuestion()?.id || "",
+        status: status === "done" ? "done" : "draft",
+      }),
+    });
+
+    if (status === "error") {
+      await createFailedRunInsightCandidate({
+        comparison,
+        dossier: dossierPayload?.asset || existingDossier || null,
+        notes,
+        plan,
+        project,
+        run,
+        runId,
+      });
+    }
+
+    await loadProjectGraph();
+  } finally {
+    state.labSavingRunId = "";
+    render();
+  }
+}
+
+async function createInsightCardFromEvidence() {
+  const project = activeProject();
+  if (!project) {
+    return;
+  }
+
+  const evidence = graphEvidenceItems(state.projectGraph)[0] || null;
+  if (!evidence?.text || !evidence.evidenceLinkIds?.length) {
+    state.error = "Link evidence before creating an insight card.";
+    render();
+    return;
+  }
+  const existingCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
+  const draftCard = {
+    claim: String(evidence.text).replace(/\s+/g, " ").slice(0, 180),
+    confidence: "unrated",
+    evidenceLinkIds: evidence.evidenceLinkIds,
+    nextAction: "Send to Writing or Lab",
+    questionId: activeResearchQuestion()?.id || "",
+    type: "claim",
+  };
+  const evaluatedCard = enrichInsightCardForQuality(draftCard, [...existingCards, draftCard]);
+
+  const payload = await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
+    method: "POST",
+    body: JSON.stringify(evaluatedCard),
+  });
+
+  state.activeInsightCardId = payload.asset?.id || state.activeInsightCardId;
+  await loadProjectGraph();
+  render();
+}
+
+async function saveInsightCardEdit(form) {
+  const project = activeProject();
+  if (!project || !form) {
+    return;
+  }
+
+  const formData = new FormData(form);
+  const cardId = String(formData.get("insightCardId") || "").trim();
+  const claim = String(formData.get("insightClaim") || "").replace(/\s+/g, " ").trim();
+  const contradictionFlag = String(formData.get("insightContradictionFlag") || "unchecked").trim();
+  const evidenceCoverage = String(formData.get("insightEvidenceCoverage") || "unrated").trim();
+  const followUpExperimentId = String(formData.get("insightFollowUpExperimentId") || "").trim();
+  const confidence = String(formData.get("insightConfidence") || "unrated").trim();
+  const nextAction = String(formData.get("insightNextAction") || "").replace(/\s+/g, " ").trim();
+  const type = String(formData.get("insightType") || "claim").trim();
+  if (!cardId || !claim) {
+    state.error = "Add a claim before saving.";
+    render();
+    return;
+  }
+
+  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
+  const card = insightCards.find((entry) => entry.id === cardId);
+  if (!card) {
+    state.error = "Unknown insight card.";
+    render();
+    return;
+  }
+
+  state.insightSavingCardId = cardId;
+  render();
+  try {
+    const nextCard = enrichInsightCardForQuality(
+      {
+        ...card,
+        claim,
+        confidence,
+        nextAction,
+        qualityCriteria: {
+          ...(card.qualityCriteria || {}),
+          contradictionFlag,
+          evidenceCoverage,
+          followUpExperimentId,
+        },
+        type,
+      },
+      insightCards,
+    );
+    const payload = await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
+      method: "POST",
+      body: JSON.stringify(nextCard),
+    });
+    state.activeInsightCardId = payload.asset?.id || cardId;
+    await loadProjectGraph();
+  } finally {
+    state.insightSavingCardId = "";
+    render();
+  }
+}
+
+async function deleteInsightCard(cardId) {
+  const project = activeProject();
+  const insightId = String(cardId || "").trim();
+  if (!project || !insightId) {
+    return;
+  }
+
+  state.insightSavingCardId = insightId;
+  render();
+  try {
+    await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards/${encodeURIComponent(insightId)}`, {
+      method: "DELETE",
+      body: JSON.stringify({
+        confirmDelete: true,
+        reason: `Delete insight card ${insightId} from Insight board.`,
+      }),
+    });
+    if (state.activeInsightCardId === insightId) {
+      state.activeInsightCardId = "";
+    }
+    await loadProjectGraph();
+  } finally {
+    state.insightSavingCardId = "";
+    render();
+  }
+}
+
+async function createDraftSectionFromInsight() {
+  const project = activeProject();
+  if (!project) {
+    return;
+  }
+
+  const { drafts, insightCards } = createDraftFeatureModel(state.projectGraph);
+  const insightCard = insightCards.find((card) => card.id === state.activeInsightCardId) || insightCards[0] || null;
+  if (!insightCard?.id) {
+    state.error = "Create an insight card before drafting.";
+    render();
+    return;
+  }
+
+  const draft =
+    drafts[0] ||
+    (
+      await api(`api/projects/${encodeURIComponent(project.id)}/drafts`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: `${project.name || "ARES"} draft`,
+        }),
+      })
+    ).asset;
+
+  const payload = await api(`api/projects/${encodeURIComponent(project.id)}/draft-sections`, {
+    method: "POST",
+    body: JSON.stringify({
+      body: insightCard.claim,
+      draftId: draft.id,
+      evidenceLinkIds: insightCard.evidenceLinkIds || [],
+      insightCardIds: [insightCard.id],
+      sectionType: "method",
+      title: "Method",
+    }),
+  });
+
+  state.activeDraftSectionId = payload.asset?.id || state.activeDraftSectionId;
+  await loadProjectGraph();
+  render();
+}
+
+async function saveDraftSectionEdit(form) {
+  const project = activeProject();
+  if (!project || !form) {
+    return;
+  }
+
+  const formData = new FormData(form);
+  const sectionId = String(formData.get("draftSectionId") || "").trim();
+  const title = String(formData.get("draftSectionTitle") || "").replace(/\s+/g, " ").trim();
+  const body = String(formData.get("draftSectionBody") || "").trim();
+  const sectionType = String(formData.get("draftSectionType") || "section").trim();
+  const status = String(formData.get("draftSectionStatus") || "draft").trim();
+  if (!sectionId || !title || !body) {
+    state.error = "Add a title and draft body before saving.";
+    render();
+    return;
+  }
+
+  const draftSections = Array.isArray(state.projectGraph?.draftSections) ? state.projectGraph.draftSections : [];
+  const section = draftSections.find((entry) => entry.id === sectionId);
+  if (!section) {
+    state.error = "Unknown draft section.";
+    render();
+    return;
+  }
+
+  state.draftSavingSectionId = sectionId;
+  render();
+  try {
+    const payload = await api(`api/projects/${encodeURIComponent(project.id)}/draft-sections`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...section,
+        body,
+        sectionType,
+        status,
+        title,
+      }),
+    });
+    state.activeDraftSectionId = payload.asset?.id || sectionId;
+    await loadProjectGraph();
+  } finally {
+    state.draftSavingSectionId = "";
+    render();
+  }
+}
+
+async function deleteDraftSection(sectionId) {
+  const project = activeProject();
+  const draftSectionId = String(sectionId || "").trim();
+  if (!project || !draftSectionId) {
+    return;
+  }
+
+  state.draftSavingSectionId = draftSectionId;
+  render();
+  try {
+    await api(`api/projects/${encodeURIComponent(project.id)}/draft-sections/${encodeURIComponent(draftSectionId)}`, {
+      method: "DELETE",
+      body: JSON.stringify({
+        confirmDelete: true,
+        reason: `Delete draft section ${draftSectionId} from Writing draft.`,
+      }),
+    });
+    if (state.activeDraftSectionId === draftSectionId) {
+      state.activeDraftSectionId = "";
+    }
+    await loadProjectGraph();
+  } finally {
+    state.draftSavingSectionId = "";
+    render();
+  }
+}
+
+async function exportWritingDraft() {
+  const sections = Array.isArray(state.projectGraph?.draftSections) ? state.projectGraph.draftSections : [];
+  if (!sections.length) {
+    state.error = "Create a draft section before export.";
+    render();
+    return;
+  }
+
+  await copyTextToClipboard(buildWritingExportMarkdown());
+  state.error = "";
+  render();
+}
+
+function writingEvidenceCitationLine(evidence, index) {
+  const sourceType = evidence.sourceType || "evidence";
+  const page = evidence.page ? `, p.${evidence.page}` : "";
+  const quote = String(evidence.quote || "Linked evidence").replace(/\s+/g, " ").trim();
+  return `[^src-${index + 1}]: ${sourceType}${page}. ${quote}`;
+}
+
+function buildWritingExportMarkdown() {
+  const sections = Array.isArray(state.projectGraph?.draftSections) ? state.projectGraph.draftSections : [];
+  const evidenceLinks = Array.isArray(state.projectGraph?.evidenceLinks) ? state.projectGraph.evidenceLinks : [];
+  const evidenceById = new Map(evidenceLinks.map((entry) => [entry.id, entry]));
+  const usedEvidenceIds = [];
+  const missingEvidenceLinkIds = [];
+
+  const body = sections
+    .map((section) => {
+      const sectionEvidenceIds = Array.isArray(section.evidenceLinkIds) ? section.evidenceLinkIds : [];
+      const markers = sectionEvidenceIds
+        .map((id) => {
+          const evidence = evidenceById.get(id);
+          if (!evidence) {
+            missingEvidenceLinkIds.push(id);
+            return "";
+          }
+
+          if (!usedEvidenceIds.includes(id)) {
+            usedEvidenceIds.push(id);
+          }
+          return `[^src-${usedEvidenceIds.indexOf(id) + 1}]`;
+        })
+        .filter(Boolean)
+        .join(" ");
+      const suffix = markers ? `\n\n${markers}` : "";
+      return [`## ${section.title || "Untitled section"}`, "", `${section.body || ""}${suffix}`].join("\n");
+    })
+    .join("\n\n");
+
+  const appendix = usedEvidenceIds.length
+    ? ["## Source appendix", "", ...usedEvidenceIds.map((id, index) => writingEvidenceCitationLine(evidenceById.get(id), index))]
+    : ["## Source appendix", "", "_No linked sources._"];
+  const warnings = missingEvidenceLinkIds.length
+    ? ["", "## Broken source warnings", "", ...missingEvidenceLinkIds.map((id) => `- Missing evidence link: ${id}`)]
+    : [];
+
+  return [body, ...appendix, ...warnings].join("\n\n");
 }
 
 function readingCitationText(session) {
@@ -865,6 +1782,48 @@ function readingCitationText(session) {
   const year = session?.year ? ` (${session.year})` : "";
   const url = session?.paperUrl || session?.pdfUrl || "";
   return `${authors}. ${title}. ${venue}${year}.${url ? ` ${url}` : ""}`;
+}
+
+function readingAssetCitationText(session, asset) {
+  const base = readingCitationText(session);
+  const kind = asset?.kind || asset?.type || "Asset";
+  const number = asset?.number ? ` ${asset.number}` : "";
+  const page = asset?.page ? ` p.${asset.page}.` : "";
+  const caption = String(asset?.caption || asset?.title || "Untitled asset").replace(/\s+/g, " ").trim();
+  return `${base} ${kind}${number}.${page} ${caption}`;
+}
+
+function readingGenerationProvenanceLine(source, kind = "summary") {
+  const generatedBy = kind === "summary" ? source?.summaryGeneratedBy : source?.generatedBy;
+  if (!generatedBy) {
+    return "not recorded";
+  }
+
+  const label =
+    generatedBy === "fallback"
+      ? "local fallback"
+      : generatedBy === "external-ocr"
+        ? "external OCR import"
+        : generatedBy === "built-in-ocr"
+          ? "built-in OCR"
+          : "agent generated";
+  const fallbackReason = kind === "summary" ? source?.summaryFallbackReason : source?.fallbackReason;
+  return fallbackReason ? `${label} (${fallbackReason})` : label;
+}
+
+function readingOcrProvenanceLines(session) {
+  const provenance = session?.ocrProvenance;
+  if (!provenance) {
+    return ["- OCR import: not recorded"];
+  }
+
+  return [
+    `- OCR import: ${provenance.sourceLabel || "External OCR text"}`,
+    `- OCR tool: ${provenance.tool || "not recorded"}`,
+    `- OCR generated at: ${provenance.generatedAt || "not recorded"}`,
+    `- OCR imported at: ${provenance.importedAt || "not recorded"}`,
+    `- OCR text length: ${provenance.textLength || 0}`,
+  ];
 }
 
 async function copyTextToClipboard(text) {
@@ -891,6 +1850,17 @@ function exportReadingNotes(session) {
     "",
     `- Venue: ${session?.venue || "Unknown"}`,
     `- Source: ${session?.paperUrl || session?.pdfUrl || "n/a"}`,
+    "",
+    "## Generation provenance",
+    "",
+    `- Summary: ${readingGenerationProvenanceLine(session, "summary")}`,
+    ...readingOcrProvenanceLines(session),
+    "- Chat turns:",
+    ...(Array.isArray(session?.chatMessages) && session.chatMessages.some((message) => message.role === "assistant")
+      ? session.chatMessages
+          .filter((message) => message.role === "assistant")
+          .map((message, index) => `  - ${index + 1}. ${readingGenerationProvenanceLine(message, "chat")}`)
+      : ["  - none"]),
     "",
     "## Notes",
     "",
@@ -937,6 +1907,11 @@ async function runReadingRequest(kind, sessionId, task, { preserveRailFocus = fa
 
 function activeProject() {
   return state.projects.find((project) => project.id === state.activeProjectId) || state.projects[0] || null;
+}
+
+function activeResearchQuestion() {
+  const questions = Array.isArray(state.projectGraph?.researchQuestions) ? state.projectGraph.researchQuestions : [];
+  return questions.find((question) => question.id === state.activeQuestionId) || questions[0] || null;
 }
 
 function buildBrowserRouteHash({ stageId = state.activeStage } = {}) {
@@ -1189,6 +2164,10 @@ function uniqueValues(values = []) {
 }
 
 function searchRunProgressLabel(run) {
+  if (run?.status === "canceled") {
+    return "canceled";
+  }
+
   if (run?.status === "error" || run?.error) {
     return "error";
   }
@@ -1208,7 +2187,7 @@ function searchRunProgressLabel(run) {
 }
 
 function isTerminalAgentRunStatus(status) {
-  return status === "done" || status === "error";
+  return status === "done" || status === "error" || status === "canceled";
 }
 
 function readingProgress(session) {
@@ -1219,67 +2198,6 @@ function readingProgress(session) {
 
   const doneCount = sections.filter((section) => section.status === "done").length;
   return Math.round((doneCount / sections.length) * 100);
-}
-
-function clampValue(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function readingText(value, fallback = "") {
-  const text = String(value ?? "").trim();
-  return text || fallback;
-}
-
-function readingExcerpt(value, fallback = "", limit = 220) {
-  const text = readingText(value, fallback).replace(/\s+/g, " ").trim();
-  if (!text) {
-    return "";
-  }
-
-  if (text.length <= limit) {
-    return text;
-  }
-
-  return `${text.slice(0, limit - 1).trimEnd()}…`;
-}
-
-function readingSentence(value, fallback = "") {
-  const text = readingText(value, fallback).replace(/\s+/g, " ").trim();
-  if (!text) {
-    return "";
-  }
-
-  const match = text.match(/^(.{0,240}?[.!?])(?:\s|$)/);
-  return match ? match[1] : text;
-}
-
-function readingCategoryMeta(type) {
-  const key = String(type || "note").trim().toLowerCase();
-  return {
-    claim: { label: "Claim", color: TOKENS.research },
-    method: { label: "Method", color: TOKENS.read },
-    result: { label: "Result", color: TOKENS.search },
-    limit: { label: "Limit", color: TOKENS.result },
-    note: { label: "Note", color: TOKENS.writing },
-    summary: { label: "Summary", color: TOKENS.read },
-  }[key] || { label: "Note", color: TOKENS.writing };
-}
-
-function readingSectionPage(index) {
-  return Math.max(1, index + 1);
-}
-
-function readingMatchSectionIndex(sections = [], value = "") {
-  const lowered = String(value || "").trim().toLowerCase();
-  if (!lowered) {
-    return -1;
-  }
-
-  return sections.findIndex((section) => {
-    const id = String(section.id || "").toLowerCase();
-    const label = String(section.label || "").toLowerCase();
-    return id === lowered || label === lowered || label.includes(lowered) || lowered.includes(id);
-  });
 }
 
 function deriveReadingNotes(session) {
@@ -1855,6 +2773,10 @@ function selectedReadingHomeItem(project = activeProject()) {
   return items.find((item) => item.paperId === state.readingHomeSelectedPaperId) || items[0] || null;
 }
 
+function readingHomeSourceUrl(item = selectedReadingHomeItem()) {
+  return item?.paper?.paperUrl || item?.paper?.url || item?.paper?.pdfUrl || item?.session?.paperUrl || item?.session?.pdfUrl || "";
+}
+
 function currentReadingPaper(project = activeProject()) {
   if (state.readingView === "home") {
     return selectedReadingHomeItem(project)?.paper || null;
@@ -1945,6 +2867,22 @@ function replaceProject(project) {
 async function loadProjects() {
   const payload = await api("api/projects");
   setProjects(payload.projects || []);
+}
+
+async function loadProjectGraph() {
+  const project = activeProject();
+  if (!project) {
+    state.projectGraph = null;
+    state.activeQuestionId = "";
+    return;
+  }
+
+  const payload = await api(`api/projects/${encodeURIComponent(project.id)}/graph`);
+  state.projectGraph = payload;
+  const questions = Array.isArray(payload.researchQuestions) ? payload.researchQuestions : [];
+  if (!state.activeQuestionId || !questions.some((question) => question.id === state.activeQuestionId)) {
+    state.activeQuestionId = questions[0]?.id || "";
+  }
 }
 
 async function loadProjectLibrary() {
@@ -2249,6 +3187,7 @@ async function runSearch({ preserveSelection = false } = {}) {
       method: "POST",
       body: JSON.stringify({
         projectId: project.id,
+        questionId: activeResearchQuestion()?.id || "",
         q: query,
         mode: state.searchMode,
         scopes: state.searchScopes,
@@ -2307,6 +3246,7 @@ async function startAgenticSearchRun({ query } = {}) {
     createdAt: new Date().toISOString(),
     id: "",
     input: {
+      questionId: activeResearchQuestion()?.id || "",
       query: trimmedQuery,
       scopes: state.searchScopes,
     },
@@ -2327,6 +3267,7 @@ async function startAgenticSearchRun({ query } = {}) {
       method: "POST",
       body: JSON.stringify({
         input: {
+          questionId: activeResearchQuestion()?.id || "",
           query: trimmedQuery,
           scopes: state.searchScopes,
         },
@@ -2538,58 +3479,6 @@ async function openReadingDetailForPaper(paperId, { createIfMissing = true } = {
   }
 }
 
-function placeholderMeta(project, stage) {
-  const base = {
-    reading: {
-      agent: "Reader agent",
-      status: project.queueCount ? "queue" : "todo",
-      summary: "Saved papers move into structured reading sessions.",
-      notes: [
-        ["Input", "Metadata, abstract, key points"],
-        ["Output", "Sections, highlights, notes"],
-      ],
-    },
-    research: {
-      agent: "Reproduction agent",
-      status: "todo",
-      summary: "Turn a reading packet into a reproduction checklist.",
-      notes: [
-        ["Input", "Method, dataset, metric"],
-        ["Output", "Checklist, run queue"],
-      ],
-    },
-    result: {
-      agent: "Experiment agent",
-      status: "todo",
-      summary: "Compare paper metrics with reproduction results.",
-      notes: [
-        ["Input", "Paper metric, run result"],
-        ["Output", "Delta, explanation"],
-      ],
-    },
-    insight: {
-      agent: "Analyst agent",
-      status: "todo",
-      summary: "Collect claims, evidence, and decisions.",
-      notes: [
-        ["Input", "Evidence, result delta"],
-        ["Output", "Claim, decision"],
-      ],
-    },
-    writing: {
-      agent: "Writing agent",
-      status: "todo",
-      summary: "Assemble source-linked sections.",
-      notes: [
-        ["Input", "Insight, evidence bundle"],
-        ["Output", "Draft sections"],
-      ],
-    },
-  };
-
-  return base[stage.id];
-}
-
 function renderSidebar() {
   const collapsed = state.sidebarCollapsed;
   const workflowExpanded = collapsed || state.workflowOpen;
@@ -2652,14 +3541,13 @@ function renderSidebar() {
   return `
     <aside class="desktop-sidebar" data-ares-surface="sidebar" data-ares-role="navigation" data-collapsed="${collapsed ? "true" : "false"}">
       <section class="sidebar-section">
-        <button type="button" class="workspace-switch hov" title="ARES · Research workspace">
+        <div class="workspace-switch" title="ARES · Research workspace">
           <span class="brand-mark">A</span>
           <span class="brand-copy">
             <span class="brand-title">ARES</span>
             <span class="brand-subtitle">Research workspace</span>
           </span>
-          ${icon("chevD", { size: 13, color: TOKENS.t3 })}
-        </button>
+        </div>
       </section>
 
       <section class="sidebar-section">
@@ -2725,16 +3613,44 @@ function renderSidebar() {
       </section>
 
       <section class="sidebar-section">
-        <button type="button" class="sidebar-account hov" title="Dokyung · Pro plan">
+        <div class="sidebar-account" title="Dokyung · Pro plan">
           <span class="account-mark">DK</span>
           <span class="brand-copy">
             <span class="account-name">Dokyung</span>
             <span class="account-plan">Pro plan</span>
           </span>
-          ${icon("settings", { size: 13, color: TOKENS.t3 })}
-        </button>
+        </div>
       </section>
     </aside>
+  `;
+}
+
+function renderThemeSwitcher() {
+  return `
+    <div class="theme-switcher" role="group" aria-label="Color theme">
+      ${[
+        ["light", "Light", "sun"],
+        ["dark", "Dark", "moon"],
+        ["system", "System", "monitor"],
+      ]
+        .map(([mode, label, iconName]) => {
+          const active = state.themeMode === mode;
+          return `
+            <button
+              type="button"
+              class="theme-switcher-btn ${active ? "is-active" : ""}"
+              data-action="set-theme-mode"
+              data-theme-mode="${mode}"
+              aria-pressed="${active ? "true" : "false"}"
+              title="${label}"
+            >
+              ${icon(iconName, { size: 12 })}
+              <span>${label}</span>
+            </button>
+          `;
+        })
+        .join("")}
+    </div>
   `;
 }
 
@@ -2769,7 +3685,7 @@ function renderTopbar() {
     ? `
         <div class="run-badge" aria-live="off">
           <span class="dot"></span>
-          ${escapeHtml(searchRun.status === "error" || searchRun.error ? "Failed" : searchRun.status === "done" ? "Done" : searchRun.status === "queue" ? "Queued" : "Live")} · ${escapeHtml(searchRunProgressLabel(searchRun))}
+          ${escapeHtml(searchRun.status === "error" || searchRun.error ? "Failed" : searchRun.status === "canceled" ? "Canceled" : searchRun.status === "done" ? "Done" : searchRun.status === "queue" ? "Queued" : "Live")} · ${escapeHtml(searchRunProgressLabel(searchRun))}
         </div>
       `
     : "";
@@ -2786,8 +3702,9 @@ function renderTopbar() {
       </div>
       <div class="topbar-actions">
         ${searchRunBadge}
-        <button type="button" class="btn-s">${icon("share", { size: 12 })} Share</button>
-        <button type="button" class="btn-s">${icon("filter", { size: 12 })} Filter</button>
+        ${renderThemeSwitcher()}
+        <button type="button" class="btn-s" data-action="copy-stage-link" data-stage-id="${escapeHtml(stage.id)}">${icon("share", { size: 12 })} Share</button>
+        <button type="button" class="btn-s" ${stage.id === "search" ? 'data-action="toggle-filter-panel"' : "disabled"}>${icon("filter", { size: 12 })} Filter</button>
       </div>
     </header>
   `;
@@ -2883,6 +3800,7 @@ const searchFeature = createSearchFeature({
   dashboardVenueBreakdown,
   dashboardPaperTags,
   actualReadingSessions,
+  activeResearchQuestion,
 });
 
 const { renderSearchPreview, renderSearchStage, resolveScopeCatalogItem, searchPlaceholder } = searchFeature;
@@ -2906,117 +3824,85 @@ const readingFeature = createReadingFeature({
 });
 
 const { renderReadingStage } = readingFeature;
-
-function renderPlaceholderStage(project) {
-  const stage = stageById(state.activeStage);
-  const meta = placeholderMeta(project, stage);
-  const statusTag = renderTag(meta.status, statusColor(meta.status), meta.status === "done");
-
-  return `
-    <div class="placeholder-stage" data-ares-surface="placeholder-stage" data-ares-stage="${escapeHtml(stage.id)}">
-      <section class="placeholder-main" data-ares-surface="placeholder-main" data-ares-stage="${escapeHtml(stage.id)}">
-        <div class="placeholder-main-inner">
-          <div class="placeholder-eyebrow">${escapeHtml(stage.label)}</div>
-          <h1 class="placeholder-title">${escapeHtml(stage.sub)}</h1>
-          <p class="placeholder-copy">${escapeHtml(meta.summary)}</p>
-
-          <div class="placeholder-grid">
-            <article class="placeholder-card">
-              <div class="placeholder-card-label">Project</div>
-              <h3>${escapeHtml(project.name)}</h3>
-              <p>${escapeHtml(project.focus || "No active focus")}</p>
-            </article>
-
-            <article class="placeholder-card">
-              <div class="placeholder-card-label">State</div>
-              <h3>${escapeHtml(meta.agent)}</h3>
-              <p>${escapeHtml(meta.summary)}</p>
-            </article>
-          </div>
-
-          <div class="placeholder-tint" style="background:${stage.color}0a;border:1px solid ${stage.color}28">
-            <div class="placeholder-card-label" style="color:${stage.color};margin-bottom:8px">${escapeHtml(meta.agent)}</div>
-            <p>${escapeHtml(meta.notes[0][1])}</p>
-          </div>
-        </div>
-      </section>
-
-      <aside class="agent-panel" data-ares-surface="agent-panel" data-ares-stage="${escapeHtml(stage.id)}">
-        <div class="agent-panel-header">
-          <div class="agent-panel-status">
-            ${statusIcon(meta.status)}
-            <span>${escapeHtml(meta.agent)}</span>
-          </div>
-          ${statusTag}
-        </div>
-
-        <div class="agent-panel-body">
-          ${meta.notes
-            .map(
-              ([label, copy]) => `
-                <section class="agent-panel-section" style="border-left-color:${stage.color}">
-                  <div class="agent-panel-eyebrow" style="color:${stage.color};margin-bottom:4px">${escapeHtml(label)}</div>
-                  <p>${escapeHtml(copy)}</p>
-                </section>
-              `,
-            )
-            .join("")}
-
-          <section class="agent-panel-metrics">
-            <div class="agent-panel-eyebrow" style="margin-bottom:8px">Project metrics</div>
-            <div class="agent-panel-metric-row">
-              <span style="color:${TOKENS.t2}">Saved papers</span>
-              <span class="mono" style="color:${TOKENS.tx}">${project.libraryCount}</span>
-            </div>
-            <div class="agent-panel-metric-row">
-              <span style="color:${TOKENS.t2}">Reading queue</span>
-              <span class="mono" style="color:${TOKENS.tx}">${project.queueCount}</span>
-            </div>
-            <div class="agent-panel-metric-row">
-              <span style="color:${TOKENS.t2}">Focus keywords</span>
-              <span class="mono" style="color:${TOKENS.tx}">${escapeHtml((project.keywords || []).slice(0, 2).join(", ") || "--")}</span>
-            </div>
-          </section>
-        </div>
-
-        <div class="agent-panel-footer">
-          <button type="button" class="btn-p" data-action="select-stage" data-stage-id="search">Back to Search</button>
-        </div>
-      </aside>
-    </div>
-  `;
-}
+const readingStagePatchController = createReadingStagePatchController({
+  activeProject,
+  applyReadingSplitUI,
+  currentReadingPaper,
+  readingPdfController,
+  render,
+  renderReadingStage,
+  scheduleReadingHydration,
+  state,
+  syncAppActivePaperMetadata,
+  syncBrowserUrlFromState,
+});
+const {
+  patchReadingDocumentPaneOnly,
+  patchReadingPdfSelectionBarOnly,
+  patchReadingPdfSelectionSurfaces,
+  patchReadingStageUI,
+  patchReadingWorkbenchPaneOnly,
+  refreshReadingStageUI,
+} = readingStagePatchController;
 
 function renderLabStage(project) {
   const stage = stageById(state.activeStage);
   const session = selectedReadingSession();
   const library = dashboardLibraryItems();
-  const sourcePaper = session || library[0] || null;
+  const { dossiers, experimentRuns, plan, plans, sourcePacket } = createLabFeatureModel(state.projectGraph);
+  const sourcePaper = session || sourcePacket || library[0] || null;
   const paperTitle = sourcePaper?.title || "No reading packet";
   const paperVenue = sourcePaper?.venue || "No venue";
   const progress = session ? readingProgress(session) : 0;
   const status = session?.status || (project.queueCount ? "queue" : "todo");
   const compareActive = stage.id === "result";
   const labMode = compareActive ? "Compare" : "Plan";
-  const labStatusLabel = session ? "Packet linked" : "Not connected";
-  const runs = [
-    {
-      name: "Baseline reproduction",
-      metric: "primary score",
-      paper: session ? "linked" : "none",
-      ours: "—",
-      delta: "—",
-      status: status === "done" ? "queue" : "todo",
-    },
-    {
-      name: "Ablation candidate",
-      metric: "sensitivity",
-      paper: "none",
-      ours: "—",
-      delta: "—",
-      status: "todo",
-    },
-  ];
+  const labStatusLabel = plan ? "Plan linked" : session || sourcePacket ? "Packet linked" : "Not connected";
+  const handoff = plan?.handoff && typeof plan.handoff === "object" ? plan.handoff : {};
+  const sourceRefs = Array.isArray(plan?.sourceRefs) ? plan.sourceRefs : [];
+  const handoffNoteCount = Array.isArray(handoff.noteIds) ? handoff.noteIds.length : 0;
+  const handoffAssetCount = Array.isArray(handoff.assetIds) ? handoff.assetIds.length : 0;
+  const handoffSectionCount = Array.isArray(handoff.sectionIds) ? handoff.sectionIds.length : 0;
+  const handoffSummary = plan
+    ? `${handoffNoteCount} notes · ${handoffAssetCount} assets · ${handoffSectionCount} sections`
+    : "No handoff context";
+  const handoffSourcePreview = sourceRefs
+    .slice(0, 2)
+    .map((ref) => ref.label || ref.id)
+    .filter(Boolean)
+    .join(" · ");
+  const runs = experimentRuns.length
+    ? experimentRuns.map((run) => {
+        const dossier = dossiers.find((entry) => Array.isArray(entry.experimentRunIds) && entry.experimentRunIds.includes(run.id));
+        const comparison = Array.isArray(dossier?.comparisons) ? dossier.comparisons[0] : null;
+        const metric = comparison?.metric || Object.keys(run.metrics || {})[0] || "primary";
+        const ours = comparison?.reproducedValue || run.metrics?.primary || run.metrics?.[metric] || "";
+        const unit = comparison?.unit || "";
+        return {
+          canEdit: true,
+          delta: comparison?.delta || (ours ? labMetricDelta(comparison?.paperValue, ours) : "—"),
+          id: run.id,
+          metric,
+          name: run.title || `${run.kind || "Manual"} run`,
+          notes: run.notes || "",
+          ours: ours || "pending",
+          paper: comparison?.paperValue || (plan ? "linked" : "none"),
+          status: run.status || "todo",
+          unit,
+        };
+      })
+    : [
+        {
+          canEdit: false,
+          name: "Baseline reproduction",
+          metric: "primary score",
+          paper: plan || session ? "linked" : "none",
+          ours: "—",
+          delta: "—",
+          status: status === "done" ? "queue" : "todo",
+          unit: "",
+        },
+      ];
 
   return `
     <div class="lab-stage" data-ares-surface="lab-stage" data-ares-stage="${escapeHtml(stage.id)}" data-lab-mode="${escapeHtml(labMode.toLowerCase())}">
@@ -3035,6 +3921,11 @@ function renderLabStage(project) {
               ${renderTag(`${progress}% read`, TOKENS.read, progress > 0)}
               ${renderTag(labStatusLabel, session ? TOKENS.search : TOKENS.t3, Boolean(session))}
             </div>
+            <div class="lab-handoff-context" data-handoff-note-count="${escapeHtml(handoffNoteCount)}">
+              <span class="lab-card-label">Handoff context</span>
+              <span>${escapeHtml(handoffSummary)}</span>
+              ${handoffSourcePreview ? `<small>${escapeHtml(handoffSourcePreview)}</small>` : ""}
+            </div>
           </div>
         </div>
 
@@ -3046,6 +3937,7 @@ function renderLabStage(project) {
               <li>${project.libraryCount || 0} saved papers</li>
               <li>${project.queueCount || 0} queued readings</li>
               <li>${session?.sections?.length || 0} parsed sections</li>
+              <li>${sourceRefs.length} source refs</li>
             </ul>
           </article>
 
@@ -3068,7 +3960,7 @@ function renderLabStage(project) {
               <span class="lab-card-label">Runs</span>
               <h2>Current run queue</h2>
             </div>
-            <button type="button" class="btn-s" disabled>Attach result</button>
+            <button type="button" class="btn-s" data-action="create-manual-experiment-run" ${plan ? "" : "disabled"}>Attach result</button>
           </div>
           <div class="lab-run-grid">
             ${runs
@@ -3081,15 +3973,83 @@ function renderLabStage(project) {
                     </div>
                     <dl>
                       <div><dt>Metric</dt><dd>${escapeHtml(run.metric)}</dd></div>
+                      <div><dt>Unit</dt><dd>${escapeHtml(run.unit || "—")}</dd></div>
                       <div><dt>Paper</dt><dd>${escapeHtml(run.paper)}</dd></div>
                       <div><dt>Ours</dt><dd>${escapeHtml(run.ours)}</dd></div>
                       <div><dt>Delta</dt><dd>${escapeHtml(run.delta)}</dd></div>
                     </dl>
+                    ${
+                      run.canEdit
+                        ? `
+                          <form class="lab-result-form" data-action="submit-lab-result-form">
+                            <input type="hidden" name="labRunId" value="${escapeHtml(run.id)}" />
+                            <input type="hidden" name="labMetricName" value="${escapeHtml(run.metric)}" />
+                            <label>
+                              <span>Paper baseline</span>
+                              <input name="labPaperMetricValue" value="${escapeHtml(run.paper === "linked" || run.paper === "none" ? "" : run.paper)}" placeholder="0.810" />
+                            </label>
+                            <label>
+                              <span>Observed</span>
+                              <input name="labObservedMetric" value="${escapeHtml(run.ours === "pending" ? "" : run.ours)}" placeholder="0.842" />
+                            </label>
+                            <label>
+                              <span>Unit</span>
+                              <input name="labMetricUnit" value="${escapeHtml(run.unit)}" placeholder="accuracy" />
+                            </label>
+                            <label>
+                              <span>Status</span>
+                              <select name="labRunStatus">
+                                ${["queue", "running", "done", "error"]
+                                  .map((option) => `<option value="${option}" ${run.status === option ? "selected" : ""}>${option}</option>`)
+                                  .join("")}
+                              </select>
+                            </label>
+                            <label class="lab-result-notes">
+                              <span>Notes</span>
+                              <textarea name="labRunNotes" rows="2" placeholder="What changed?">${escapeHtml(run.notes)}</textarea>
+                            </label>
+                            <button type="submit" class="btn-p" ${state.labSavingRunId === run.id ? "disabled" : ""}>
+                              ${state.labSavingRunId === run.id ? "Saving..." : "Save result"}
+                            </button>
+                          </form>
+                        `
+                        : ""
+                    }
                   </article>
                 `,
               )
               .join("")}
           </div>
+          <form class="lab-result-form lab-import-form" data-action="submit-lab-import-form">
+            <input type="hidden" name="labImportPlanId" value="${escapeHtml(plan?.id || "")}" />
+            <label>
+              <span>Command</span>
+              <input name="labImportCommand" placeholder="python eval.py --dataset ..." ${plan ? "" : "disabled"} />
+            </label>
+            <label>
+              <span>Paper baseline</span>
+              <input name="labImportPaperMetricValue" placeholder="0.810" ${plan ? "" : "disabled"} />
+            </label>
+            <label>
+              <span>Unit</span>
+              <input name="labImportMetricUnit" placeholder="accuracy" ${plan ? "" : "disabled"} />
+            </label>
+            <label>
+              <span>Artifact label</span>
+              <input name="labImportArtifactLabel" placeholder="metrics.json" ${plan ? "" : "disabled"} />
+            </label>
+            <label>
+              <span>Artifact URL</span>
+              <input name="labImportArtifactUrl" placeholder="file:///runs/metrics.json" ${plan ? "" : "disabled"} />
+            </label>
+            <label class="lab-result-notes">
+              <span>Run log</span>
+              <textarea name="labImportLog" rows="4" placeholder="accuracy: 0.842" ${plan ? "" : "disabled"}></textarea>
+            </label>
+            <button type="submit" class="btn-p" ${plan && !state.labImporting ? "" : "disabled"}>
+              ${state.labImporting ? "Importing..." : "Import run"}
+            </button>
+          </form>
         </section>
       </section>
 
@@ -3104,11 +4064,11 @@ function renderLabStage(project) {
         <div class="agent-panel-body">
           <section class="agent-panel-section" style="border-left-color:${TOKENS.research}">
             <div class="agent-panel-eyebrow" style="color:${TOKENS.research};margin-bottom:4px">Plan</div>
-            <p>${escapeHtml(session ? "Method and result notes linked." : "No reading packet selected.")}</p>
+            <p>${escapeHtml(plan ? `${plans.length} plan · ${experimentRuns.length} run · ${dossiers.length} dossier` : session || sourcePacket ? "Reading packet linked. Create a plan from Reader handoff." : "No reading packet selected.")}</p>
           </section>
           <section class="agent-panel-section" style="border-left-color:${TOKENS.result}">
             <div class="agent-panel-eyebrow" style="color:${TOKENS.result};margin-bottom:4px">Compare</div>
-            <p>${escapeHtml(compareActive ? "Result dossier selected." : "Delta table is empty.")}</p>
+            <p>${escapeHtml(dossiers.length ? `${dossiers.length} result dossier ready.` : compareActive ? "Result dossier selected." : "Delta table is empty.")}</p>
           </section>
         </div>
         <div class="agent-panel-footer">
@@ -3123,7 +4083,11 @@ function renderInsightStage(project) {
   const session = selectedReadingSession();
   const notes = Array.isArray(session?.notes) ? session.notes : [];
   const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
-  const evidenceItems = [...notes, ...highlights].slice(0, 4);
+  const graphEvidence = graphEvidenceItems(state.projectGraph);
+  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
+  const evaluatedInsightCards = insightCards.map((card) => enrichInsightCardForQuality(card, insightCards));
+  const insightClusters = buildInsightClusters(evaluatedInsightCards);
+  const evidenceItems = graphEvidence.length ? graphEvidence : [...notes, ...highlights].slice(0, 4);
   const hasEvidence = evidenceItems.length > 0;
   const fallbackEvidence = [
     {
@@ -3138,11 +4102,15 @@ function renderInsightStage(project) {
   const evidence = evidenceItems.length
     ? evidenceItems.map((entry) => ({
         cat: entry.cat || entry.type || entry.kind || "Evidence",
+        evidenceLinkIds: Array.isArray(entry.evidenceLinkIds)
+          ? entry.evidenceLinkIds
+          : [entry.evidenceLinkId].filter(Boolean),
         page: entry.page || "",
         text: entry.quote || entry.text || entry.body || entry.memo || "No evidence text",
       }))
     : fallbackEvidence;
-  const primaryClaim = hasEvidence ? evidence[0]?.text : project?.focus || "Select evidence to draft a claim";
+  const primaryCard = evaluatedInsightCards[0] || null;
+  const primaryClaim = primaryCard?.claim || (hasEvidence ? evidence[0]?.text : project?.focus || "Select evidence to draft a claim");
   const focus = project?.focus || session?.title || "current research direction";
   const hypotheses = hasEvidence
     ? [
@@ -3150,6 +4118,19 @@ function renderInsightStage(project) {
         "Compare the smallest ablation before expanding the run.",
       ]
     : [];
+  const displayedInsightCards = evaluatedInsightCards.length
+    ? evaluatedInsightCards
+    : [
+        {
+          claim: primaryClaim,
+          confidence: hasEvidence ? "unrated" : "—",
+          evidenceLinkIds: evidence[0]?.evidenceLinkIds || [],
+          nextAction: hasEvidence ? "Send to Writing or Lab" : "Link evidence",
+          status: hasEvidence ? "draft" : "empty",
+        },
+      ];
+  const selectedInsightCard =
+    evaluatedInsightCards.find((card) => card.id === state.activeInsightCardId) || evaluatedInsightCards[0] || null;
 
   return `
     <div class="insight-stage" data-ares-surface="insight-stage" data-ares-stage="insight">
@@ -3163,6 +4144,7 @@ function renderInsightStage(project) {
           <div class="insight-hero-actions">
             <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
             <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
+            <button type="button" class="btn-s" data-action="create-insight-card" ${hasEvidence ? "" : "disabled"}>Create insight card</button>
           </div>
         </div>
 
@@ -3187,38 +4169,151 @@ function renderInsightStage(project) {
                 )
                 .join("")}
             </div>
+            ${renderInsightClusterSummary(insightClusters)}
           </aside>
 
           <section class="insight-panel insight-panel--cards">
             <div class="insight-panel-head">
               <span class="insight-card-label">Claims</span>
-              ${renderTag("Insight Card", TOKENS.insight, true)}
+              ${renderTag(`${insightCards.length || 1} Insight Card`, TOKENS.insight, true)}
             </div>
-            <article class="insight-card is-primary">
-              <div class="insight-card-top">
-                <span class="insight-card-label">Insight Card</span>
-                ${renderTag(hasEvidence ? "draft" : "empty", hasEvidence ? TOKENS.insight : TOKENS.t3, hasEvidence)}
-              </div>
-              <h2>${escapeHtml(String(primaryClaim).replace(/\s+/g, " ").slice(0, 96))}</h2>
-              <dl>
-                <div>
-                  <dt>linked evidence</dt>
-                  <dd>${escapeHtml(evidence[0]?.cat || "Evidence")}</dd>
-                </div>
-                <div>
-                  <dt>confidence</dt>
-                  <dd>${escapeHtml(hasEvidence ? "unrated" : "—")}</dd>
-                </div>
-                <div>
-                  <dt>next action</dt>
-                  <dd>${escapeHtml(hasEvidence ? "Send to Writing or Lab" : "Link evidence")}</dd>
-                </div>
-              </dl>
-              <div class="insight-card-actions">
-                <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
-                <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
-              </div>
-            </article>
+            ${
+              displayedInsightCards
+                .slice(0, 3)
+                .map(
+                  (card, index) => {
+                    const isSelected = Boolean(card.id && selectedInsightCard?.id === card.id);
+                    const qualityCriteria = card.qualityCriteria || {};
+                    const claimCluster = card.claimCluster || null;
+                    return `
+                    <article class="insight-card ${isSelected || (!selectedInsightCard && index === 0) ? "is-primary" : ""}">
+                      <div class="insight-card-top">
+                        <span class="insight-card-label">Insight Card</span>
+                        ${renderTag(card.status || "draft", hasEvidence || insightCards.length ? TOKENS.insight : TOKENS.t3, Boolean(hasEvidence || insightCards.length))}
+                      </div>
+                      <h2>${escapeHtml(String(card.claim || primaryClaim).replace(/\s+/g, " ").slice(0, 96))}</h2>
+                      <dl>
+                        <div>
+                          <dt>linked evidence</dt>
+                          <dd>${escapeHtml(card.evidenceLinkIds?.length ? `${card.evidenceLinkIds.length} source` : evidence[0]?.cat || "Evidence")}</dd>
+                        </div>
+                        <div>
+                          <dt>confidence</dt>
+                          <dd>${escapeHtml(card.confidence || "unrated")}</dd>
+                        </div>
+                        <div>
+                          <dt>evidence coverage</dt>
+                          <dd>${escapeHtml(qualityCriteria.evidenceCoverage || "unrated")}</dd>
+                        </div>
+                        <div>
+                          <dt>auto quality</dt>
+                          <dd>${escapeHtml(claimCluster?.label ? `${claimCluster.label} · ${claimCluster.relatedInsightCardIds?.length || 1} related claims` : "unclustered")}</dd>
+                        </div>
+                        <div>
+                          <dt>contradiction</dt>
+                          <dd>${escapeHtml(qualityCriteria.contradictionFlag || "unchecked")}</dd>
+                        </div>
+                        <div>
+                          <dt>follow-up run</dt>
+                          <dd>${escapeHtml(qualityCriteria.followUpExperimentId || "none")}</dd>
+                        </div>
+                        ${
+                          card.failureCause
+                            ? `<div><dt>failure cause</dt><dd>${escapeHtml(String(card.failureCause).slice(0, 120))}</dd></div>`
+                            : ""
+                        }
+                        ${
+                          card.followUpExperiment
+                            ? `<div><dt>follow-up</dt><dd>${escapeHtml(String(card.followUpExperiment).slice(0, 120))}</dd></div>`
+                            : ""
+                        }
+                        <div>
+                          <dt>next action</dt>
+                          <dd>${escapeHtml(card.nextAction || "Send to Writing or Lab")}</dd>
+                        </div>
+                      </dl>
+                      <div class="insight-card-actions">
+                        ${
+                          card.id
+                            ? `<button type="button" class="btn-s" data-action="select-insight-card" data-insight-card-id="${escapeHtml(card.id)}">${isSelected ? "Selected" : "Select"}</button>`
+                            : ""
+                        }
+                        <button type="button" class="btn-p" data-action="select-stage" data-stage-id="writing">Send to Writing</button>
+                        <button type="button" class="btn-s" data-action="select-stage" data-stage-id="research">Create follow-up experiment</button>
+                      </div>
+                      ${
+                        isSelected
+                          ? `
+                            <form class="insight-edit-form" data-action="submit-insight-card-form">
+                              <input type="hidden" name="insightCardId" value="${escapeHtml(card.id)}" />
+                              <label>
+                                <span>Claim</span>
+                                <textarea name="insightClaim" rows="3">${escapeHtml(card.claim || "")}</textarea>
+                              </label>
+                              <div class="insight-edit-row">
+                                <label>
+                                  <span>Type</span>
+                                  <select name="insightType">
+                                    ${["claim", "hypothesis", "decision", "observation"]
+                                      .map((option) => `<option value="${option}" ${card.type === option ? "selected" : ""}>${option}</option>`)
+                                      .join("")}
+                                  </select>
+                                </label>
+                                <label>
+                                  <span>Confidence</span>
+                                  <select name="insightConfidence">
+                                    ${["unrated", "low", "medium", "high"]
+                                      .map((option) => `<option value="${option}" ${card.confidence === option ? "selected" : ""}>${option}</option>`)
+                                      .join("")}
+                                  </select>
+                                </label>
+                              </div>
+                              <div class="insight-edit-row">
+                                <label>
+                                  <span>Evidence coverage</span>
+                                  <select name="insightEvidenceCoverage">
+                                    ${["unrated", "weak", "partial", "strong"]
+                                      .map(
+                                        (option) =>
+                                          `<option value="${option}" ${qualityCriteria.evidenceCoverage === option ? "selected" : ""}>${option}</option>`,
+                                      )
+                                      .join("")}
+                                  </select>
+                                </label>
+                                <label>
+                                  <span>Contradiction</span>
+                                  <select name="insightContradictionFlag">
+                                    ${["unchecked", "none", "possible", "conflict"]
+                                      .map(
+                                        (option) =>
+                                          `<option value="${option}" ${qualityCriteria.contradictionFlag === option ? "selected" : ""}>${option}</option>`,
+                                      )
+                                      .join("")}
+                                  </select>
+                                </label>
+                              </div>
+                              <label>
+                                <span>Follow-up run</span>
+                                <input name="insightFollowUpExperimentId" value="${escapeHtml(qualityCriteria.followUpExperimentId || "")}" />
+                              </label>
+                              <label>
+                                <span>Next action</span>
+                                <textarea name="insightNextAction" rows="2">${escapeHtml(card.nextAction || "")}</textarea>
+                              </label>
+                              <div class="insight-edit-actions">
+                                <button type="submit" class="btn-p" ${state.insightSavingCardId === card.id ? "disabled" : ""}>${state.insightSavingCardId === card.id ? "Saving..." : "Save insight"}</button>
+                                <button type="button" class="btn-s" data-action="delete-insight-card" data-insight-card-id="${escapeHtml(card.id)}" ${state.insightSavingCardId === card.id ? "disabled" : ""}>Delete</button>
+                              </div>
+                            </form>
+                          `
+                          : ""
+                      }
+                    </article>
+                  `;
+                  },
+                )
+                .join("")
+            }
           </section>
 
           <aside class="insight-panel">
@@ -3256,22 +4351,38 @@ function renderInsightStage(project) {
 function renderWritingStage(project) {
   const session = selectedReadingSession();
   const sourceTitle = session?.title || dashboardLibraryItems()[0]?.title || project?.name || "Untitled research draft";
-  const sections = [
-    { id: "abstract", label: "Abstract", status: "todo", words: 0 },
-    { id: "intro", label: "Introduction", status: "queue", words: 120 },
-    { id: "related", label: "Related Work", status: "todo", words: 0 },
-    { id: "method", label: "Method", status: "queue", words: 180 },
-    { id: "experiments", label: "Experiments", status: "todo", words: 0 },
-    { id: "conclusion", label: "Conclusion", status: "todo", words: 0 },
-  ];
+  const { draftSections, insightCards } = createDraftFeatureModel(state.projectGraph);
+  const sections = draftSections.length
+    ? draftSections.map((section) => ({
+        id: section.id,
+        label: section.title || section.sectionType || "Section",
+        status: section.status || "draft",
+        words: String(section.body || "").split(/\s+/).filter(Boolean).length,
+      }))
+    : [
+        { id: "abstract", label: "Abstract", status: "todo", words: 0 },
+        { id: "intro", label: "Introduction", status: "queue", words: 120 },
+        { id: "related", label: "Related Work", status: "todo", words: 0 },
+        { id: "method", label: "Method", status: "queue", words: 180 },
+        { id: "experiments", label: "Experiments", status: "todo", words: 0 },
+        { id: "conclusion", label: "Conclusion", status: "todo", words: 0 },
+      ];
+  const activeSection =
+    draftSections.find((section) => section.id === state.activeDraftSectionId) || draftSections[0] || null;
+  const activeInsight =
+    insightCards.find((card) => Array.isArray(activeSection?.insightCardIds) && activeSection.insightCardIds.includes(card.id)) ||
+    insightCards.find((card) => card.id === state.activeInsightCardId) ||
+    insightCards[0] ||
+    null;
+  const draftSaving = Boolean(activeSection?.id && state.draftSavingSectionId === activeSection.id);
   const evidence = [
     {
       label: "Insight Card",
-      detail: session?.summary || "No claim selected.",
+      detail: activeInsight?.claim || session?.summary || "No claim selected.",
     },
     {
       label: "Evidence Bundle",
-      detail: sourceTitle,
+      detail: activeInsight?.evidenceLinkIds?.length ? `${activeInsight.evidenceLinkIds.length} linked source` : sourceTitle,
     },
     {
       label: "Result Dossier",
@@ -3290,7 +4401,13 @@ function renderWritingStage(project) {
           ${sections
             .map(
               (section) => `
-                <button type="button" class="writing-section-row ${section.status === "queue" ? "is-active" : ""}">
+                <button
+                  type="button"
+                  class="writing-section-row ${activeSection?.id === section.id || (!activeSection && section.status === "queue") ? "is-active" : ""}"
+                  data-action="select-draft-section"
+                  data-draft-section-id="${escapeHtml(section.id)}"
+                  ${draftSections.length ? "" : "disabled"}
+                >
                   <span>${escapeHtml(section.label)}</span>
                   <small class="mono">${escapeHtml(section.status)} · ${escapeHtml(String(section.words))}w</small>
                 </button>
@@ -3306,10 +4423,10 @@ function renderWritingStage(project) {
               <div class="writing-kicker">${icon("pen", { size: 14, color: TOKENS.writing })}<span>Writing</span></div>
               <h1>Draft from evidence</h1>
               <p>Source-linked sections and export queue.</p>
-            </div>
+          </div>
           <div class="writing-actions">
-            <button type="button" class="btn-p" disabled>Generate section</button>
-            <button type="button" class="btn-s" disabled>Export</button>
+            <button type="button" class="btn-p" data-action="create-draft-section" ${activeInsight ? "" : "disabled"}>Generate section</button>
+            <button type="button" class="btn-s" data-action="export-writing-draft" ${draftSections.length ? "" : "disabled"}>Export</button>
           </div>
         </div>
 
@@ -3319,15 +4436,68 @@ function renderWritingStage(project) {
             ${renderTag("source-linked draft", TOKENS.writing, true)}
           </div>
           <article class="writing-draft-body">
-            <h2>Method</h2>
+            <h2>${escapeHtml(activeSection?.title || "Method")}</h2>
             <p>
               Source: <strong>${escapeHtml(sourceTitle)}</strong>
             </p>
-            <blockquote>No suggestion selected.</blockquote>
+            <blockquote>${escapeHtml(activeSection?.body || "No suggestion selected.")}</blockquote>
           </article>
+          ${
+            activeSection
+              ? `
+                <form class="writing-section-form" data-action="submit-draft-section-form">
+                  <input type="hidden" name="draftSectionId" value="${escapeHtml(activeSection.id)}" />
+                  <div class="writing-section-form-row">
+                    <label>
+                      <span>Title</span>
+                      <input name="draftSectionTitle" value="${escapeHtml(activeSection.title || "")}" ${draftSaving ? "disabled" : ""} />
+                    </label>
+                    <label>
+                      <span>Type</span>
+                      <select name="draftSectionType" ${draftSaving ? "disabled" : ""}>
+                        ${["abstract", "introduction", "method", "experiments", "related-work", "discussion", "conclusion", "section"]
+                          .map(
+                            (type) =>
+                              `<option value="${type}" ${type === (activeSection.sectionType || "section") ? "selected" : ""}>${type}</option>`,
+                          )
+                          .join("")}
+                      </select>
+                    </label>
+                  </div>
+                  <label>
+                    <span>Body</span>
+                    <textarea name="draftSectionBody" rows="8" ${draftSaving ? "disabled" : ""}>${escapeHtml(activeSection.body || "")}</textarea>
+                  </label>
+                  <div class="writing-section-form-row">
+                    <label>
+                      <span>Status</span>
+                      <select name="draftSectionStatus" ${draftSaving ? "disabled" : ""}>
+                        ${["draft", "review", "done"]
+                          .map(
+                            (status) =>
+                              `<option value="${status}" ${status === (activeSection.status || "draft") ? "selected" : ""}>${status}</option>`,
+                          )
+                          .join("")}
+                      </select>
+                    </label>
+                  </div>
+                  <div class="writing-section-actions">
+                    <button type="submit" class="btn-p" ${draftSaving ? "disabled" : ""}>${draftSaving ? "Saving..." : "Save section"}</button>
+                    <button
+                      type="button"
+                      class="btn-s"
+                      data-action="delete-draft-section"
+                      data-draft-section-id="${escapeHtml(activeSection.id)}"
+                      ${draftSaving ? "disabled" : ""}
+                    >Delete section</button>
+                  </div>
+                </form>
+              `
+              : ""
+          }
           <div class="writing-suggestion-bar">
             <button type="button" class="btn-s" data-action="select-stage" data-stage-id="insight">Insert evidence</button>
-            <button type="button" class="btn-s" disabled>Accept suggestion</button>
+            <button type="button" class="btn-s" data-action="create-draft-section" ${activeInsight ? "" : "disabled"}>Accept suggestion</button>
           </div>
         </section>
       </main>
@@ -3410,6 +4580,72 @@ function isBottomNavMobile() {
   return window.innerWidth <= SEARCH_LAYOUT_BREAKPOINTS.mobileMax;
 }
 
+function isIosViewportBrowserChromeFallbackTarget() {
+  const platform = navigator.platform || "";
+  const userAgent = navigator.userAgent || "";
+  const isIosDevice = /iP(ad|hone|od)/.test(platform) || (/Mac/.test(platform) && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches || navigator.standalone === true;
+  return isBottomNavMobile() && isIosDevice && /Safari/.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent) && !isStandalone;
+}
+
+function getViewportBrowserBottomOcclusion() {
+  const viewport = window.visualViewport;
+  if (!viewport) {
+    return 0;
+  }
+
+  const layoutHeight = window.innerHeight || document.documentElement.clientHeight || viewport.height;
+  const visibleBottom = viewport.offsetTop + viewport.height;
+  return Math.max(0, Math.ceil(layoutHeight - visibleBottom));
+}
+
+function getViewportBrowserBottomFallback() {
+  if (!isIosViewportBrowserChromeFallbackTarget()) {
+    return 0;
+  }
+
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || window.visualViewport?.height || 0;
+  return Math.round(Math.min(
+    IOS_BROWSER_CHROME_FALLBACK_MAX,
+    Math.max(IOS_BROWSER_CHROME_FALLBACK_MIN, viewportHeight * IOS_BROWSER_CHROME_FALLBACK_RATIO),
+  ));
+}
+
+function syncViewportChromeVariables() {
+  document.documentElement.style.setProperty("--viewport-browser-bottom", `${getViewportBrowserBottomOcclusion()}px`);
+  document.documentElement.style.setProperty("--viewport-browser-bottom-fallback", `${getViewportBrowserBottomFallback()}px`);
+}
+
+function scheduleViewportChromeSync() {
+  if (viewportChromeFrame) {
+    return;
+  }
+
+  viewportChromeFrame = window.requestAnimationFrame(() => {
+    viewportChromeFrame = 0;
+    syncViewportChromeVariables();
+    syncBottomNavIndicator();
+  });
+}
+
+function bindViewportChromeLifecycle() {
+  if (viewportChromeLifecycleBound) {
+    return;
+  }
+
+  viewportChromeLifecycleBound = true;
+  syncViewportChromeVariables();
+  window.addEventListener("resize", scheduleViewportChromeSync);
+  window.addEventListener("orientationchange", scheduleViewportChromeSync);
+  window.addEventListener("pageshow", scheduleViewportChromeSync);
+  document.addEventListener("visibilitychange", scheduleViewportChromeSync);
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", scheduleViewportChromeSync);
+    window.visualViewport.addEventListener("scroll", scheduleViewportChromeSync);
+  }
+}
+
 function setBottomNavHidden(nextHidden) {
   if (bottomNavHidden === nextHidden) {
     return;
@@ -3455,6 +4691,8 @@ function onBottomNavScroll() {
 }
 
 function onBottomNavResize() {
+  scheduleViewportChromeSync();
+
   if (bottomNavScrollFrame) {
     window.cancelAnimationFrame(bottomNavScrollFrame);
     bottomNavScrollFrame = 0;
@@ -3507,6 +4745,7 @@ function bindBottomNavLifecycle() {
   }
 
   bottomNavLifecycleBound = true;
+  bindViewportChromeLifecycle();
   primeBottomNavAutoHideState();
   window.addEventListener("scroll", onBottomNavScroll, { passive: true });
   document.addEventListener("scroll", onBottomNavScroll, { passive: true, capture: true });
@@ -3571,7 +4810,7 @@ function render() {
             ? renderInsightStage(project)
             : state.activeStage === "writing"
               ? renderWritingStage(project)
-              : renderPlaceholderStage(project);
+              : renderSearchStage(project);
 
   app.innerHTML = `
     <div
@@ -3706,251 +4945,10 @@ function patchSearchStageUI() {
   return true;
 }
 
-function patchReadingWorkbenchPaneOnly() {
-  if (state.activeStage !== "reading" || state.readingView !== "detail") {
-    return false;
-  }
-
-  const project = activeProject();
-  const currentStage = document.querySelector('[data-ares-surface="reading-stage"]');
-  const currentWorkbenchPane = currentStage?.querySelector(".reading-workbench-pane");
-  if (!project || !currentStage || !currentWorkbenchPane) {
-    return false;
-  }
-
-  const template = document.createElement("template");
-  template.innerHTML = renderReadingStage(project).trim();
-  const nextWorkbenchPane = template.content.querySelector(".reading-workbench-pane");
-  if (!nextWorkbenchPane) {
-    return false;
-  }
-
-  currentWorkbenchPane.replaceWith(nextWorkbenchPane);
-  applyReadingSplitUI();
-  syncAppActivePaperMetadata(currentReadingPaper(project));
-  syncBrowserUrlFromState();
-  return true;
-}
-
-function patchReadingDocumentPaneOnly() {
-  if (state.activeStage !== "reading" || state.readingView !== "detail") {
-    return false;
-  }
-
-  const project = activeProject();
-  const currentStage = document.querySelector('[data-ares-surface="reading-stage"]');
-  const currentDocPane = currentStage?.querySelector(".reading-doc-pane");
-  if (!project || !currentStage || !currentDocPane) {
-    return false;
-  }
-
-  const template = document.createElement("template");
-  template.innerHTML = renderReadingStage(project).trim();
-  const nextDocPane = template.content.querySelector(".reading-doc-pane");
-  if (!nextDocPane) {
-    return false;
-  }
-
-  const preservedPdfPane = state.readingDocumentTab === "pdf" && patchStableReadingPdfDocPane(currentDocPane, nextDocPane);
-  if (!preservedPdfPane) {
-    transplantStableReadingPdfHost(currentDocPane, nextDocPane);
-    currentDocPane.replaceWith(nextDocPane);
-  }
-  applyReadingSplitUI();
-  syncAppActivePaperMetadata(currentReadingPaper(project));
-
-  if (state.readingDocumentTab === "pdf") {
-    if (!preservedPdfPane) {
-      scheduleReadingHydration();
-    }
-  } else {
-    readingPdfController.resetSurface();
-  }
-
-  syncBrowserUrlFromState();
-  return true;
-}
-
-function patchReadingPdfSelectionBarOnly() {
-  if (state.activeStage !== "reading" || state.readingView !== "detail" || state.readingDocumentTab !== "pdf") {
-    return false;
-  }
-
-  const project = activeProject();
-  const currentStage = document.querySelector('[data-ares-surface="reading-stage"]');
-  const currentDock = currentStage?.querySelector(".reading-pdf-dock-layer");
-  const currentTocPanel = currentStage?.querySelector(".toc-panel");
-  const currentPageGridPanel = currentStage?.querySelector(".page-grid-panel");
-  const currentDocPane = currentStage?.querySelector(".reading-doc-pane");
-  const pdfHost = currentStage?.querySelector('[data-reading-pdf-host="true"]');
-  if (!project || !currentStage || !currentDocPane || !pdfHost) {
-    return false;
-  }
-
-  const template = document.createElement("template");
-  template.innerHTML = renderReadingStage(project).trim();
-  const nextDock = template.content.querySelector(".reading-pdf-dock-layer");
-  const nextTocPanel = template.content.querySelector(".toc-panel");
-  const nextPageGridPanel = template.content.querySelector(".page-grid-panel");
-
-  if (currentDock && nextDock) {
-    syncReadingPdfDockState(currentDock, nextDock);
-  } else if (currentDock) {
-    currentDock.remove();
-  } else if (nextDock) {
-    appendReadingPdfDockWithAnimation(currentDocPane, nextDock);
-  }
-
-  if (currentTocPanel && nextTocPanel) {
-    syncReadingPopupPanelState(currentTocPanel, nextTocPanel);
-  } else if (currentTocPanel) {
-    currentTocPanel.remove();
-  } else if (nextTocPanel) {
-    currentDocPane.appendChild(nextTocPanel);
-  }
-
-  if (currentPageGridPanel && nextPageGridPanel) {
-    syncReadingPopupPanelState(currentPageGridPanel, nextPageGridPanel);
-  } else if (currentPageGridPanel) {
-    currentPageGridPanel.remove();
-  } else if (nextPageGridPanel) {
-    currentDocPane.appendChild(nextPageGridPanel);
-  }
-
-  syncAppActivePaperMetadata(currentReadingPaper(project));
-  return true;
-}
-
-function patchReadingPdfSelectionSurfaces() {
-  const patchedDock = patchReadingPdfSelectionBarOnly();
-  const patchedWorkbench = patchReadingWorkbenchPaneOnly();
-  if (!patchedDock || !patchedWorkbench) {
-    refreshReadingStageUI();
-  }
-}
-
 function scrollReadingChatToBottom() {
   const chatBody = document.querySelector(".reading-chat-body");
   if (chatBody) {
     chatBody.scrollTop = chatBody.scrollHeight;
-  }
-}
-
-function patchReadingStageUI({ preserveRailFocus = false } = {}) {
-  if (state.activeStage !== "reading") {
-    return false;
-  }
-
-  const project = activeProject();
-  const currentStage = document.querySelector('[data-ares-surface="reading-stage"]');
-  if (!project || !currentStage) {
-    return false;
-  }
-
-  const template = document.createElement("template");
-  template.innerHTML = renderReadingStage(project).trim();
-  const nextStage = template.content.firstElementChild;
-  if (!nextStage) {
-    return false;
-  }
-
-  const currentView = currentStage.dataset.readingView || "";
-  const nextView = nextStage.dataset.readingView || "";
-  if (currentView !== "detail" || nextView !== "detail") {
-    currentStage.replaceWith(nextStage);
-    syncAppActivePaperMetadata(currentReadingPaper(project));
-    scheduleReadingHydration();
-    return true;
-  }
-
-  const currentMetabar = currentStage.querySelector(".reading-metabar");
-  const nextMetabar = nextStage.querySelector(".reading-metabar");
-  const currentShell = currentStage.querySelector(".reading-shell-main");
-  const nextShell = nextStage.querySelector(".reading-shell-main");
-  if (!currentMetabar || !nextMetabar || !currentShell || !nextShell) {
-    return false;
-  }
-
-  const focusedRailQuery =
-    preserveRailFocus && document.activeElement?.matches?.('[name="readingRailQuery"]')
-      ? {
-          start: document.activeElement.selectionStart ?? null,
-          end: document.activeElement.selectionEnd ?? null,
-          direction: document.activeElement.selectionDirection ?? "none",
-        }
-      : null;
-
-  const currentIconRail = currentShell.querySelector(".reading-icon-rail");
-  const nextIconRail = nextShell.querySelector(".reading-icon-rail");
-  const currentSplit = currentShell.querySelector(".reading-split");
-  const nextSplit = nextShell.querySelector(".reading-split");
-  if (!currentIconRail || !nextIconRail || !currentSplit || !nextSplit) {
-    return false;
-  }
-
-  const currentPanel = currentShell.querySelector(".reading-float-panel");
-  const nextPanel = nextShell.querySelector(".reading-float-panel");
-  const previousPanelScrollTop = currentPanel?.querySelector(".reading-float-panel-body")?.scrollTop ?? 0;
-  const currentWorkbenchStrip = currentShell.querySelector(".reading-wb-strip");
-  const nextWorkbenchStrip = nextShell.querySelector(".reading-wb-strip");
-
-  currentStage.dataset.readingOrientation = nextStage.dataset.readingOrientation || "";
-  replaceReadingNodeIfChanged(currentMetabar, nextMetabar);
-  replaceReadingNodeIfChanged(currentIconRail, nextIconRail);
-
-  if (currentPanel && nextPanel) {
-    if (!currentPanel.isEqualNode(nextPanel)) {
-      currentPanel.className = nextPanel.className;
-      currentPanel.replaceChildren(...Array.from(nextPanel.childNodes));
-      const nextPanelBody = currentPanel.querySelector(".reading-float-panel-body");
-      if (nextPanelBody) {
-        nextPanelBody.scrollTop = previousPanelScrollTop;
-      }
-    }
-  } else if (currentPanel) {
-    currentPanel.remove();
-  } else if (nextPanel) {
-    currentShell.insertBefore(nextPanel, currentSplit);
-  }
-
-  const shouldHydrateReadingPdf = !patchReadingSplitPreservingPdf(currentSplit, nextSplit);
-  if (shouldHydrateReadingPdf) {
-    currentSplit.replaceWith(nextSplit);
-  }
-
-  if (currentWorkbenchStrip && nextWorkbenchStrip) {
-    replaceReadingNodeIfChanged(currentWorkbenchStrip, nextWorkbenchStrip);
-  } else if (currentWorkbenchStrip) {
-    currentWorkbenchStrip.remove();
-  } else if (nextWorkbenchStrip) {
-    currentShell.appendChild(nextWorkbenchStrip);
-  }
-
-  if (focusedRailQuery) {
-    window.requestAnimationFrame(() => {
-      const input = document.querySelector('[name="readingRailQuery"]');
-      if (!input) {
-        return;
-      }
-
-      input.focus();
-      if (focusedRailQuery.start !== null && focusedRailQuery.end !== null) {
-        input.setSelectionRange(focusedRailQuery.start, focusedRailQuery.end, focusedRailQuery.direction);
-      }
-    });
-  }
-
-  syncAppActivePaperMetadata(currentReadingPaper(project));
-  if (shouldHydrateReadingPdf) {
-    scheduleReadingHydration();
-  }
-  syncBrowserUrlFromState();
-  return true;
-}
-
-function refreshReadingStageUI(options = {}) {
-  if (!patchReadingStageUI(options)) {
-    render();
   }
 }
 
@@ -4266,7 +5264,8 @@ document.addEventListener("click", async (event) => {
     state.projectLibrary = [];
     state.scopePicker = null;
     saveStorage(STORAGE_KEYS.project, state.activeProjectId);
-    state.searchInput = activeProject()?.defaultQuery || "";
+    await loadProjectGraph();
+    state.searchInput = activeResearchQuestion()?.prompt || activeProject()?.defaultQuery || "";
     resetSearchState();
     await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: false });
@@ -4347,6 +5346,7 @@ document.addEventListener("click", async (event) => {
 
   if (action === "select-reading-home-paper") {
     state.readingHomeSelectedPaperId = trigger.dataset.readingPaperId || "";
+    state.readingHomePreviewMenuOpen = false;
     if (state.readingHomeLayout !== "desktop") {
       state.readingHomePreviewOpen = true;
     }
@@ -4356,18 +5356,73 @@ document.addEventListener("click", async (event) => {
 
   if (action === "close-reading-home-preview") {
     state.readingHomePreviewOpen = false;
+    state.readingHomePreviewMenuOpen = false;
     refreshReadingStageUI();
     return;
   }
 
+  if (action === "toggle-reading-home-preview-menu") {
+    const paperId = trigger.dataset.readingPaperId || "";
+    if (paperId) {
+      state.readingHomeSelectedPaperId = paperId;
+    }
+    state.readingHomePreviewMenuOpen = !state.readingHomePreviewMenuOpen;
+    refreshReadingStageUI();
+    return;
+  }
+
+  if (action === "open-reading-home-source") {
+    const paperId = trigger.dataset.readingPaperId || "";
+    if (paperId) {
+      state.readingHomeSelectedPaperId = paperId;
+    }
+    state.readingHomePreviewMenuOpen = false;
+    const sourceUrl = readingHomeSourceUrl();
+    if (sourceUrl) {
+      window.open(sourceUrl, "_blank", "noopener,noreferrer");
+      refreshReadingStageUI();
+    } else {
+      state.error = "Source URL is not available for this paper.";
+      render();
+    }
+    return;
+  }
+
+  if (action === "copy-reading-home-paper-link") {
+    const paperId = trigger.dataset.readingPaperId || "";
+    if (paperId) {
+      state.readingHomeSelectedPaperId = paperId;
+    }
+    state.readingHomePreviewMenuOpen = false;
+    const sourceUrl = readingHomeSourceUrl();
+    if (sourceUrl) {
+      try {
+        await copyTextToClipboard(sourceUrl);
+      } catch (error) {
+        state.error = error.message;
+      }
+      refreshReadingStageUI();
+    } else {
+      state.error = "Source URL is not available for this paper.";
+      render();
+    }
+    return;
+  }
+
   if (action === "open-reading-detail") {
+    state.readingHomePreviewMenuOpen = false;
     await openReadingDetailForPaper(trigger.dataset.readingPaperId || "");
     return;
   }
 
   if (action === "select-reading-session") {
+    const nextSessionId = trigger.dataset.readingSessionId || "";
     state.readingView = "detail";
-    state.activeReadingSessionId = trigger.dataset.readingSessionId || "";
+    if (nextSessionId !== state.activeReadingSessionId) {
+      state.readingPdfSourceHighlight = null;
+      state.readingPdfTargetPage = null;
+    }
+    state.activeReadingSessionId = nextSessionId;
     state.readingHomeSelectedPaperId = selectedReadingSession()?.paperId || state.readingHomeSelectedPaperId;
     renderWithViewTransition();
     return;
@@ -4405,6 +5460,7 @@ document.addEventListener("click", async (event) => {
     state.readingContextMenuOpen = false;
     if (state.readingDocumentTab !== "pdf") {
       state.readingPdfTargetPage = null;
+      state.readingPdfSourceHighlight = null;
     }
     if (!patchReadingDocumentPaneOnly()) {
       refreshReadingStageUI();
@@ -4459,8 +5515,23 @@ document.addEventListener("click", async (event) => {
   if (action === "jump-reading-page") {
     const page = Number(trigger.dataset.readingPage || trigger.dataset.page || "");
     if (Number.isFinite(page) && page > 0) {
+      const session = selectedReadingSession();
+      const assetId = String(trigger.dataset.readingAssetId || "");
+      const sourceAsset = assetId ? session?.assets?.find?.((asset) => asset.id === assetId) : null;
+      const sourceBounds = sourceAsset?.sourceBounds;
       state.readingDocumentTab = "pdf";
       state.readingPdfTargetPage = page;
+      state.readingPdfSourceHighlight =
+        sourceBounds?.unit === "page-ratio"
+          ? {
+              height: Number(sourceBounds.height) || 0,
+              page: Number(sourceBounds.page || page) || page,
+              unit: "page-ratio",
+              width: Number(sourceBounds.width) || 0,
+              x: Number(sourceBounds.x) || 0,
+              y: Number(sourceBounds.y) || 0,
+            }
+          : null;
       state.readingPdfDockPanel = "";
       refreshReadingStageUI();
       window.requestAnimationFrame(() => {
@@ -4477,6 +5548,24 @@ document.addEventListener("click", async (event) => {
     state.readingPdfDockPanel = state.readingPdfDockPanel === panel ? "" : panel;
     if (!patchReadingPdfSelectionBarOnly()) {
       refreshReadingStageUI();
+    }
+    return;
+  }
+
+  if (action === "jump-reading-pdf-search-result") {
+    const page = Number(trigger.dataset.readingPage || "");
+    if (Number.isFinite(page) && page > 0) {
+      state.readingPdfTargetPage = page;
+      state.readingPdfSourceHighlight = null;
+      state.readingPdfDockPanel = "";
+      if (!patchReadingPdfSelectionBarOnly()) {
+        refreshReadingStageUI();
+      }
+      window.requestAnimationFrame(() => {
+        if (!readingPdfController.scrollToPage(page)) {
+          scheduleReadingHydration();
+        }
+      });
     }
     return;
   }
@@ -4526,6 +5615,7 @@ document.addEventListener("click", async (event) => {
               origin: "selection-highlight",
               page: selection.page || null,
               quote: selection.quote,
+              sourceBounds: selection.sourceBounds,
             }),
           }),
         );
@@ -4555,6 +5645,7 @@ document.addEventListener("click", async (event) => {
               origin: "selection",
               page: selection.page || null,
               quote: selection.quote,
+              sourceBounds: selection.sourceBounds,
             }),
           }),
         );
@@ -4634,6 +5725,83 @@ document.addEventListener("click", async (event) => {
     if (!patchReadingDocumentPaneOnly()) {
       refreshReadingStageUI();
     }
+    return;
+  }
+
+  if (action === "open-reading-asset-data") {
+    const session = selectedReadingSession();
+    const assetId = trigger.dataset.readingAssetId || state.readingAssetDetailId || "";
+    const asset = Array.isArray(session?.assets) ? session.assets.find((entry) => entry.id === assetId) : null;
+    if (!session?.id || !asset?.id || !asset.dataPath) {
+      state.error = "Asset data file is not available.";
+      render();
+      return;
+    }
+
+    const dataUrl = appUrl(
+      `api/reading-sessions/${encodeURIComponent(session.id)}/assets/${encodeURIComponent(asset.id)}/file?kind=data`,
+    ).href;
+    window.open(dataUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  if (action === "copy-reading-asset-citation") {
+    const session = selectedReadingSession();
+    const assetId = trigger.dataset.readingAssetId || state.readingAssetDetailId || "";
+    const asset = Array.isArray(session?.assets) ? session.assets.find((entry) => entry.id === assetId) : null;
+    if (!session?.id || !asset?.id) {
+      state.error = "Asset citation is not available.";
+      render();
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(readingAssetCitationText(session, asset));
+      state.error = "";
+    } catch (error) {
+      state.error = error.message;
+    }
+    refreshReadingStageUI();
+    return;
+  }
+
+  if (action === "create-reading-asset-evidence") {
+    const project = activeProject();
+    const session = selectedReadingSession();
+    const assetId = trigger.dataset.readingAssetId || state.readingAssetDetailId || "";
+    const asset = Array.isArray(session?.assets) ? session.assets.find((entry) => entry.id === assetId) : null;
+    if (!project || !session?.id || !asset?.id) {
+      state.error = "Asset evidence cannot be created from the current selection.";
+      render();
+      return;
+    }
+
+    try {
+      await api(`api/projects/${encodeURIComponent(project.id)}/evidence-links`, {
+        method: "POST",
+        body: JSON.stringify({
+          createdBy: "user",
+          locator: {
+            assetId: asset.id,
+            dataPath: asset.dataPath || "",
+            thumbPath: asset.thumbPath || "",
+          },
+          page: asset.page || null,
+          paperId: session.paperId || "",
+          quote: asset.caption || asset.title || `${asset.kind || "Asset"} ${asset.number || ""}`.trim(),
+          readingSessionId: session.id,
+          sectionId: asset.sectionId || "",
+          sourceId: asset.id,
+          sourceRefs: [{ id: asset.id, label: asset.caption || asset.title || "Reading asset", type: "readingAsset" }],
+          sourceType: "readingAsset",
+        }),
+      });
+      await loadProjectGraph();
+      state.error = "";
+    } catch (error) {
+      state.error = error.message;
+    }
+    refreshReadingStageUI();
     return;
   }
 
@@ -4766,6 +5934,80 @@ document.addEventListener("click", async (event) => {
       await handoffReadingToResearch({
         noteId: noteCard?.dataset.readingNoteId || "",
       });
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
+  if (action === "create-manual-experiment-run") {
+    try {
+      await createManualExperimentRun();
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
+  if (action === "create-insight-card") {
+    try {
+      await createInsightCardFromEvidence();
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
+  if (action === "select-insight-card") {
+    state.activeInsightCardId = trigger.dataset.insightCardId || "";
+    render();
+    return;
+  }
+
+  if (action === "delete-insight-card") {
+    try {
+      await deleteInsightCard(trigger.dataset.insightCardId || "");
+    } catch (error) {
+      state.error = error.message;
+      state.insightSavingCardId = "";
+      render();
+    }
+    return;
+  }
+
+  if (action === "create-draft-section") {
+    try {
+      await createDraftSectionFromInsight();
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
+  if (action === "select-draft-section") {
+    state.activeDraftSectionId = trigger.dataset.draftSectionId || "";
+    render();
+    return;
+  }
+
+  if (action === "delete-draft-section") {
+    try {
+      await deleteDraftSection(trigger.dataset.draftSectionId || "");
+    } catch (error) {
+      state.error = error.message;
+      state.draftSavingSectionId = "";
+      render();
+    }
+    return;
+  }
+
+  if (action === "export-writing-draft") {
+    try {
+      await exportWritingDraft();
     } catch (error) {
       state.error = error.message;
       render();
@@ -4951,6 +6193,13 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "set-theme-mode") {
+    if (setThemeMode(trigger.dataset.themeMode)) {
+      render();
+    }
+    return;
+  }
+
   if (action === "toggle-workflow-menu") {
     state.openWorkflowMenu = state.openWorkflowMenu === trigger.dataset.stageId ? "" : trigger.dataset.stageId;
     render();
@@ -5041,6 +6290,67 @@ function countReadingSelectionLines(value) {
   return Math.max(1, Math.ceil(text.replace(/\s+/g, " ").trim().length / 84));
 }
 
+function normalizeReadingSelectionRects(rects, surfaceRect) {
+  if (!surfaceRect?.width || !surfaceRect?.height) {
+    return [];
+  }
+
+  return Array.from(rects || [])
+    .map((rect) => {
+      const width = Math.min(1, Math.max(0.01, (rect.right - rect.left) / surfaceRect.width));
+      const height = Math.min(1, Math.max(0.01, (rect.bottom - rect.top) / surfaceRect.height));
+      return {
+        height,
+        width,
+        x: Math.min(1 - width, Math.max(0, (rect.left - surfaceRect.left) / surfaceRect.width)),
+        y: Math.min(1 - height, Math.max(0, (rect.top - surfaceRect.top) / surfaceRect.height)),
+      };
+    })
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .slice(0, 24);
+}
+
+function captureReadingSelectionSourceBounds(selection, pageNode, page) {
+  if (!selection?.rangeCount || !pageNode) {
+    return null;
+  }
+
+  const surface = pageNode.querySelector(".reading-pdf-page-surface") || pageNode;
+  const surfaceRect = surface.getBoundingClientRect?.();
+  if (!surfaceRect?.width || !surfaceRect?.height) {
+    return null;
+  }
+
+  const rects = Array.from(selection.getRangeAt(0).getClientRects?.() || [])
+    .map((rect) => ({
+      bottom: Math.min(rect.bottom, surfaceRect.bottom),
+      left: Math.max(rect.left, surfaceRect.left),
+      right: Math.min(rect.right, surfaceRect.right),
+      top: Math.max(rect.top, surfaceRect.top),
+    }))
+    .filter((rect) => rect.right > rect.left && rect.bottom > rect.top);
+
+  if (!rects.length) {
+    return null;
+  }
+
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const right = Math.max(...rects.map((rect) => rect.right));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  const width = Math.min(1, Math.max(0.01, (right - left) / surfaceRect.width));
+  const height = Math.min(1, Math.max(0.01, (bottom - top) / surfaceRect.height));
+  return {
+    height,
+    page,
+    rects: normalizeReadingSelectionRects(rects, surfaceRect),
+    unit: "page-ratio",
+    width,
+    x: Math.min(1 - width, Math.max(0, (left - surfaceRect.left) / surfaceRect.width)),
+    y: Math.min(1 - height, Math.max(0, (top - surfaceRect.top) / surfaceRect.height)),
+  };
+}
+
 function captureReadingPdfSelection() {
   if (state.activeStage !== "reading" || state.readingView !== "detail" || state.readingDocumentTab !== "pdf") {
     return;
@@ -5072,6 +6382,7 @@ function captureReadingPdfSelection() {
     page: Number.isFinite(page) && page > 0 ? page : null,
     quote: quote.slice(0, 900),
     sessionId: session.id,
+    sourceBounds: captureReadingSelectionSourceBounds(selection, pageNode, page),
   };
   state.readingPdfDockSelectionActive = true;
   patchReadingPdfSelectionSurfaces();
@@ -5182,6 +6493,92 @@ document.addEventListener("keydown", async (event) => {
 });
 
 document.addEventListener("submit", async (event) => {
+  const draftSectionForm = event.target.closest('[data-action="submit-draft-section-form"]');
+  if (draftSectionForm) {
+    event.preventDefault();
+    try {
+      await saveDraftSectionEdit(draftSectionForm);
+    } catch (error) {
+      state.error = error.message;
+      state.draftSavingSectionId = "";
+      render();
+    }
+    return;
+  }
+
+  const insightCardForm = event.target.closest('[data-action="submit-insight-card-form"]');
+  if (insightCardForm) {
+    event.preventDefault();
+    try {
+      await saveInsightCardEdit(insightCardForm);
+    } catch (error) {
+      state.error = error.message;
+      state.insightSavingCardId = "";
+      render();
+    }
+    return;
+  }
+
+  const labResultForm = event.target.closest('[data-action="submit-lab-result-form"]');
+  if (labResultForm) {
+    event.preventDefault();
+    try {
+      await saveLabExperimentResult(labResultForm);
+    } catch (error) {
+      state.error = error.message;
+      state.labSavingRunId = "";
+      render();
+    }
+    return;
+  }
+
+  const labImportForm = event.target.closest('[data-action="submit-lab-import-form"]');
+  if (labImportForm) {
+    event.preventDefault();
+    try {
+      await importExternalExperimentRun(labImportForm);
+    } catch (error) {
+      state.error = error.message;
+      state.labImporting = false;
+      render();
+    }
+    return;
+  }
+
+  const readingTextImportForm = event.target.closest('[data-action="submit-reading-text-import-form"]');
+  if (readingTextImportForm) {
+    event.preventDefault();
+    const currentSession = selectedReadingSession();
+    const formData = new FormData(readingTextImportForm);
+    const text = String(formData.get("readingTextImport") || "").trim();
+    const sourceLabel = String(formData.get("readingTextImportSource") || "External OCR import").trim();
+    const tool = String(formData.get("readingTextImportTool") || "").trim();
+    const generatedAt = String(formData.get("readingTextImportGeneratedAt") || "").trim();
+    if (!currentSession?.id) {
+      return;
+    }
+    if (!text) {
+      state.error = "Paste extracted text before importing.";
+      render();
+      return;
+    }
+
+    try {
+      await runReadingRequest("importText", currentSession.id, () =>
+            api(readingSessionApiPath(currentSession.id, "import-text"), {
+              method: "POST",
+              body: JSON.stringify({ generatedAt: generatedAt || null, sourceLabel, text, tool }),
+            }),
+          );
+      state.readingDocumentTab = "summary";
+      render();
+    } catch (error) {
+      state.error = error.message;
+      render();
+    }
+    return;
+  }
+
   const readingChatForm = event.target.closest('[data-action="submit-reading-chat-form"]');
   if (readingChatForm) {
     event.preventDefault();
@@ -5194,12 +6591,13 @@ document.addEventListener("submit", async (event) => {
 
     const selectedTextContext =
       state.readingPdfSelection?.sessionId === currentSession.id && state.readingPdfSelection.quote
-        ? {
-            lineCount: state.readingPdfSelection.lineCount || countReadingSelectionLines(state.readingPdfSelection.quote),
-            page: state.readingPdfSelection.page || null,
-            quote: state.readingPdfSelection.quote,
-          }
-        : null;
+            ? {
+                lineCount: state.readingPdfSelection.lineCount || countReadingSelectionLines(state.readingPdfSelection.quote),
+                page: state.readingPdfSelection.page || null,
+                quote: state.readingPdfSelection.quote,
+                sourceBounds: state.readingPdfSelection.sourceBounds,
+              }
+            : null;
     const optimisticStamp = Date.now();
     const optimisticUserMessage = {
       createdAt: new Date(optimisticStamp).toISOString(),
@@ -5293,6 +6691,22 @@ document.addEventListener("input", (event) => {
   if (event.target.name === "readingRailQuery") {
     state.readingRailQuery = event.target.value;
     refreshReadingStageUI({ preserveRailFocus: true });
+    return;
+  }
+
+  if (
+    event.target.name === "readingPdfSearchQuery" ||
+    event.target.closest?.('[data-action="set-reading-pdf-search-query"]')
+  ) {
+    state.readingPdfSearchQuery = event.target.value;
+    if (state.readingPdfDockPanel !== "search") {
+      state.readingPdfDockPanel = "search";
+    }
+    if (!patchReadingPdfSelectionBarOnly()) {
+      refreshReadingStageUI();
+    }
+    const searchInput = document.querySelector('[name="readingPdfSearchQuery"]');
+    searchInput?.focus();
     return;
   }
 
@@ -5504,8 +6918,9 @@ window.addEventListener("resize", () => {
 async function boot() {
   try {
     await loadProjects();
+    await loadProjectGraph();
     const project = activeProject();
-    state.searchInput = project?.defaultQuery || "";
+    state.searchInput = activeResearchQuestion()?.prompt || project?.defaultQuery || "";
     resetSearchState();
     await loadProjectLibrary();
     await loadReadingSessions({ preserveSelection: Boolean(state.activeReadingSessionId) });
@@ -5522,5 +6937,6 @@ async function boot() {
   }
 }
 
+bindThemeModeListener();
 renderWithViewTransition();
 boot();

@@ -3,25 +3,27 @@ import { promises as fs } from 'node:fs';
 
 import { Pool } from 'pg';
 
+import { ASSET_COLLECTIONS, normaliseAsset, normalisePaper } from './asset-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
-
-const ASSET_COLLECTIONS = [
-  'agentRuns',
-  'readingSessions',
-  'reproChecklistItems',
-  'experimentRuns',
-  'resultComparisons',
-  'insightNotes',
-  'writingDrafts',
-];
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
-const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error']);
+const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
 const MAX_AGENT_PROGRESS_EVENTS = 80;
+const EVIDENCE_LINK_REFERENCE_COLLECTIONS = [
+  'readingPackets',
+  'reproductionPlans',
+  'resultDossiers',
+  'insightCards',
+  'draftSections',
+];
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function jsonPayload(value) {
+  return JSON.stringify(value ?? {});
 }
 
 function ensureArrayMap(state, key) {
@@ -86,6 +88,14 @@ function sortByUpdatedDesc(left, right) {
   const leftStamp = Date.parse(left.updatedAt || left.createdAt || 0) || 0;
   const rightStamp = Date.parse(right.updatedAt || right.createdAt || 0) || 0;
   return rightStamp - leftStamp;
+}
+
+function removeAssetId(values, id) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.filter((value) => value !== id);
 }
 
 function ensureText(value, fallback = '') {
@@ -286,7 +296,7 @@ async function importBootstrapState(client, state) {
     await client.query(
       `
         INSERT INTO ares_projects (id, name, color, focus, default_query, keywords, payload)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           color = EXCLUDED.color,
@@ -302,8 +312,8 @@ async function importBootstrapState(client, state) {
         project.color,
         project.focus,
         project.defaultQuery,
-        ensureStringArray(project.keywords),
-        project,
+        jsonPayload(ensureStringArray(project.keywords)),
+        jsonPayload(project),
       ],
     );
   }
@@ -313,13 +323,13 @@ async function importBootstrapState(client, state) {
       await client.query(
         `
           INSERT INTO ares_library (project_id, paper_id, payload, saved_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5)
+          VALUES ($1, $2, $3::jsonb, $4, $5)
           ON CONFLICT (project_id, paper_id) DO UPDATE SET
             payload = EXCLUDED.payload,
             saved_at = EXCLUDED.saved_at,
             updated_at = EXCLUDED.updated_at
         `,
-        [projectId, paper.paperId, paper, paper.savedAt || nowIso(), paper.updatedAt || paper.savedAt || nowIso()],
+        [projectId, paper.paperId, jsonPayload(paper), paper.savedAt || nowIso(), paper.updatedAt || paper.savedAt || nowIso()],
       );
     }
   }
@@ -329,13 +339,13 @@ async function importBootstrapState(client, state) {
       await client.query(
         `
           INSERT INTO ares_reading_queue (project_id, paper_id, payload, queued_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5)
+          VALUES ($1, $2, $3::jsonb, $4, $5)
           ON CONFLICT (project_id, paper_id) DO UPDATE SET
             payload = EXCLUDED.payload,
             queued_at = EXCLUDED.queued_at,
             updated_at = EXCLUDED.updated_at
         `,
-        [projectId, entry.paperId, entry, entry.queuedAt || nowIso(), entry.updatedAt || entry.queuedAt || nowIso()],
+        [projectId, entry.paperId, jsonPayload(entry), entry.queuedAt || nowIso(), entry.updatedAt || entry.queuedAt || nowIso()],
       );
     }
   }
@@ -344,7 +354,7 @@ async function importBootstrapState(client, state) {
     await client.query(
       `
         INSERT INTO ares_reading_sessions (id, project_id, paper_id, status, created_at, updated_at, payload)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
         ON CONFLICT (project_id, paper_id) DO UPDATE SET
           id = EXCLUDED.id,
           status = EXCLUDED.status,
@@ -358,7 +368,7 @@ async function importBootstrapState(client, state) {
         normaliseStatus(session.status, 'todo'),
         session.createdAt || nowIso(),
         session.updatedAt || nowIso(),
-        session,
+        jsonPayload(session),
       ],
     );
   }
@@ -378,7 +388,7 @@ async function importBootstrapState(client, state) {
           finished_at,
           payload
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
         ON CONFLICT (id) DO UPDATE SET
           stage = EXCLUDED.stage,
           task_kind = EXCLUDED.task_kind,
@@ -398,7 +408,7 @@ async function importBootstrapState(client, state) {
         run.updatedAt || nowIso(),
         run.startedAt || null,
         run.finishedAt || null,
-        run,
+        jsonPayload(run),
       ],
     );
   }
@@ -408,13 +418,13 @@ async function importBootstrapState(client, state) {
       await client.query(
         `
           INSERT INTO ares_project_assets (collection_name, id, project_id, created_at, updated_at, payload)
-          VALUES ($1, $2, $3, $4, $5, $6)
+          VALUES ($1, $2, $3, $4, $5, $6::jsonb)
           ON CONFLICT (collection_name, id) DO UPDATE SET
             project_id = EXCLUDED.project_id,
             updated_at = EXCLUDED.updated_at,
             payload = EXCLUDED.payload
         `,
-        [collectionName, asset.id, asset.projectId, asset.createdAt || nowIso(), asset.updatedAt || nowIso(), asset],
+        [collectionName, asset.id, asset.projectId, asset.createdAt || nowIso(), asset.updatedAt || nowIso(), jsonPayload(asset)],
       );
     }
   }
@@ -588,13 +598,13 @@ async function upsertLibraryRow(pool, projectId, paper) {
   await pool.query(
     `
       INSERT INTO ares_library (project_id, paper_id, payload, saved_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3::jsonb, $4, $5)
       ON CONFLICT (project_id, paper_id) DO UPDATE SET
         payload = EXCLUDED.payload,
         saved_at = EXCLUDED.saved_at,
         updated_at = EXCLUDED.updated_at
     `,
-    [projectId, paper.paperId, paper, paper.savedAt || nowIso(), paper.updatedAt || paper.savedAt || nowIso()],
+    [projectId, paper.paperId, jsonPayload(paper), paper.savedAt || nowIso(), paper.updatedAt || paper.savedAt || nowIso()],
   );
 }
 
@@ -602,13 +612,13 @@ async function upsertQueueRow(pool, projectId, entry) {
   await pool.query(
     `
       INSERT INTO ares_reading_queue (project_id, paper_id, payload, queued_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3::jsonb, $4, $5)
       ON CONFLICT (project_id, paper_id) DO UPDATE SET
         payload = EXCLUDED.payload,
         queued_at = EXCLUDED.queued_at,
         updated_at = EXCLUDED.updated_at
     `,
-    [projectId, entry.paperId, entry, entry.queuedAt || nowIso(), entry.updatedAt || entry.queuedAt || nowIso()],
+    [projectId, entry.paperId, jsonPayload(entry), entry.queuedAt || nowIso(), entry.updatedAt || entry.queuedAt || nowIso()],
   );
 }
 
@@ -616,7 +626,7 @@ async function upsertReadingSessionRow(pool, session) {
   await pool.query(
     `
       INSERT INTO ares_reading_sessions (id, project_id, paper_id, status, created_at, updated_at, payload)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
       ON CONFLICT (project_id, paper_id) DO UPDATE SET
         id = EXCLUDED.id,
         status = EXCLUDED.status,
@@ -630,7 +640,7 @@ async function upsertReadingSessionRow(pool, session) {
       normaliseStatus(session.status, 'todo'),
       session.createdAt || nowIso(),
       session.updatedAt || nowIso(),
-      session,
+      jsonPayload(session),
     ],
   );
 }
@@ -650,7 +660,7 @@ async function upsertAgentRunRow(pool, run) {
         finished_at,
         payload
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
       ON CONFLICT (id) DO UPDATE SET
         stage = EXCLUDED.stage,
         task_kind = EXCLUDED.task_kind,
@@ -670,7 +680,7 @@ async function upsertAgentRunRow(pool, run) {
       run.updatedAt || nowIso(),
       run.startedAt || null,
       run.finishedAt || null,
-      run,
+      jsonPayload(run),
     ],
   );
 }
@@ -679,13 +689,13 @@ async function upsertProjectAssetRow(pool, collectionName, asset) {
   await pool.query(
     `
       INSERT INTO ares_project_assets (collection_name, id, project_id, created_at, updated_at, payload)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
       ON CONFLICT (collection_name, id) DO UPDATE SET
         project_id = EXCLUDED.project_id,
         updated_at = EXCLUDED.updated_at,
         payload = EXCLUDED.payload
     `,
-    [collectionName, asset.id, asset.projectId, asset.createdAt || nowIso(), asset.updatedAt || nowIso(), asset],
+    [collectionName, asset.id, asset.projectId, asset.createdAt || nowIso(), asset.updatedAt || nowIso(), jsonPayload(asset)],
   );
 }
 
@@ -840,6 +850,70 @@ export async function createPostgresStore({
     return null;
   }
 
+  function listGraphPapers(projectId) {
+    const papers = new Map();
+
+    for (const paper of [...libraryFor(projectId), ...queueFor(projectId)]) {
+      const normalized = normalisePaper(paper, { projectId });
+      papers.set(normalized.paperId, normalized);
+    }
+
+    for (const session of listCollection('readingSessions', { projectId })) {
+      const normalized = normaliseReadingSession(session);
+      const paper = normalisePaper(
+        {
+          abstract: normalized.abstract,
+          authors: normalized.authors,
+          createdAt: normalized.createdAt,
+          keywords: normalized.keywords,
+          paperId: normalized.paperId,
+          paperUrl: normalized.paperUrl,
+          pdfUrl: normalized.pdfUrl,
+          sourceProvider: normalized.sourceProvider || 'reading',
+          status: normalized.status,
+          summary: normalized.summary,
+          title: normalized.title,
+          updatedAt: normalized.updatedAt,
+          venue: normalized.venue,
+          year: normalized.year,
+        },
+        { projectId },
+      );
+      papers.set(paper.paperId, { ...papers.get(paper.paperId), ...paper });
+    }
+
+    return Array.from(papers.values()).sort(sortByUpdatedDesc);
+  }
+
+  function getProjectGraph(projectId) {
+    const project = projectSummary(ensureProject(projectId));
+    const researchQuestions = listCollection('researchQuestions', { projectId });
+    return {
+      drafts: listCollection('drafts', { projectId }),
+      draftSections: listCollection('draftSections', { projectId }),
+      evidenceLinks: listCollection('evidenceLinks', { projectId }),
+      experimentRuns: listCollection('experimentRuns', { projectId }),
+      graphVersion: 1,
+      insightCards: listCollection('insightCards', { projectId }),
+      papers: listGraphPapers(projectId),
+      project,
+      readingPackets: listCollection('readingPackets', { projectId }),
+      reproductionPlans: listCollection('reproductionPlans', { projectId }),
+      researchQuestions: researchQuestions.length
+        ? researchQuestions
+        : [
+            normaliseAsset('researchQuestions', {
+              id: `question-${project.id}-default`,
+              projectId,
+              prompt: project.defaultQuery || project.focus || project.name,
+              status: 'active',
+              title: project.focus || project.defaultQuery || `${project.name} question`,
+            }),
+          ],
+      resultDossiers: listCollection('resultDossiers', { projectId }),
+    };
+  }
+
   return {
     backend: 'postgres',
 
@@ -861,6 +935,8 @@ export async function createPostgresStore({
     getProject(projectId) {
       return projectSummary(ensureProject(projectId));
     },
+
+    getProjectGraph,
 
     getLibrary(projectId) {
       return clone(libraryFor(projectId));
@@ -1016,11 +1092,13 @@ export async function createPostgresStore({
       const collection = collectionFor(collectionName);
       const previous = collection.find((entry) => entry[matchBy] === input[matchBy]) || null;
       const next = {
-        ...clone(input),
+        ...normaliseAsset(collectionName, input, {
+          prefix: options.prefix || collectionName.replace(/s$/, ''),
+          projectId,
+        }),
         createdAt,
         id,
         projectId,
-        sourceRefs: ensureObjectArray(input.sourceRefs),
         updatedAt,
       };
 
@@ -1034,6 +1112,110 @@ export async function createPostgresStore({
       return clone(persisted);
     },
 
+    async deleteProjectAsset(collectionName, id, { projectId } = {}) {
+      if (!ASSET_COLLECTIONS.includes(collectionName) || collectionName === 'agentRuns' || collectionName === 'readingSessions') {
+        throw new Error(`Unsupported asset collection: ${collectionName}`);
+      }
+
+      const assetId = String(id || '').trim();
+      if (!assetId) {
+        throw new Error(`${collectionName} id is required.`);
+      }
+
+      const collection = collectionFor(collectionName);
+      const index = collection.findIndex((entry) => {
+        if (entry.id !== assetId) {
+          return false;
+        }
+
+        return !projectId || entry.projectId === projectId;
+      });
+
+      if (index < 0) {
+        return { deleted: false, id: assetId };
+      }
+
+      collection.splice(index, 1);
+      const changedReferenceAssets = [];
+      if (collectionName === 'insightCards') {
+        for (const section of collectionFor('draftSections')) {
+          if (projectId && section.projectId !== projectId) {
+            continue;
+          }
+
+          const nextInsightCardIds = removeAssetId(section.insightCardIds, assetId);
+          if (nextInsightCardIds.length !== (section.insightCardIds || []).length) {
+            section.insightCardIds = nextInsightCardIds;
+            section.updatedAt = nowIso();
+            changedReferenceAssets.push(['draftSections', section]);
+          }
+        }
+      }
+      if (collectionName === 'evidenceLinks') {
+        for (const referenceCollectionName of EVIDENCE_LINK_REFERENCE_COLLECTIONS) {
+          for (const asset of collectionFor(referenceCollectionName)) {
+            if (projectId && asset.projectId !== projectId) {
+              continue;
+            }
+
+            const nextEvidenceLinkIds = removeAssetId(asset.evidenceLinkIds, assetId);
+            if (nextEvidenceLinkIds.length !== (asset.evidenceLinkIds || []).length) {
+              asset.evidenceLinkIds = nextEvidenceLinkIds;
+              asset.updatedAt = nowIso();
+              changedReferenceAssets.push([referenceCollectionName, asset]);
+            }
+          }
+        }
+      }
+      const deletedDraftSectionIds = [];
+      if (collectionName === 'drafts') {
+        const draftSections = collectionFor('draftSections');
+        for (let draftSectionIndex = draftSections.length - 1; draftSectionIndex >= 0; draftSectionIndex -= 1) {
+          const section = draftSections[draftSectionIndex];
+          if (section.draftId !== assetId) {
+            continue;
+          }
+
+          if (projectId && section.projectId !== projectId) {
+            continue;
+          }
+
+          deletedDraftSectionIds.push(section.id);
+          draftSections.splice(draftSectionIndex, 1);
+        }
+      }
+      if (projectId) {
+        await pool.query('DELETE FROM ares_project_assets WHERE collection_name = $1 AND id = $2 AND project_id = $3', [
+          collectionName,
+          assetId,
+          projectId,
+        ]);
+      } else {
+        await pool.query('DELETE FROM ares_project_assets WHERE collection_name = $1 AND id = $2', [
+          collectionName,
+          assetId,
+        ]);
+      }
+      for (const [referenceCollectionName, asset] of changedReferenceAssets) {
+        await upsertProjectAssetRow(pool, referenceCollectionName, asset);
+      }
+      for (const draftSectionId of deletedDraftSectionIds) {
+        if (projectId) {
+          await pool.query('DELETE FROM ares_project_assets WHERE collection_name = $1 AND id = $2 AND project_id = $3', [
+            'draftSections',
+            draftSectionId,
+            projectId,
+          ]);
+        } else {
+          await pool.query('DELETE FROM ares_project_assets WHERE collection_name = $1 AND id = $2', [
+            'draftSections',
+            draftSectionId,
+          ]);
+        }
+      }
+      return { deleted: true, id: assetId };
+    },
+
     async createAgentRun(input) {
       const projectId = String(input.projectId || '').trim();
       if (!projectId) {
@@ -1045,7 +1227,11 @@ export async function createPostgresStore({
       const next = {
         agent: ensureText(input.agent, 'Agent'),
         assetRefs: ensureObjectArray(input.assetRefs),
+        candidateAssetIds: ensureStringArray(input.candidateAssetIds, 128),
+        cancelReason: ensureText(input.cancelReason),
+        cancelRequestedAt: input.cancelRequestedAt || null,
         createdAt,
+        createdAssetIds: ensureStringArray(input.createdAssetIds, 128),
         error: ensureText(input.error),
         finishedAt: input.finishedAt || null,
         id: String(input.id || createId('run')),
@@ -1055,6 +1241,7 @@ export async function createPostgresStore({
         progressEvents: ensureProgressEvents(input.progressEvents),
         profileId: ensureText(input.profileId),
         projectId,
+        sourceAssetIds: ensureStringArray(input.sourceAssetIds, 128),
         stage: ensureText(input.stage),
         startedAt: input.startedAt || null,
         status: normaliseStatus(input.status, 'todo'),
@@ -1078,11 +1265,19 @@ export async function createPostgresStore({
         ...existing,
         ...clone(patch),
         assetRefs: patch.assetRefs !== undefined ? ensureObjectArray(patch.assetRefs) : existing.assetRefs,
+        candidateAssetIds:
+          patch.candidateAssetIds !== undefined ? ensureStringArray(patch.candidateAssetIds, 128) : ensureStringArray(existing.candidateAssetIds, 128),
+        cancelReason: patch.cancelReason !== undefined ? ensureText(patch.cancelReason) : ensureText(existing.cancelReason),
+        cancelRequestedAt: patch.cancelRequestedAt !== undefined ? patch.cancelRequestedAt : existing.cancelRequestedAt || null,
+        createdAssetIds:
+          patch.createdAssetIds !== undefined ? ensureStringArray(patch.createdAssetIds, 128) : ensureStringArray(existing.createdAssetIds, 128),
         finishedAt: patch.finishedAt !== undefined ? patch.finishedAt : existing.finishedAt,
         input: patch.input !== undefined ? clone(patch.input) : existing.input,
         outputRef: patch.outputRef !== undefined ? clone(patch.outputRef) : existing.outputRef,
         outputSummary: patch.outputSummary !== undefined ? clone(patch.outputSummary) : existing.outputSummary,
         progressEvents: patch.progressEvents !== undefined ? ensureProgressEvents(patch.progressEvents) : ensureProgressEvents(existing.progressEvents),
+        sourceAssetIds:
+          patch.sourceAssetIds !== undefined ? ensureStringArray(patch.sourceAssetIds, 128) : ensureStringArray(existing.sourceAssetIds, 128),
         status: patch.status !== undefined ? normaliseStatus(patch.status, existing.status) : existing.status,
         updatedAt: nowIso(),
       };

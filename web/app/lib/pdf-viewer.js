@@ -1,6 +1,8 @@
 let pdfjsModulePromise = null;
 let activeRenderToken = 0;
 let activePageObserver = null;
+let activeAnnotations = [];
+let activeSourceHighlight = null;
 
 function setMessage(host, message, className = '') {
   if (!host) {
@@ -52,6 +54,168 @@ function disconnectActivePageObserver() {
 
   activePageObserver.disconnect();
   activePageObserver = null;
+}
+
+function clampRatio(value, fallback = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+
+  return Math.min(1, Math.max(0, number));
+}
+
+function normalizeSourceHighlight(sourceHighlight) {
+  if (!sourceHighlight || sourceHighlight.unit !== 'page-ratio') {
+    return null;
+  }
+
+  const page = Math.max(1, Number(sourceHighlight.page) || 1);
+  const width = Math.max(0.04, clampRatio(sourceHighlight.width, 0.84));
+  const height = Math.max(0.04, clampRatio(sourceHighlight.height, 0.12));
+  const highlight = {
+    height,
+    page,
+    unit: 'page-ratio',
+    width,
+    x: Math.min(1 - width, clampRatio(sourceHighlight.x, 0)),
+    y: Math.min(1 - height, clampRatio(sourceHighlight.y, 0)),
+  };
+
+  const rects = normalizeSourceHighlightRects(sourceHighlight.rects);
+  if (rects.length) {
+    highlight.rects = rects;
+  }
+
+  return highlight;
+}
+
+function normalizeSourceHighlightRects(rects) {
+  if (!Array.isArray(rects)) {
+    return [];
+  }
+
+  return rects
+    .map((rect) => {
+      const width = Math.max(0.01, clampRatio(rect?.width, 0));
+      const height = Math.max(0.01, clampRatio(rect?.height, 0));
+      return {
+        height,
+        width,
+        x: Math.min(1 - width, clampRatio(rect?.x, 0)),
+        y: Math.min(1 - height, clampRatio(rect?.y, 0)),
+      };
+    })
+    .filter((rect) => rect.width > 0 && rect.height > 0)
+    .slice(0, 24);
+}
+
+function normalizePdfAnnotations(annotations) {
+  if (!Array.isArray(annotations)) {
+    return [];
+  }
+
+  return annotations
+    .map((annotation, index) => {
+      const page = Math.max(1, Math.floor(Number(annotation?.page) || 1));
+      const type = annotation?.type === 'highlight' ? 'highlight' : 'note';
+      const label = String(annotation?.label || (type === 'highlight' ? 'Highlight' : 'Note')).trim();
+      const text = String(annotation?.text || '').trim();
+      const id = String(annotation?.id || `${type}-${page}-${index + 1}`).trim();
+      const sourceBounds = normalizeSourceHighlight(annotation?.sourceBounds);
+      return { id, label, page, sourceBounds, text, type };
+    })
+    .filter((annotation) => annotation.id && annotation.page > 0);
+}
+
+function applyPdfPageAnnotations(surface, pageNumber, annotations = activeAnnotations) {
+  surface.querySelector('.reading-pdf-annotation-layer')?.remove();
+  const page = Number(pageNumber);
+  const pageAnnotations = normalizePdfAnnotations(annotations).filter((annotation) => annotation.page === page);
+  if (!pageAnnotations.length) {
+    return;
+  }
+
+  const layer = document.createElement('div');
+  layer.className = 'reading-pdf-annotation-layer';
+  layer.setAttribute('aria-label', `Annotations on page ${page}`);
+
+  pageAnnotations.slice(0, 8).forEach((annotation, index) => {
+    if (annotation.sourceBounds && Number(annotation.sourceBounds.page) === page) {
+      const boxes = annotation.sourceBounds.rects?.length ? annotation.sourceBounds.rects : [annotation.sourceBounds];
+      boxes.forEach((sourceBounds, rectIndex) => {
+        const box = document.createElement('div');
+        box.className = `reading-pdf-annotation-box is-${annotation.type}`;
+        box.dataset.readingPdfAnnotationId = annotation.id;
+        box.dataset.readingPdfAnnotationRectIndex = String(rectIndex);
+        box.dataset.readingPdfAnnotationType = annotation.type;
+        box.setAttribute('aria-label', [annotation.label, annotation.text].filter(Boolean).join(': '));
+        box.style.left = `${sourceBounds.x * 100}%`;
+        box.style.top = `${sourceBounds.y * 100}%`;
+        box.style.width = `${sourceBounds.width * 100}%`;
+        box.style.height = `${sourceBounds.height * 100}%`;
+        box.title = [annotation.label, annotation.text].filter(Boolean).join(': ');
+        layer.appendChild(box);
+      });
+      return;
+    }
+
+    const marker = document.createElement('div');
+    marker.className = `reading-pdf-annotation-marker is-${annotation.type}`;
+    marker.dataset.readingPdfAnnotationId = annotation.id;
+    marker.dataset.readingPdfAnnotationType = annotation.type;
+    marker.style.top = `${Math.min(86, 7 + index * 10)}%`;
+    marker.title = [annotation.label, annotation.text].filter(Boolean).join(': ');
+    marker.textContent = annotation.type === 'highlight' ? 'H' : 'N';
+    layer.appendChild(marker);
+  });
+
+  if (pageAnnotations.length > 8) {
+    const overflow = document.createElement('div');
+    overflow.className = 'reading-pdf-annotation-marker is-overflow';
+    overflow.style.top = '90%';
+    overflow.textContent = `+${pageAnnotations.length - 8}`;
+    layer.appendChild(overflow);
+  }
+
+  surface.appendChild(layer);
+}
+
+export function syncReadingPdfAnnotations(host, annotations = activeAnnotations) {
+  activeAnnotations = normalizePdfAnnotations(annotations);
+  host?.querySelectorAll?.('[data-reading-pdf-page]')?.forEach((pageNode) => {
+    const surface = pageNode.querySelector('.reading-pdf-page-surface');
+    if (surface) {
+      applyPdfPageAnnotations(surface, pageNode.dataset.readingPdfPage);
+    }
+  });
+}
+
+function applyPdfPageSourceHighlight(surface, pageNumber, sourceHighlight = activeSourceHighlight) {
+  surface.querySelector('.reading-pdf-source-highlight')?.remove();
+  const highlight = normalizeSourceHighlight(sourceHighlight);
+  if (!highlight || Number(highlight.page) !== Number(pageNumber)) {
+    return;
+  }
+
+  const marker = document.createElement('div');
+  marker.className = 'reading-pdf-source-highlight';
+  marker.setAttribute('aria-label', `Source region on page ${pageNumber}`);
+  marker.style.left = `${highlight.x * 100}%`;
+  marker.style.top = `${highlight.y * 100}%`;
+  marker.style.width = `${highlight.width * 100}%`;
+  marker.style.height = `${highlight.height * 100}%`;
+  surface.appendChild(marker);
+}
+
+export function syncReadingPdfSourceHighlight(host, sourceHighlight = activeSourceHighlight) {
+  activeSourceHighlight = normalizeSourceHighlight(sourceHighlight);
+  host?.querySelectorAll?.('[data-reading-pdf-page]')?.forEach((pageNode) => {
+    const surface = pageNode.querySelector('.reading-pdf-page-surface');
+    if (surface) {
+      applyPdfPageSourceHighlight(surface, pageNode.dataset.readingPdfPage);
+    }
+  });
 }
 
 function createPdfPageShell(viewport, pageNumber) {
@@ -117,6 +281,8 @@ export function scrollReadingPdfToPage(host, pageNumber) {
 
 export function resetReadingPdfSurface() {
   activeRenderToken += 1;
+  activeAnnotations = [];
+  activeSourceHighlight = null;
   disconnectActivePageObserver();
 }
 
@@ -160,6 +326,8 @@ async function renderPdfPage({ pageRecord, pdfjsLib, renderToken }) {
     }
 
     surface.appendChild(textLayer);
+    applyPdfPageAnnotations(surface, wrapper.dataset.readingPdfPage);
+    applyPdfPageSourceHighlight(surface, wrapper.dataset.readingPdfPage);
     wrapper.dataset.renderState = 'ready';
   })().catch((error) => {
     if (renderToken !== activeRenderToken) {
@@ -215,7 +383,7 @@ function observePdfPages({ host, pageRecords, pdfjsLib, renderToken }) {
   });
 }
 
-export async function hydrateReadingPdfSurface({ baseUrl, host, pdfUrl, targetPage = null, zoom = 100 }) {
+export async function hydrateReadingPdfSurface({ annotations = [], baseUrl, host, pdfUrl, sourceHighlight = null, targetPage = null, zoom = 100 }) {
   if (!host || !pdfUrl) {
     return;
   }
@@ -223,7 +391,11 @@ export async function hydrateReadingPdfSurface({ baseUrl, host, pdfUrl, targetPa
   const nextPdfUrl = String(pdfUrl);
   const nextZoom = Number.isFinite(Number(zoom)) ? Math.min(200, Math.max(50, Number(zoom))) : 100;
   const nextZoomKey = String(nextZoom);
+  activeAnnotations = normalizePdfAnnotations(annotations);
+  activeSourceHighlight = normalizeSourceHighlight(sourceHighlight);
   if (host.dataset.renderState === 'ready' && host.dataset.pdfUrl === nextPdfUrl && host.dataset.pdfZoom === nextZoomKey) {
+    syncReadingPdfAnnotations(host, activeAnnotations);
+    syncReadingPdfSourceHighlight(host, activeSourceHighlight);
     if (targetPage) {
       window.requestAnimationFrame(() => {
         scrollReadingPdfToPage(host, targetPage);
@@ -262,12 +434,14 @@ export async function hydrateReadingPdfSurface({ baseUrl, host, pdfUrl, targetPa
       const pageRecord = { page, surface, viewport, wrapper };
       pageRecords.push(pageRecord);
       host.appendChild(wrapper);
-      if (pageNumber <= 2 || pageNumber === Number(targetPage)) {
+      if (pageNumber <= 2 || pageNumber === Number(targetPage) || pageNumber === Number(activeSourceHighlight?.page)) {
         void renderPdfPage({ pageRecord, pdfjsLib, renderToken });
       }
     }
 
     observePdfPages({ host, pageRecords, pdfjsLib, renderToken });
+    syncReadingPdfAnnotations(host, activeAnnotations);
+    syncReadingPdfSourceHighlight(host, activeSourceHighlight);
     if (targetPage) {
       window.requestAnimationFrame(() => {
         scrollReadingPdfToPage(host, targetPage);

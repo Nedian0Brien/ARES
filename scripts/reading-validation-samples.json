@@ -1,0 +1,37 @@
+{
+  "thresholds": {
+    "minAssets": 1,
+    "minSourceBoundedAssets": 1,
+    "minTables": 1
+  },
+  "samples": [
+    {
+      "id": "arxiv-2504.09554",
+      "title": "Mixture-of-RAG: Integrating Text and Tables with Large Language Models",
+      "paperUrl": "https://arxiv.org/abs/2504.09554",
+      "pdfUrl": "https://arxiv.org/pdf/2504.09554",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "year": 2025,
+      "thresholds": {
+        "minAssets": 7,
+        "minSourceBoundedAssets": 7,
+        "minTables": 7
+      }
+    },
+    {
+      "id": "arxiv-2512.10888",
+      "title": "PubTables-v2: A new large-scale dataset for full-page and multi-page table extraction",
+      "paperUrl": "https://arxiv.org/abs/2512.10888",
+      "pdfUrl": "https://arxiv.org/pdf/2512.10888",
+      "sourceName": "arXiv",
+      "sourceProvider": "arxiv",
+      "year": 2025,
+      "thresholds": {
+        "minAssets": 5,
+        "minSourceBoundedAssets": 5,
+        "minTables": 5
+      }
+    }
+  ]
+}

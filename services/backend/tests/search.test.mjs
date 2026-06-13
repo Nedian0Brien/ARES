@@ -53,6 +53,7 @@ test('searchSeedPapers narrows results by active scopes', () => {
 test('parseSearchPayload normalises the POST search contract', () => {
   const payload = parseSearchPayload({
     projectId: ' demo ',
+    questionId: ' question-1 ',
     q: ' adaptive reranker ',
     mode: 'scout',
     page: '3',
@@ -63,6 +64,7 @@ test('parseSearchPayload normalises the POST search contract', () => {
   });
 
   assert.equal(payload.projectId, 'demo');
+  assert.equal(payload.questionId, 'question-1');
   assert.equal(payload.q, 'adaptive reranker');
   assert.equal(payload.mode, 'scout');
   assert.equal(payload.page, 3);

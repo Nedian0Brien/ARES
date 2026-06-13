@@ -71,6 +71,58 @@ function ensureObjectArray(values) {
   return ensureArray(values).filter((entry) => entry && typeof entry === 'object').map((entry) => clone(entry));
 }
 
+function normaliseSourceBoundRect(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const width = Math.max(0, Math.min(1, ensureNumber(value.width, 0)));
+  const height = Math.max(0, Math.min(1, ensureNumber(value.height, 0)));
+  if (!width || !height) {
+    return null;
+  }
+
+  return {
+    height,
+    width,
+    x: Math.max(0, Math.min(1 - width, ensureNumber(value.x, 0))),
+    y: Math.max(0, Math.min(1 - height, ensureNumber(value.y, 0))),
+  };
+}
+
+export function normaliseSourceBounds(value, fallbackPage = 1) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const unit = ensureTrimmedString(value.unit, 'page-ratio');
+  if (unit !== 'page-ratio') {
+    return null;
+  }
+
+  const width = Math.max(0, Math.min(1, ensureNumber(value.width, 0)));
+  const height = Math.max(0, Math.min(1, ensureNumber(value.height, 0)));
+  if (!width || !height) {
+    return null;
+  }
+
+  const rects = ensureArray(value.rects).map(normaliseSourceBoundRect).filter(Boolean).slice(0, 24);
+  const sourceBounds = {
+    height,
+    page: Math.max(1, ensureNumber(value.page || fallbackPage, fallbackPage)),
+    unit,
+    width,
+    x: Math.max(0, Math.min(1 - width, ensureNumber(value.x, 0))),
+    y: Math.max(0, Math.min(1 - height, ensureNumber(value.y, 0))),
+  };
+
+  if (rects.length) {
+    sourceBounds.rects = rects;
+  }
+
+  return sourceBounds;
+}
+
 function normaliseParseStatus(value, fallback = 'idle') {
   const next = ensureTrimmedString(value, '').toLowerCase();
   return READING_PARSE_STATUSES.has(next) ? next : fallback;
@@ -152,10 +204,12 @@ function normaliseHighlight(entry, index = 0) {
 
   const page = Math.max(1, ensureNumber(entry.page || entry.pg, index + 1));
   return {
+    confidence: Math.max(0, Math.min(1, ensureNumber(entry.confidence, 0))),
     id: ensureTrimmedString(entry.id, `highlight-${index + 1}`),
     page,
     quote: clipText(entry.quote || text, 900),
     sectionId: ensureTrimmedString(entry.sectionId || entry.section, ''),
+    selectionMethod: ensureTrimmedString(entry.selectionMethod, ''),
     text,
     type: ensureTrimmedString(entry.type || entry.kind, 'claim').toLowerCase(),
   };
@@ -174,6 +228,7 @@ function normaliseNote(entry, index = 0) {
   return {
     body,
     createdAt,
+    evidenceLinkId: ensureTrimmedString(entry.evidenceLinkId, '') || null,
     id: ensureTrimmedString(entry.id, `note-${index + 1}`),
     kind: ensureTrimmedString(entry.kind || entry.label, 'note').toLowerCase(),
     origin: ensureTrimmedString(entry.origin, entry.sourceHighlightId ? 'highlight' : 'user').toLowerCase(),
@@ -185,6 +240,9 @@ function normaliseNote(entry, index = 0) {
         : Math.max(1, ensureNumber(entry.page, 1)),
     quote,
     sectionId: ensureTrimmedString(entry.sectionId || entry.section, ''),
+    confidence: Math.max(0, Math.min(1, ensureNumber(entry.confidence, 0))),
+    seedMethod: ensureTrimmedString(entry.seedMethod, ''),
+    sourceBounds: normaliseSourceBounds(entry.sourceBounds, entry.page || entry.pg || 1),
     sourceHighlightId: ensureTrimmedString(entry.sourceHighlightId, '') || null,
     updatedAt,
   };
@@ -206,6 +264,94 @@ function normaliseCitation(entry, index = 0) {
   };
 }
 
+function normaliseRetrievalTrace(entry = {}) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  return {
+    chunks: ensureObjectArray(entry.chunks)
+      .map((chunk) => ({
+        chunkId: ensureTrimmedString(chunk.chunkId || chunk.id, ''),
+        lexicalScore: ensureNumber(chunk.lexicalScore, 0),
+        page: chunk.page === null || chunk.page === undefined ? null : Math.max(1, ensureNumber(chunk.page, 1)),
+        phraseBoost: ensureNumber(chunk.phraseBoost, 0),
+        score: ensureNumber(chunk.score, 0),
+        sectionId: ensureTrimmedString(chunk.sectionId, ''),
+        semanticScore: ensureNumber(chunk.semanticScore, 0),
+        titleBoost: ensureNumber(chunk.titleBoost, 0),
+      }))
+      .filter((chunk) => chunk.chunkId),
+    confidence: ensureTrimmedString(entry.confidence, 'none'),
+    lowConfidence: ensureBoolean(entry.lowConfidence, false),
+    minEvidenceScore: ensureNumber(entry.minEvidenceScore, 0),
+    mode: ensureTrimmedString(entry.mode, 'hybrid'),
+    queryTerms: ensureStringArray(entry.queryTerms, { limit: 10 }),
+    scorer: ensureTrimmedString(entry.scorer, ''),
+    topK: ensureNumber(entry.topK, 0),
+    topScore: ensureNumber(entry.topScore, 0),
+  };
+}
+
+function normaliseAssetQuality(entry = {}) {
+  const source = entry && typeof entry === 'object' ? entry : {};
+  const checks = ensureStringArray(source.checks, { limit: 8 });
+  const score = Math.max(0, Math.min(1, ensureNumber(source.score, 0)));
+  const status = ensureTrimmedString(source.status, checks.length ? 'partial' : 'synthetic').toLowerCase();
+
+  return {
+    checks,
+    score,
+    status,
+  };
+}
+
+function normaliseOcrProvenance(input, previous = null) {
+  const source = input && typeof input === 'object' ? input : previous && typeof previous === 'object' ? previous : null;
+  if (!source) {
+    return null;
+  }
+
+  const generatedAt = ensureIso(source.generatedAt, null);
+  const importedAt = ensureIso(source.importedAt, null);
+  const sourceLabel = ensureTrimmedString(source.sourceLabel, '');
+  const tool = ensureTrimmedString(source.tool, '');
+  const textLength = Math.max(0, ensureNumber(source.textLength, 0));
+  if (!generatedAt && !importedAt && !sourceLabel && !tool && !textLength) {
+    return null;
+  }
+
+  return {
+    generatedAt,
+    importedAt,
+    sourceLabel,
+    textLength,
+    tool,
+  };
+}
+
+function normaliseEvidenceCoverage(input, previous = null) {
+  const source = input && typeof input === 'object' ? input : previous && typeof previous === 'object' ? previous : null;
+  if (!source) {
+    return null;
+  }
+
+  return {
+    assetCount: ensureNumber(source.assetCount, 0),
+    chunkCount: ensureNumber(source.chunkCount, 0),
+    citedChatCount: ensureNumber(source.citedChatCount, 0),
+    figureCount: ensureNumber(source.figureCount, 0),
+    generatedAt: ensureIso(source.generatedAt, null),
+    lastRetrievalConfidence: ensureTrimmedString(source.lastRetrievalConfidence, ''),
+    lastRetrievalTopScore: ensureNumber(source.lastRetrievalTopScore, 0),
+    lowConfidenceChatCount: ensureNumber(source.lowConfidenceChatCount, 0),
+    retrievalReady: ensureBoolean(source.retrievalReady, false),
+    sectionCount: ensureNumber(source.sectionCount, 0),
+    sourceBoundedAssetCount: ensureNumber(source.sourceBoundedAssetCount, 0),
+    tableCount: ensureNumber(source.tableCount, 0),
+  };
+}
+
 function normaliseChatMessage(entry, index = 0) {
   if (!entry || typeof entry !== 'object') {
     return null;
@@ -222,6 +368,7 @@ function normaliseChatMessage(entry, index = 0) {
     fallbackReason: ensureTrimmedString(entry.fallbackReason, ''),
     generatedBy: ensureTrimmedString(entry.generatedBy, ''),
     id: ensureTrimmedString(entry.id, `chat-${index + 1}`),
+    retrieval: normaliseRetrievalTrace(entry.retrieval),
     role: ensureTrimmedString(entry.role, 'assistant').toLowerCase() === 'user' ? 'user' : 'assistant',
     text,
   };
@@ -249,7 +396,10 @@ function normaliseAsset(entry, index = 0) {
           ? null
           : Math.max(1, ensureNumber(entry.pg, 1))
         : Math.max(1, ensureNumber(entry.page, 1)),
+    quality: normaliseAssetQuality(entry.quality),
     rows: kind === 'table' && Array.isArray(entry.rows) ? clone(entry.rows) : [],
+    sourceBounds: normaliseSourceBounds(entry.sourceBounds, entry.page || entry.pg || 1),
+    sourceText: clipText(entry.sourceText || '', 420),
     thumbPath: ensureSessionRelativePath(entry.thumbPath, null),
   };
 }
@@ -378,6 +528,10 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
       input.citedByCount === undefined ? ensureNumber(previous.citedByCount, 0) : ensureNumber(input.citedByCount, 0),
     createdAt,
     error: ensureTrimmedString(input.error, previous.error || ''),
+    evidenceCoverage: normaliseEvidenceCoverage(
+      input.evidenceCoverage !== undefined ? input.evidenceCoverage : null,
+      previous.evidenceCoverage || null,
+    ),
     finishedAt: ensureIso(input.finishedAt, ensureIso(previous.finishedAt, null)),
     highlights,
     id: ensureTrimmedString(input.id, previous.id || buildReadingId('reading')),
@@ -388,6 +542,10 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
       { limit: 8 },
     ),
     notes,
+    ocrProvenance: normaliseOcrProvenance(
+      input.ocrProvenance !== undefined ? input.ocrProvenance : null,
+      previous.ocrProvenance || null,
+    ),
     openAccess: input.openAccess === undefined ? ensureBoolean(previous.openAccess, false) : ensureBoolean(input.openAccess),
     pageCount:
       input.pageCount === undefined
@@ -400,7 +558,10 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
     paperId: ensureTrimmedString(input.paperId, previous.paperId || ''),
     paperUrl: input.paperUrl === undefined ? previous.paperUrl || null : ensureTrimmedString(input.paperUrl, '') || null,
     parsedArtifactPath: ensureSessionRelativePath(input.parsedArtifactPath, previous.parsedArtifactPath || null),
-    parseError: ensureTrimmedString(input.parseError, previous.parseError || ''),
+    parseError:
+      input.parseError === '' || input.parseError === null
+        ? ''
+        : ensureTrimmedString(input.parseError, previous.parseError || ''),
     parseFinishedAt: ensureIso(input.parseFinishedAt, ensureIso(previous.parseFinishedAt, null)),
     parseStartedAt: ensureIso(input.parseStartedAt, ensureIso(previous.parseStartedAt, null)),
     parseStatus,

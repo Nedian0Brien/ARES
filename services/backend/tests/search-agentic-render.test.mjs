@@ -83,6 +83,7 @@ function createFeature(stateOverrides = {}) {
     SEARCH_TARGET_TYPES,
     TOKENS,
     actualReadingSessions: () => [],
+    activeResearchQuestion: () => ({ id: 'question-demo-default', prompt: 'Diffusion LoRA forgetting trade-offs', title: 'Forgetting trade-offs' }),
     dashboardAreaPath: () => '',
     dashboardCumulativeCounts: () => [],
     dashboardDailyCounts: () => [],
@@ -119,6 +120,8 @@ test('search dashboard renders stacked agentic home and run stages', () => {
   const html = feature.renderSearchStage({ id: 'demo', libraryCount: 0, queueCount: 0 });
 
   assert.match(html, /search-agentic-entry/);
+  assert.match(html, /Research Queue/);
+  assert.match(html, /Forgetting trade-offs/);
   assert.match(html, /class="stage-home"/);
   assert.match(html, /class="stage-run"/);
   assert.match(html, /class="run-badge"/);

@@ -11,6 +11,21 @@ async function readProjectFile(relativePath) {
   return readFile(path.join(rootDir, relativePath), 'utf8');
 }
 
+const STYLE_FILES = [
+  'web/styles.css',
+  'web/styles/base.css',
+  'web/styles/lab.css',
+  'web/styles/insight.css',
+  'web/styles/writing.css',
+  'web/styles/reading.css',
+  'web/styles/search.css',
+];
+
+async function readProjectStyles() {
+  const chunks = await Promise.all(STYLE_FILES.map((relativePath) => readProjectFile(relativePath)));
+  return chunks.join('\n');
+}
+
 test('mobile breakpoint is documented at the same width used by runtime layout state', async () => {
   const [appJs, designSystem] = await Promise.all([
     readProjectFile('web/app.js'),
@@ -22,7 +37,7 @@ test('mobile breakpoint is documented at the same width used by runtime layout s
 });
 
 test('mobile shell uses dynamic viewport and safe-area aware spacing', async () => {
-  const styles = await readProjectFile('web/styles.css');
+  const styles = await readProjectStyles();
 
   assert.match(styles, /@supports\s*\(height:\s*100dvh\)/);
   assert.match(styles, /--mobile-bottom-nav-height/);
@@ -32,7 +47,7 @@ test('mobile shell uses dynamic viewport and safe-area aware spacing', async () 
 });
 
 test('core mobile controls keep accessible touch targets and focus rings', async () => {
-  const styles = await readProjectFile('web/styles.css');
+  const styles = await readProjectStyles();
 
   assert.match(styles, /\.btn-p:focus-visible,\s*\.btn-s:focus-visible/);
   assert.match(styles, /\.bottom-nav button:focus-visible/);
@@ -41,7 +56,7 @@ test('core mobile controls keep accessible touch targets and focus rings', async
 });
 
 test('mobile search and reading surfaces avoid desktop-width table pressure', async () => {
-  const styles = await readProjectFile('web/styles.css');
+  const styles = await readProjectStyles();
 
   assert.match(styles, /\.dashboard-tbl-row[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   assert.match(styles, /\.dashboard-tbl-row[\s\S]*min-width:\s*0/);
@@ -53,7 +68,7 @@ test('mobile content trims AI-slop copy and protects narrow labels', async () =>
     readProjectFile('web/app.js'),
     readProjectFile('web/app/features/reading.js'),
     readProjectFile('web/app/features/search.js'),
-    readProjectFile('web/styles.css'),
+    readProjectStyles(),
   ]);
 
   assert.doesNotMatch(appJs, /Next UI/);

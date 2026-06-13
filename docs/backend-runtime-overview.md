@@ -90,6 +90,14 @@
 
 즉, `AgentRun` 메타는 영속화되지만 실제 실행 핸들은 아직 단일 프로세스 메모리에 묶여 있다.
 
+Asset graph linkage:
+
+- `sourceAssetIds`: run 시작 시 입력으로 받은 paper, reading packet, plan 같은 source asset ID
+- `candidateAssetIds`: Scout처럼 후보를 만들지만 아직 최종 산출물이 아닌 asset ID
+- `createdAssetIds`: Reader, Lab, Writer 계열 run이 저장까지 완료한 output asset ID
+
+이 세 필드는 `outputRef`보다 더 단순한 재시작 복구용 인덱스다. `outputRef`는 collection 단위 hydration에 쓰고, `createdAssetIds` 계열은 run list, audit, worker 재개 판단에서 빠르게 사용한다.
+
 ## Storage Model
 
 ### 1. Store Selection
@@ -213,8 +221,15 @@ AgentRun:
 - `ARES_STORE_BACKEND`
 - `ARES_DATABASE_URL`
 - `ARES_DATABASE_SSL`
+- `ARES_RETRIEVAL_SCORER_PROVIDER`
+- `ARES_RETRIEVAL_SCORER_URL`
+- `ARES_RETRIEVAL_SCORER_API_KEY`
+- `ARES_RETRIEVAL_SCORER_TIMEOUT_MS`
+- `ARES_OCR_MAX_PAGES`
 - `SCOUT_AGENT_RUNTIME`
 - `ARES_AGENT_RUNTIME`
+
+Reader retrieval scorer 운영 기본값은 `ARES_RETRIEVAL_SCORER_PROVIDER=local-cross-encoder`다. 실제 모델은 ARES 프로세스 밖의 HTTP endpoint로 운영하고, 배포 전 `node scripts/validate-retrieval-scorer.mjs --min-top-score 0.8`로 expected top chunk와 score threshold를 확인한다.
 - `SCOUT_AGENT_TIMEOUT_MS`
 - `ARES_LIVE_RELOAD`
 
@@ -257,3 +272,19 @@ AgentRun:
 2. AgentRun 실행을 별도 worker 프로세스로 분리
 3. stage별 자산 생성 API와 UI 연결 확대
 4. 인증 및 사용자/프로젝트 권한 모델 추가
+
+## Worker Separation Plan
+
+현재 API는 그대로 두고 실행 경계만 분리한다.
+
+1. HTTP process는 `AgentRun` 생성, 조회, SSE fan-out만 담당한다.
+2. Worker process는 `queue/running` run을 lease로 잡아 실행하고 `progressEvents`, `createdAssetIds`, `candidateAssetIds`, `sourceAssetIds`, `outputRef`를 store에 기록한다.
+3. Abort는 메모리 `Map` 직접 호출 대신 `AgentRun` action record 또는 status patch로 요청하고, worker가 lease heartbeat 중 확인한다.
+4. 복구 기준은 `status=running`이지만 heartbeat가 stale인 run이다. worker는 이 run을 `queue`로 되돌리거나 stage별 idempotency key로 이어서 처리한다.
+5. 첫 구현에서는 단일 worker만 허용하고, multi-worker는 lease owner와 expiresAt 컬럼이 PostgreSQL에 들어간 뒤 확장한다.
+
+남는 한계:
+
+- 현재 파일 store에서는 cross-process atomic lease를 강하게 보장하기 어렵다.
+- Codex subprocess 자체의 중간 상태는 복구하지 않는다. 재시작 시 run 단위 재시도만 보장한다.
+- SSE 클라이언트는 재연결 후 store에 남은 `progressEvents`와 final output을 다시 읽는 방식으로 복구한다.
