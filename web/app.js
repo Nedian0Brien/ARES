@@ -2964,6 +2964,22 @@ async function applyAgentRunPayload(payload) {
   return false;
 }
 
+function applyAgentRunProgressEvent(payload) {
+  const runId = payload?.runId || "";
+  const event = payload?.event && typeof payload.event === "object" ? payload.event : null;
+  if (!runId || !event || state.searchAgentRun?.id !== runId) {
+    return;
+  }
+
+  const progressEvents = Array.isArray(state.searchAgentRun.progressEvents)
+    ? state.searchAgentRun.progressEvents
+    : [];
+  state.searchAgentRun = {
+    ...state.searchAgentRun,
+    progressEvents: [...progressEvents, event].slice(-80),
+  };
+}
+
 async function pollAgentRun(runId) {
   if (!runId) {
     state.activeReadingRunId = "";
@@ -3021,6 +3037,16 @@ function subscribeAgentRun(runId) {
         refreshActiveStageUI();
       }
     })();
+  });
+
+  source.addEventListener("progress", (event) => {
+    try {
+      applyAgentRunProgressEvent(JSON.parse(event.data || "{}"));
+      refreshActiveStageUI();
+    } catch (error) {
+      state.error = error.message;
+      refreshActiveStageUI();
+    }
   });
 
   source.onerror = () => {

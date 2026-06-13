@@ -350,6 +350,8 @@ test('Agent run updates use SSE and refresh only the active stage', async () => 
   assert.match(appJs, /function subscribeAgentRun\(runId\)/);
   assert.match(appJs, /new EventSource\(appUrl\(`api\/agent-runs\/\$\{encodeURIComponent\(runId\)\}\/events`\)\.href\)/);
   assert.match(subscribeAgentRunBody, /source\.addEventListener\("run"/);
+  assert.match(subscribeAgentRunBody, /source\.addEventListener\("progress"/);
+  assert.match(subscribeAgentRunBody, /applyAgentRunProgressEvent/);
   assert.match(subscribeAgentRunBody, /void pollAgentRun\(runId\)/);
   assert.match(appJs, /function patchSearchStageUI\(\)/);
   assert.match(appJs, /function refreshActiveStageUI\(\)/);
@@ -362,9 +364,23 @@ test('Backend exposes an SSE endpoint for agent run updates', async () => {
 
   assert.match(indexJs, /function registerAgentRunEventClient/);
   assert.match(indexJs, /content-type': 'text\/event-stream; charset=utf-8'/);
+  assert.match(indexJs, /sendSseEvent\(response, 'progress'/);
   assert.match(indexJs, /sendSseEvent\(response, 'run', payload\)/);
   assert.match(indexJs, /\/api\\\/agent-runs\\\/\[\^\/\]\+\\\/events/);
   assert.match(indexJs, /agentRunService\.subscribeRun/);
+});
+
+test('Backend replays stored agent progress before the live run snapshot', async () => {
+  const indexJs = await readProjectFile('services/backend/index.mjs');
+  const registerStart = indexJs.indexOf('function registerAgentRunEventClient');
+  const collectStart = indexJs.indexOf('async function collectDirectories');
+  const registerBody = indexJs.slice(registerStart, collectStart);
+  const progressIndex = registerBody.indexOf("sendSseEvent(response, 'progress'");
+  const runIndex = registerBody.indexOf('sendRun(initialPayload)');
+
+  assert.ok(progressIndex >= 0, 'progress replay event must be sent on SSE connect');
+  assert.ok(runIndex >= 0, 'run snapshot must still be sent on SSE connect');
+  assert.ok(progressIndex < runIndex, 'stored progress should replay before the run snapshot');
 });
 
 test('Agent run UI treats canceled runs as terminal', async () => {

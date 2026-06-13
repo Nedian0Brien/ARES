@@ -407,6 +407,12 @@ function registerAgentRunEventClient(request, response, runId) {
   const sendRun = (payload) => {
     sendSseEvent(response, 'run', payload);
   };
+  for (const event of Array.isArray(initialPayload.run?.progressEvents) ? initialPayload.run.progressEvents : []) {
+    sendSseEvent(response, 'progress', {
+      event,
+      runId,
+    });
+  }
   sendRun(initialPayload);
 
   const heartbeat = setInterval(() => {

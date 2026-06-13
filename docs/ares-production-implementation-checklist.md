@@ -101,9 +101,9 @@
 - [x] durable cancel action을 worker loop와 연결한다.
   - 산출물: cancel request polling, subprocess termination
   - 검증: durable cancel subprocess abort test in `services/backend/tests/agent-runs.test.mjs`, worker once-loop test in `services/backend/tests/agent-worker.test.mjs`
-- [ ] progress event replay를 추가한다.
+- [x] progress event replay를 추가한다.
   - 산출물: stored progressEvents, SSE replay
-  - 검증: SSE reconnect test
+  - 검증: SSE reconnect replay contract in `services/backend/tests/search-reading-tab-contract.test.mjs`
 - [ ] stale running recovery를 구현한다.
   - 산출물: stale heartbeat detector, retry/error policy
   - 검증: worker kill/restart integration test
