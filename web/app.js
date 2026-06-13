@@ -1605,10 +1605,11 @@ async function createDraftSectionFromInsight() {
     return;
   }
 
-  const { drafts, insightCards } = createDraftFeatureModel(state.projectGraph);
-  const insightCard = insightCards.find((card) => card.id === state.activeInsightCardId) || insightCards[0] || null;
+  const { acceptedInsightCards, drafts } = createDraftFeatureModel(state.projectGraph);
+  const insightCard =
+    acceptedInsightCards.find((card) => card.id === state.activeInsightCardId) || acceptedInsightCards[0] || null;
   if (!insightCard?.id) {
-    state.error = "Create an insight card before drafting.";
+    state.error = "Accept an insight card before drafting.";
     render();
     return;
   }
@@ -4377,7 +4378,7 @@ function renderInsightStage(project) {
 function renderWritingStage(project) {
   const session = selectedReadingSession();
   const sourceTitle = session?.title || dashboardLibraryItems()[0]?.title || project?.name || "Untitled research draft";
-  const { draftSections, insightCards } = createDraftFeatureModel(state.projectGraph);
+  const { acceptedInsightCards, draftSections, insightCards } = createDraftFeatureModel(state.projectGraph);
   const sections = draftSections.length
     ? draftSections.map((section) => ({
         id: section.id,
@@ -4397,8 +4398,8 @@ function renderWritingStage(project) {
     draftSections.find((section) => section.id === state.activeDraftSectionId) || draftSections[0] || null;
   const activeInsight =
     insightCards.find((card) => Array.isArray(activeSection?.insightCardIds) && activeSection.insightCardIds.includes(card.id)) ||
-    insightCards.find((card) => card.id === state.activeInsightCardId) ||
-    insightCards[0] ||
+    acceptedInsightCards.find((card) => card.id === state.activeInsightCardId) ||
+    acceptedInsightCards[0] ||
     null;
   const draftSaving = Boolean(activeSection?.id && state.draftSavingSectionId === activeSection.id);
   const evidence = [

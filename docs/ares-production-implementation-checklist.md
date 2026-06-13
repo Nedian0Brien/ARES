@@ -179,9 +179,9 @@
 - [x] insight quality report를 추가한다.
   - 산출물: evidence coverage, source diversity, unresolved contradiction count
   - 검증: report calculation test in `services/backend/tests/asset-model.test.mjs`
-- [ ] accepted insight gate를 Write에 적용한다.
+- [x] accepted insight gate를 Write에 적용한다.
   - 산출물: accepted insight만 기본 draft 후보로 노출
-  - 검증: Write candidate filter test
+  - 검증: Write candidate filter test in `services/backend/tests/writing-tab-contract.test.mjs`
 - [ ] follow-up experiment handoff를 추가한다.
   - 산출물: Insight -> Lab run candidate
   - 검증: handoff E2E

@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
+import { createDraftFeatureModel } from '../../../web/app/features/draft.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..', '..');
 
@@ -43,6 +45,23 @@ test('Writing actions cover generation, evidence insertion, suggestions, and exp
   assert.match(appJs, /Accept suggestion/);
   assert.match(appJs, /data-action="export-writing-draft"/);
   assert.match(appJs, /Export/);
+});
+
+test('Writing default draft candidates include only accepted insight cards', () => {
+  const model = createDraftFeatureModel({
+    insightCards: [
+      { claim: 'Candidate claim', id: 'insight-candidate', status: 'candidate' },
+      { claim: 'Accepted claim', id: 'insight-accepted', status: 'accepted' },
+      { claim: 'Rejected claim', id: 'insight-rejected', status: 'rejected' },
+    ],
+  });
+
+  assert.deepEqual(model.acceptedInsightCards.map((card) => card.id), ['insight-accepted']);
+  assert.deepEqual(model.insightCards.map((card) => card.id), [
+    'insight-candidate',
+    'insight-accepted',
+    'insight-rejected',
+  ]);
 });
 
 test('Writing draft sections can be selected, edited, and deleted before export', async () => {
