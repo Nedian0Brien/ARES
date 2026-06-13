@@ -104,9 +104,9 @@
 - [x] progress event replay를 추가한다.
   - 산출물: stored progressEvents, SSE replay
   - 검증: SSE reconnect replay contract in `services/backend/tests/search-reading-tab-contract.test.mjs`
-- [ ] stale running recovery를 구현한다.
+- [x] stale running recovery를 구현한다.
   - 산출물: stale heartbeat detector, retry/error policy
-  - 검증: worker kill/restart integration test
+  - 검증: stale lease recovery test in `services/backend/tests/agent-runs.test.mjs`
 - [ ] stage별 idempotency key를 적용한다.
   - 산출물: duplicate asset prevention
   - 검증: retry creates no duplicate asset test

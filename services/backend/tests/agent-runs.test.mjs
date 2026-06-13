@@ -334,6 +334,60 @@ test('agent run service persists abort requests and recovers them as canceled af
   assert.equal(store.getAgentRun(queued.id).status, 'canceled');
 });
 
+test('agent run service recovers stale running leases without touching fresh or queued runs', async () => {
+  const store = await createDemoStore();
+  const stale = await store.createAgentRun({
+    agent: 'Reader agent',
+    heartbeatAt: '2026-06-14T01:00:00.000Z',
+    input: { paper: paperFixture({ paperId: 'stale-paper' }) },
+    leaseExpiresAt: '2026-06-14T01:01:00.000Z',
+    leaseOwner: 'worker-stale',
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'running',
+    taskKind: 'create-reading-session',
+  });
+  const fresh = await store.createAgentRun({
+    agent: 'Reader agent',
+    heartbeatAt: '2026-06-14T01:04:30.000Z',
+    input: { paper: paperFixture({ paperId: 'fresh-paper' }) },
+    leaseExpiresAt: '2026-06-14T01:06:00.000Z',
+    leaseOwner: 'worker-fresh',
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'running',
+    taskKind: 'create-reading-session',
+  });
+  const queued = await store.createAgentRun({
+    agent: 'Reader agent',
+    input: { paper: paperFixture({ paperId: 'queued-paper' }) },
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'queue',
+    taskKind: 'create-reading-session',
+  });
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+
+  const recovered = await service.recoverStaleRuns({
+    now: '2026-06-14T01:05:00.000Z',
+    staleMs: 60_000,
+  });
+  const staleRun = store.getAgentRun(stale.id);
+
+  assert.deepEqual(recovered.map((run) => run.id), [stale.id]);
+  assert.equal(staleRun.status, 'error');
+  assert.equal(staleRun.leaseOwner, '');
+  assert.equal(staleRun.leaseExpiresAt, null);
+  assert.equal(staleRun.heartbeatAt, null);
+  assert.match(staleRun.warning, /stale worker heartbeat/);
+  assert.equal(store.getAgentRun(fresh.id).status, 'running');
+  assert.equal(store.getAgentRun(queued.id).status, 'queue');
+});
+
 test('agent run service keeps canceled search runs from queueing late results', async () => {
   const store = await createDemoStore();
   let resolveSearch;

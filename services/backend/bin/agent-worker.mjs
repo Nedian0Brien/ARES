@@ -87,7 +87,7 @@ export async function bootAgentWorker({ dryRun = false, idleMs = 1000, leaseMs =
     runtimeName: process.env.ARES_AGENT_RUNTIME || process.env.SCOUT_AGENT_RUNTIME || 'codex',
     store,
   });
-  const recovered = dryRun ? await service.recoverInterruptedRuns() : [];
+  const recovered = dryRun ? await service.recoverInterruptedRuns() : await service.recoverStaleRuns({ staleMs: leaseMs });
   const workerReport = dryRun
     ? { processedRunCount: 0 }
     : await runAgentWorkerLoop({

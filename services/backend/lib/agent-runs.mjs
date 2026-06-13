@@ -141,6 +141,11 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function toTimestamp(value) {
+  const stamp = Date.parse(value || '');
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
 function combineWarnings(...groups) {
   return uniqueStrings(groups.flat()).join(' / ');
 }
@@ -932,6 +937,38 @@ export function createAgentRunService({
     return recovered;
   }
 
+  async function recoverStaleRuns({ now = new Date(), staleMs = 60_000 } = {}) {
+    const nowValue = now instanceof Date ? now.toISOString() : String(now || nowIso());
+    const nowStamp = Date.parse(nowValue) || Date.now();
+    const staleWindow = Number.isFinite(Number(staleMs)) && Number(staleMs) > 0 ? Number(staleMs) : 60_000;
+    const staleRuns = store.listAgentRuns().filter((run) => {
+      if (String(run.status || '').toLowerCase() !== 'running') {
+        return false;
+      }
+
+      const leaseExpired = run.leaseExpiresAt && toTimestamp(run.leaseExpiresAt) <= nowStamp;
+      const heartbeatExpired = run.heartbeatAt && toTimestamp(run.heartbeatAt) + staleWindow <= nowStamp;
+      return Boolean(leaseExpired || heartbeatExpired);
+    });
+    const recovered = [];
+
+    for (const run of staleRuns) {
+      const canceled = isRunCancelRequested(store, run.id);
+      const updated = await notifyingStore.updateAgentRun(run.id, {
+        error: canceled ? 'Canceled by user.' : 'Agent run heartbeat expired before completion. Retry the run to continue.',
+        finishedAt: nowValue,
+        heartbeatAt: null,
+        leaseExpiresAt: null,
+        leaseOwner: '',
+        status: canceled ? 'canceled' : 'error',
+        warning: canceled ? run.warning : combineWarnings(run.warning, 'stale worker heartbeat'),
+      });
+      recovered.push(updated);
+    }
+
+    return recovered;
+  }
+
   return {
     async checkAvailability() {
       return runtime.checkAvailability();
@@ -946,6 +983,7 @@ export function createAgentRunService({
     getRun,
     processNextQueuedRun,
     recoverInterruptedRuns,
+    recoverStaleRuns,
     retryRun,
     subscribeRun,
   };
