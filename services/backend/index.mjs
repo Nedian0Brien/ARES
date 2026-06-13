@@ -1,10 +1,12 @@
 import http from 'node:http';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { promises as fs, watch as watchDirectory } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { createAgentRunService } from './lib/agent-runs.mjs';
 import { createAuthService } from './lib/auth.mjs';
+import { createLogger } from './lib/logger.mjs';
 import { normalizeRequestPath } from './lib/path-utils.mjs';
 import { createReadingService } from './lib/reading-service.mjs';
 import { createConfiguredRetrievalScorer } from './lib/retrieval-scorer.mjs';
@@ -88,6 +90,11 @@ const liveReloadClients = new Set();
 let liveReloadTimer = null;
 let lastLiveReloadAt = 0;
 
+const logger = createLogger({
+  bindings: {
+    service: 'ares-backend',
+  },
+});
 const store = await createStore({
   backend: STORE_BACKEND,
   databaseSsl: DATABASE_SSL,
@@ -142,7 +149,9 @@ const agentRunService = createAgentRunService({
 });
 const recoveredAgentRuns = await agentRunService.recoverInterruptedRuns();
 if (recoveredAgentRuns.length) {
-  console.warn(`Recovered ${recoveredAgentRuns.length} interrupted agent run(s) after startup.`);
+  logger.warn('Recovered interrupted agent runs after startup.', {
+    recoveredAgentRunCount: recoveredAgentRuns.length,
+  });
 }
 const searchService = createScoutSearchService({
   agentRuntime: SCOUT_AGENT_RUNTIME,
@@ -187,7 +196,24 @@ async function readJsonBody(request) {
 function sendError(response, error, statusCode = 500) {
   json(response, statusCode, {
     error: error instanceof Error ? error.message : String(error),
+    requestId: response.getHeader('x-request-id') || undefined,
   });
+}
+
+function normalizeRequestId(value) {
+  const requestId = String(value || '').trim();
+  return /^[A-Za-z0-9._:-]{8,128}$/.test(requestId) ? requestId : randomUUID();
+}
+
+function createRequestContext(request) {
+  const requestId = normalizeRequestId(request.headers['x-request-id']);
+  return {
+    logger: logger.child({
+      method: request.method || 'GET',
+      requestId,
+    }),
+    requestId,
+  };
 }
 
 function uploadErrorStatus(error) {
@@ -574,8 +600,13 @@ async function handleSearchRequest(request, response, searchInput) {
 }
 
 const server = http.createServer(async (request, response) => {
+  const requestContext = createRequestContext(request);
+  response.setHeader('x-request-id', requestContext.requestId);
   const url = new URL(request.url || '/', `http://${request.headers.host}`);
   const requestPath = normalizeRequestPath(url.pathname);
+  const requestLogger = requestContext.logger.child({
+    path: requestPath,
+  });
 
   try {
     if ((request.method === 'GET' || request.method === 'HEAD') && resolveVendorAsset(requestPath)) {
@@ -882,12 +913,18 @@ const server = http.createServer(async (request, response) => {
 
     await serveStatic(requestPath, response);
   } catch (error) {
+    requestLogger.error('Unhandled request error.', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     sendError(response, error, 500);
   }
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`ARES service listening on http://${HOST}:${PORT}`);
+  logger.info('ARES service listening.', {
+    host: HOST,
+    port: PORT,
+  });
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

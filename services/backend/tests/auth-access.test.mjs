@@ -145,6 +145,14 @@ test('required auth mode rejects anonymous API access and filters project lists'
     await server.close();
   });
 
+  const healthResponse = await fetch(new URL('/api/health', server.url), {
+    headers: {
+      'x-request-id': 'req-auth-test-0001',
+    },
+  });
+  assert.equal(healthResponse.status, 200);
+  assert.equal(healthResponse.headers.get('x-request-id'), 'req-auth-test-0001');
+
   const anonymousResponse = await fetch(new URL('/api/projects', server.url));
   assert.equal(anonymousResponse.status, 401);
 

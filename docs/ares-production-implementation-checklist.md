@@ -75,12 +75,12 @@
 
 ### 3. Observability Foundation
 
-- [ ] request id를 모든 API 응답과 log에 추가한다.
+- [x] request id를 모든 API 응답과 log에 추가한다.
   - 산출물: request context helper
-  - 검증: route test
-- [ ] structured log format을 고정한다.
+  - 검증: `x-request-id` route test in `services/backend/tests/auth-access.test.mjs`
+- [x] structured log format을 고정한다.
   - 산출물: logger helper, error logging contract
-  - 검증: logger unit test
+  - 검증: `services/backend/lib/logger.mjs`, `services/backend/tests/logger.test.mjs`
 - [ ] user id, project id, run id correlation을 log context에 포함한다.
   - 산출물: request/run scoped logger
   - 검증: API/agent run log test
