@@ -123,7 +123,11 @@ async function startServer(dataRootDir) {
 
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
+  let stdout = '';
   let stderr = '';
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk;
+  });
   child.stderr.on('data', (chunk) => {
     stderr += chunk;
   });
@@ -139,8 +143,37 @@ async function startServer(dataRootDir) {
     getStderr() {
       return stderr;
     },
+    getStdout() {
+      return stdout;
+    },
     url: baseUrl,
   };
+}
+
+function parseJsonLogs(text) {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+async function waitForLog(server, predicate) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const match = parseJsonLogs(server.getStdout()).find(predicate);
+    if (match) {
+      return match;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for expected log. stdout=${server.getStdout()}`);
 }
 
 function userHeaders(userId, role = 'viewer') {
@@ -196,10 +229,17 @@ test('required auth mode rejects anonymous API access and filters project lists'
     headers: {
       ...userHeaders('owner-user'),
       'content-type': 'application/json',
+      'x-request-id': 'req-run-abort-0001',
     },
     method: 'POST',
   });
   assert.equal(abortResponse.status, 200);
+  const abortLog = await waitForLog(server, (entry) => entry.requestId === 'req-run-abort-0001');
+  assert.equal(abortLog.message, 'HTTP request completed.');
+  assert.equal(abortLog.projectId, 'owned');
+  assert.equal(abortLog.runId, 'run-owned');
+  assert.equal(abortLog.statusCode, 200);
+  assert.equal(abortLog.userId, 'owner-user');
 
   const auditResponse = await fetch(new URL('/api/projects/owned/audit-events', server.url), {
     headers: userHeaders('owner-user'),

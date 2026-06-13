@@ -95,6 +95,7 @@ const logger = createLogger({
     service: 'ares-backend',
   },
 });
+const requestContexts = new WeakMap();
 const store = await createStore({
   backend: STORE_BACKEND,
   databaseSsl: DATABASE_SSL,
@@ -207,13 +208,28 @@ function normalizeRequestId(value) {
 
 function createRequestContext(request) {
   const requestId = normalizeRequestId(request.headers['x-request-id']);
-  return {
-    logger: logger.child({
-      method: request.method || 'GET',
-      requestId,
-    }),
+  const bindings = {
+    method: request.method || 'GET',
     requestId,
   };
+  return {
+    bind(nextBindings = {}) {
+      for (const [key, value] of Object.entries(nextBindings)) {
+        if (value !== undefined && value !== null && value !== '') {
+          bindings[key] = value;
+        }
+      }
+    },
+    bindings,
+    requestId,
+  };
+}
+
+function bindRequestLogContext(request, bindings) {
+  const requestContext = requestContexts.get(request);
+  if (requestContext) {
+    requestContext.bind(bindings);
+  }
 }
 
 function uploadErrorStatus(error) {
@@ -240,6 +256,7 @@ function requireAuthenticatedUser(request, response) {
     return null;
   }
 
+  bindRequestLogContext(request, { userId: authContext.user.id });
   return authContext.user;
 }
 
@@ -260,10 +277,12 @@ function requireProjectAccess(request, response, projectId, action = 'read') {
   const projectAccess =
     typeof store.listProjectAccess === 'function' ? store.listProjectAccess({ projectId }) : project.projectAccess || [];
   if (!authService.canAccessProject(user, { ...project, projectAccess }, action)) {
+    bindRequestLogContext(request, { projectId });
     sendError(response, new Error('Project access is forbidden.'), 403);
     return null;
   }
 
+  bindRequestLogContext(request, { projectId });
   return {
     project,
     user,
@@ -609,11 +628,16 @@ async function handleSearchRequest(request, response, searchInput) {
 
 const server = http.createServer(async (request, response) => {
   const requestContext = createRequestContext(request);
+  requestContexts.set(request, requestContext);
   response.setHeader('x-request-id', requestContext.requestId);
   const url = new URL(request.url || '/', `http://${request.headers.host}`);
   const requestPath = normalizeRequestPath(url.pathname);
-  const requestLogger = requestContext.logger.child({
-    path: requestPath,
+  requestContext.bind({ path: requestPath });
+  response.on('finish', () => {
+    logger.child(requestContext.bindings).info('HTTP request completed.', {
+      statusCode: response.statusCode,
+    });
+    requestContexts.delete(request);
   });
 
   try {
@@ -769,6 +793,7 @@ const server = http.createServer(async (request, response) => {
         stage,
         taskKind: String(body.taskKind || '').trim() || undefined,
       });
+      bindRequestLogContext(request, { runId: run.id });
 
       json(response, 202, {
         run,
@@ -778,6 +803,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'GET' && /^\/api\/agent-runs\/[^/]+$/.test(requestPath)) {
       const runId = parseAgentRunId(requestPath);
+      bindRequestLogContext(request, { runId });
       const payload = agentRunService.getRun(runId);
       if (!payload) {
         notFound(response);
@@ -793,6 +819,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'GET' && /^\/api\/agent-runs\/[^/]+\/events$/.test(requestPath)) {
       const runId = parseAgentRunEventsId(requestPath);
+      bindRequestLogContext(request, { runId });
       const payload = agentRunService.getRun(runId);
       if (!payload) {
         notFound(response);
@@ -808,6 +835,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'POST' && /^\/api\/agent-runs\/[^/]+\/actions$/.test(requestPath)) {
       const runId = parseAgentRunActionId(requestPath);
+      bindRequestLogContext(request, { runId });
       const body = await readJsonBody(request);
       const action = String(body.action || '').trim().toLowerCase();
 
@@ -1046,7 +1074,7 @@ const server = http.createServer(async (request, response) => {
 
     await serveStatic(requestPath, response);
   } catch (error) {
-    requestLogger.error('Unhandled request error.', {
+    logger.child(requestContext.bindings).error('Unhandled request error.', {
       error: error instanceof Error ? error.message : String(error),
     });
     sendError(response, error, 500);
