@@ -4,7 +4,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { buildDraftExportBundle, createDraftFeatureModel } from '../../../web/app/features/draft.js';
+import {
+  buildDraftExportBundle,
+  createDraftFeatureModel,
+  validateDraftExportSources,
+} from '../../../web/app/features/draft.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..', '..');
@@ -123,4 +127,30 @@ test('Writing export builder creates Markdown, HTML, BibTeX, and CSL JSON snapsh
   assert.match(bundle.bibtex, /@misc\{paper-1/);
   assert.match(bundle.cslJson, /"id": "paper-1"/);
   assert.deepEqual(bundle.missingEvidenceLinkIds, ['missing-evidence']);
+  assert.equal(bundle.sourceValidation.status, 'warning');
+  assert.deepEqual(bundle.sourceValidation.warnings, ['Missing evidence link: missing-evidence']);
+});
+
+test('Writing export source validation blocks empty drafts and warns on missing evidence', () => {
+  assert.deepEqual(validateDraftExportSources({ evidenceLinks: [], sections: [] }), {
+    blockers: ['Create a draft section before export.'],
+    missingEvidenceLinkIds: [],
+    status: 'blocked',
+    usedEvidenceIds: [],
+    warnings: [],
+  });
+
+  assert.deepEqual(
+    validateDraftExportSources({
+      evidenceLinks: [{ id: 'evidence-1' }],
+      sections: [{ evidenceLinkIds: ['evidence-1', 'missing-evidence'] }],
+    }),
+    {
+      blockers: [],
+      missingEvidenceLinkIds: ['missing-evidence'],
+      status: 'warning',
+      usedEvidenceIds: ['evidence-1'],
+      warnings: ['Missing evidence link: missing-evidence'],
+    },
+  );
 });

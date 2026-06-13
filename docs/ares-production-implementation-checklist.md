@@ -199,9 +199,9 @@
 - [x] export format을 확장한다.
   - 산출물: Markdown, HTML, DOCX 또는 PDF, BibTeX/CSL JSON
   - 검증: Markdown/HTML/BibTeX/CSL JSON snapshot test in `services/backend/tests/writing-tab-contract.test.mjs`
-- [ ] broken source blocker/warning을 export에 적용한다.
+- [x] broken source blocker/warning을 export에 적용한다.
   - 산출물: pre-export validation
-  - 검증: missing evidence export test
+  - 검증: missing evidence export validation test in `services/backend/tests/writing-tab-contract.test.mjs`
 - [ ] draft version history를 추가한다.
   - 산출물: draft revision model
   - 검증: revision diff test

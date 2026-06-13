@@ -77,9 +77,25 @@ function uniqueEvidenceIds(sections = [], evidenceById = new Map()) {
   return { missingEvidenceLinkIds, usedEvidenceIds };
 }
 
-export function buildDraftExportBundle({ draftTitle = "ARES draft", evidenceLinks = [], sections = [] } = {}) {
+export function validateDraftExportSources({ evidenceLinks = [], sections = [] } = {}) {
   const evidenceById = new Map(evidenceLinks.map((entry) => [entry.id, entry]));
   const { missingEvidenceLinkIds, usedEvidenceIds } = uniqueEvidenceIds(sections, evidenceById);
+  const warnings = missingEvidenceLinkIds.map((id) => `Missing evidence link: ${id}`);
+  const blockers = sections.length ? [] : ['Create a draft section before export.'];
+
+  return {
+    blockers,
+    missingEvidenceLinkIds,
+    status: blockers.length ? "blocked" : warnings.length ? "warning" : "passed",
+    usedEvidenceIds,
+    warnings,
+  };
+}
+
+export function buildDraftExportBundle({ draftTitle = "ARES draft", evidenceLinks = [], sections = [] } = {}) {
+  const evidenceById = new Map(evidenceLinks.map((entry) => [entry.id, entry]));
+  const sourceValidation = validateDraftExportSources({ evidenceLinks, sections });
+  const { missingEvidenceLinkIds, usedEvidenceIds } = sourceValidation;
 
   const markdownBody = sections
     .map((section) => {
@@ -131,6 +147,7 @@ export function buildDraftExportBundle({ draftTitle = "ARES draft", evidenceLink
     html,
     markdown,
     missingEvidenceLinkIds,
+    sourceValidation,
     usedEvidenceIds,
   };
 }
