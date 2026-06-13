@@ -1421,8 +1421,10 @@ export async function createPostgresStore({
     const project = projectSummary(ensureProject(projectId));
     const researchQuestions = listCollection('researchQuestions', { projectId });
     return {
+      commentThreads: listCollection('commentThreads', { projectId }),
       drafts: listCollection('drafts', { projectId }),
       draftSections: listCollection('draftSections', { projectId }),
+      draftRevisions: listCollection('draftRevisions', { projectId }),
       evidenceLinks: listCollection('evidenceLinks', { projectId }),
       experimentRuns: listCollection('experimentRuns', { projectId }),
       graphVersion: 1,

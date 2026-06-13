@@ -1,4 +1,5 @@
 const PROJECT_ASSET_PATHS = {
+  'comment-threads': 'commentThreads',
   'draft-sections': 'draftSections',
   drafts: 'drafts',
   'evidence-links': 'evidenceLinks',

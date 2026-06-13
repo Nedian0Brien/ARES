@@ -6,6 +6,7 @@ import {
   buildInsightQualityReport,
   diffDraftRevisionSections,
   normaliseAsset,
+  normaliseCommentThread,
   normaliseDraftRevision,
   normaliseEvidenceLink,
   normaliseExperimentRun,
@@ -23,6 +24,7 @@ test('asset collection registry includes legacy and graph collections', () => {
   assert.ok(ASSET_COLLECTIONS.includes('resultDossiers'));
   assert.ok(ASSET_COLLECTIONS.includes('draftSections'));
   assert.ok(ASSET_COLLECTIONS.includes('draftRevisions'));
+  assert.ok(ASSET_COLLECTIONS.includes('commentThreads'));
 });
 
 test('normalisePaper maps legacy paper records into graph shape', () => {
@@ -351,4 +353,29 @@ test('diffDraftRevisionSections reports stable section changes', () => {
   assert.deepEqual(diffDraftRevisionSections([], [{ id: 'new', title: 'New', body: 'Body' }]), [
     { id: 'new', nextTitle: 'New', type: 'added' },
   ]);
+});
+
+test('normaliseCommentThread stores review request and resolve metadata', () => {
+  const thread = normaliseCommentThread(
+    {
+      assigneeIds: ['reviewer-1'],
+      messages: [{ authorId: 'author-1', body: 'Please verify this citation.' }],
+      requestedReview: true,
+      resolvedAt: '2026-06-14T00:00:00.000Z',
+      resolvedBy: 'reviewer-1',
+      status: 'resolved',
+      targetId: 'section-1',
+      targetType: 'draftSection',
+      title: 'Citation review',
+    },
+    { projectId: 'demo' },
+  );
+
+  assert.equal(thread.projectId, 'demo');
+  assert.equal(thread.status, 'resolved');
+  assert.equal(thread.requestedReview, true);
+  assert.equal(thread.targetId, 'section-1');
+  assert.deepEqual(thread.assigneeIds, ['reviewer-1']);
+  assert.equal(thread.messages[0].body, 'Please verify this citation.');
+  assert.equal(thread.resolvedBy, 'reviewer-1');
 });

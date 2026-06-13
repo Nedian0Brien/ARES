@@ -201,6 +201,42 @@ test('asset graph routes expose project graph and create graph assets', async (t
   assert.equal(section.asset.draftId, draft.asset.id);
   assert.deepEqual(section.asset.insightCardIds, [created.asset.id]);
 
+  const commentResponse = await fetch(new URL('/api/projects/demo/comment-threads', server.url), {
+    body: JSON.stringify({
+      assigneeIds: ['reviewer-1'],
+      messages: [{ authorId: 'author-1', body: 'Please verify this citation.' }],
+      requestedReview: true,
+      targetId: section.asset.id,
+      targetType: 'draftSection',
+      title: 'Citation review',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const comment = await commentResponse.json();
+  assert.equal(commentResponse.status, 201);
+  assert.equal(comment.asset.status, 'open');
+  assert.equal(comment.asset.requestedReview, true);
+
+  const resolveCommentResponse = await fetch(new URL('/api/projects/demo/comment-threads', server.url), {
+    body: JSON.stringify({
+      ...comment.asset,
+      resolvedAt: '2026-06-14T00:00:00.000Z',
+      resolvedBy: 'reviewer-1',
+      status: 'resolved',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const resolvedComment = await resolveCommentResponse.json();
+  assert.equal(resolveCommentResponse.status, 201);
+  assert.equal(resolvedComment.asset.id, comment.asset.id);
+  assert.equal(resolvedComment.asset.status, 'resolved');
+
+  const graphWithCommentResponse = await fetch(new URL('/api/projects/demo/graph', server.url));
+  const graphWithComment = await graphWithCommentResponse.json();
+  assert.equal(graphWithComment.commentThreads[0].id, comment.asset.id);
+
   const unsafeDeleteResponse = await fetch(new URL(`/api/projects/demo/insight-cards/${created.asset.id}`, server.url), {
     method: 'DELETE',
   });

@@ -21,6 +21,7 @@ export const GRAPH_ASSET_COLLECTIONS = [
   'drafts',
   'draftSections',
   'draftRevisions',
+  'commentThreads',
 ];
 
 export const ASSET_COLLECTIONS = Array.from(new Set([...LEGACY_ASSET_COLLECTIONS, ...GRAPH_ASSET_COLLECTIONS]));
@@ -29,6 +30,7 @@ const VALID_GENERIC_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'err
 const VALID_QUESTION_STATUSES = new Set(['active', 'paused', 'done', 'archived']);
 const VALID_INSIGHT_REVIEW_STATUSES = new Set(['candidate', 'needs-review', 'accepted', 'rejected', 'archived']);
 const VALID_INSIGHT_TYPES = new Set(['claim', 'hypothesis', 'decision', 'observation']);
+const VALID_COMMENT_THREAD_STATUSES = new Set(['open', 'resolved', 'reopened']);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -414,6 +416,36 @@ export function normaliseDraftRevision(input = {}, options = {}) {
   };
 }
 
+function normaliseCommentMessage(input = {}) {
+  const value = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const createdAt = ensureText(value.createdAt, nowIso());
+
+  return {
+    authorId: ensureText(value.authorId, 'user'),
+    body: ensureText(value.body),
+    createdAt,
+    id: ensureText(value.id, createId('comment')),
+  };
+}
+
+export function normaliseCommentThread(input = {}, options = {}) {
+  const base = baseAsset(input, { ...options, fallbackStatus: 'open', prefix: 'thread' });
+  const status = ensureText(input.status, base.status).toLowerCase();
+
+  return {
+    ...base,
+    assigneeIds: ensureTextArray(input.assigneeIds, 16),
+    messages: ensureArray(input.messages).map(normaliseCommentMessage).filter((message) => message.body),
+    requestedReview: Boolean(input.requestedReview),
+    resolvedAt: ensureText(input.resolvedAt),
+    resolvedBy: ensureText(input.resolvedBy),
+    status: VALID_COMMENT_THREAD_STATUSES.has(status) ? status : 'open',
+    targetId: ensureText(input.targetId),
+    targetType: ensureText(input.targetType, 'draftSection'),
+    title: ensureText(input.title, 'Review comment'),
+  };
+}
+
 export function normaliseAsset(collectionName, input = {}, options = {}) {
   switch (collectionName) {
     case 'researchQuestions':
@@ -436,6 +468,8 @@ export function normaliseAsset(collectionName, input = {}, options = {}) {
       return normaliseDraftSection(input, options);
     case 'draftRevisions':
       return normaliseDraftRevision(input, options);
+    case 'commentThreads':
+      return normaliseCommentThread(input, options);
     default:
       return {
         ...baseAsset(input, {
