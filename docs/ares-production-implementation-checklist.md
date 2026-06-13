@@ -124,9 +124,9 @@
 - [x] table/figure quality report를 추가한다.
   - 산출물: source-backed/partial/synthetic 비율 report
   - 검증: report snapshot test in `services/backend/tests/reading-sample-validator.test.mjs`
-- [ ] multi-page table 처리 기준을 추가한다.
+- [x] multi-page table 처리 기준을 추가한다.
   - 산출물: extraction rule 또는 known limitation marker
-  - 검증: multi-page table sample test
+  - 검증: multi-page table sample test in `services/backend/tests/reading-sample-validator.test.mjs`
 - [ ] retrieval scorer health validation을 배포 smoke에 연결한다.
   - 산출물: scorer validation command in deploy/check script
   - 검증: validation success/failure test

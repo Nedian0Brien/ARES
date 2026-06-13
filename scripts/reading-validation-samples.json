@@ -25,6 +25,7 @@
     {
       "categories": ["text-layer", "table", "multi-page-table"],
       "expectedFeatures": ["full-page tables", "multi-page table continuation markers"],
+      "extractionRules": ["flag adjacent-page table candidates when captions, headers, or row structures continue"],
       "id": "arxiv-2409.05125",
       "paperUrl": "https://arxiv.org/abs/2409.05125",
       "pdfUrl": "https://arxiv.org/pdf/2409.05125",
@@ -41,6 +42,7 @@
     {
       "categories": ["text-layer", "table", "multi-page-table", "citation"],
       "expectedFeatures": ["document parsing survey tables", "long bibliography"],
+      "knownLimitations": ["multi-page table continuation is reported as a candidate when exact cell stitching is uncertain"],
       "id": "arxiv-2410.21169",
       "paperUrl": "https://arxiv.org/abs/2410.21169",
       "pdfUrl": "https://arxiv.org/pdf/2410.21169",

@@ -9,6 +9,7 @@ import {
   parseValidationArgs,
   parseValidationSampleSet,
   summariseReadingValidation,
+  validateMultiPageTableSamples,
   validateValidationSampleCorpus,
   validateReadingSummary,
 } from '../../../scripts/validate-reading-sample.mjs';
@@ -101,6 +102,7 @@ test('reading sample validator parses a sample set with per-sample thresholds', 
       {
         categories: ['table', 'multi-page-table'],
         expectedFeatures: ['dense tables'],
+        extractionRules: ['mark continuation candidates when table-like rows span adjacent pages'],
         id: 'dense-table',
         knownLimitations: ['requires table boundary review'],
         title: 'Dense Table Paper',
@@ -119,7 +121,20 @@ test('reading sample validator parses a sample set with per-sample thresholds', 
   assert.equal(sampleSet.samples[0].thresholds.minTables, 7);
   assert.deepEqual(sampleSet.samples[0].categories, ['table', 'multi-page-table']);
   assert.deepEqual(sampleSet.samples[0].expectedFeatures, ['dense tables']);
+  assert.deepEqual(sampleSet.samples[0].extractionRules, [
+    'mark continuation candidates when table-like rows span adjacent pages',
+  ]);
   assert.deepEqual(sampleSet.samples[0].knownLimitations, ['requires table boundary review']);
+});
+
+test('reading validation corpus records multi-page table handling criteria', async () => {
+  const raw = await readFile(path.join(rootDir, 'scripts', 'reading-validation-samples.json'), 'utf8');
+  const corpus = parseValidationSampleSet(JSON.parse(raw));
+  const coverage = validateMultiPageTableSamples(corpus);
+
+  assert.equal(coverage.status, 'passed');
+  assert.equal(coverage.sampleCount >= 1, true);
+  assert.deepEqual(coverage.failures, []);
 });
 
 test('reading validation corpus covers at least 20 PDFs and required categories', async () => {

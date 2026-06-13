@@ -73,6 +73,9 @@ function normaliseValidationSample(input = {}, thresholds = {}) {
     expectedFeatures: Array.isArray(input.expectedFeatures)
       ? input.expectedFeatures.map((feature) => String(feature || '').trim()).filter(Boolean)
       : [],
+    extractionRules: Array.isArray(input.extractionRules)
+      ? input.extractionRules.map((rule) => String(rule || '').trim()).filter(Boolean)
+      : [],
     id,
     knownLimitations: Array.isArray(input.knownLimitations)
       ? input.knownLimitations.map((limitation) => String(limitation || '').trim()).filter(Boolean)
@@ -179,6 +182,39 @@ function qualityStatusReport(counts = {}) {
     counts: normalized,
     ratios,
     total,
+  };
+}
+
+export function validateMultiPageTableSamples(sampleSet) {
+  const samples = Array.isArray(sampleSet?.samples) ? sampleSet.samples : [];
+  const multiPageSamples = samples.filter((sample) => sample.categories?.includes('multi-page-table'));
+  const failures = [];
+  if (!multiPageSamples.length) {
+    failures.push('Expected at least 1 multi-page-table validation sample.');
+  }
+
+  for (const sample of multiPageSamples) {
+    const hasExpectedFeature = Array.isArray(sample.expectedFeatures) && sample.expectedFeatures.length > 0;
+    const hasHandlingCriteria =
+      (Array.isArray(sample.extractionRules) && sample.extractionRules.length > 0) ||
+      (Array.isArray(sample.knownLimitations) && sample.knownLimitations.length > 0);
+    if (!hasExpectedFeature) {
+      failures.push(`Expected multi-page-table sample ${sample.id} to declare expectedFeatures.`);
+    }
+    if (!hasHandlingCriteria) {
+      failures.push(`Expected multi-page-table sample ${sample.id} to declare extractionRules or knownLimitations.`);
+    }
+  }
+
+  return {
+    failures,
+    sampleCount: multiPageSamples.length,
+    samples: multiPageSamples.map((sample) => ({
+      extractionRules: sample.extractionRules || [],
+      id: sample.id,
+      knownLimitations: sample.knownLimitations || [],
+    })),
+    status: failures.length ? 'failed' : 'passed',
   };
 }
 
