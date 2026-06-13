@@ -190,12 +190,12 @@
 
 목표: 팀이 결과물을 검토하고 외부 산출물로 내보낼 수 있게 한다.
 
-- [ ] citation model을 분리한다.
+- [x] citation model을 분리한다.
   - 산출물: bibliography item, citation key, locator, style metadata
-  - 검증: citation normalization test
-- [ ] citation formatter를 추가한다.
+  - 검증: citation normalization test in `services/backend/tests/citation-model.test.mjs`
+- [x] citation formatter를 추가한다.
   - 산출물: CSL 또는 최소 IEEE/APA formatter
-  - 검증: formatter snapshot test
+  - 검증: IEEE/APA formatter snapshot test in `services/backend/tests/citation-model.test.mjs`
 - [ ] export format을 확장한다.
   - 산출물: Markdown, HTML, DOCX 또는 PDF, BibTeX/CSL JSON
   - 검증: export snapshot test
