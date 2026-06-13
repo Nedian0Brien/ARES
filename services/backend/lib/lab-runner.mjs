@@ -152,6 +152,52 @@ function buildFailureResult({ approval, artifacts = [], command, code, signal, s
   };
 }
 
+function buildMetricMissingResult({ approval, artifacts = [], command, code, metrics, missingMetrics, stderr, stdout }) {
+  return {
+    approval,
+    artifacts,
+    command,
+    exitCode: code,
+    failure: {
+      message: `Missing expected metric: ${missingMetrics.join(', ')}`,
+      missingMetrics,
+      type: 'metric_missing',
+    },
+    logs: {
+      stderr,
+      stdout,
+    },
+    metrics,
+    status: 'error',
+  };
+}
+
+function buildTimeoutResult({ approval, command, stderr, stdout }) {
+  return {
+    approval,
+    artifacts: [],
+    command,
+    exitCode: null,
+    failure: {
+      message: `Runner timed out after ${command.timeoutMs}ms.`,
+      type: 'timeout',
+    },
+    logs: {
+      stderr,
+      stdout,
+    },
+    metrics: parseRunnerMetrics(stdout),
+    status: 'error',
+  };
+}
+
+function missingExpectedMetrics(command, metrics) {
+  return command.expectedMetrics.filter((metric) => {
+    const name = normaliseMetricName(metric);
+    return !Object.hasOwn(metrics, name);
+  });
+}
+
 export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
   if (!rootDir) {
     throw new Error('rootDir is required to create the Lab runner adapter.');
@@ -187,6 +233,25 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
         });
         let stdout = '';
         let stderr = '';
+        let settled = false;
+
+        function finish(result) {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeoutHandle);
+          resolve(result);
+        }
+
+        const timeoutHandle = setTimeout(() => {
+          try {
+            child.kill?.('SIGTERM');
+          } catch {
+            // The timeout result below is still the source of truth.
+          }
+          finish(buildTimeoutResult({ approval, command, stderr, stdout }));
+        }, command.timeoutMs);
 
         child.stdout?.on('data', (chunk) => {
           stdout += chunk.toString();
@@ -195,14 +260,14 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
           stderr += chunk.toString();
         });
         child.on('error', (error) => {
-          resolve({
+          finish({
             approval,
             artifacts: [],
             command,
             exitCode: null,
             failure: {
               message: error.message,
-              type: 'spawn_error',
+              type: error.code === 'ENOENT' ? 'dependency' : 'spawn_error',
             },
             logs: {
               stderr,
@@ -213,10 +278,32 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
           });
         });
         child.on('close', async (code, signal) => {
+          if (settled) {
+            return;
+          }
+
           const artifacts = await captureDeclaredArtifacts({ cwd, input });
+          const metrics = parseRunnerMetrics(stdout);
 
           if (code === 0) {
-            resolve({
+            const missingMetrics = missingExpectedMetrics(command, metrics);
+            if (missingMetrics.length) {
+              finish(
+                buildMetricMissingResult({
+                  approval,
+                  artifacts,
+                  code,
+                  command,
+                  metrics,
+                  missingMetrics,
+                  stderr,
+                  stdout,
+                }),
+              );
+              return;
+            }
+
+            finish({
               approval,
               artifacts,
               command,
@@ -226,13 +313,13 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
                 stderr,
                 stdout,
               },
-              metrics: parseRunnerMetrics(stdout),
+              metrics,
               status: 'done',
             });
             return;
           }
 
-          resolve(buildFailureResult({ approval, artifacts, command, code, signal, stderr, stdout }));
+          finish(buildFailureResult({ approval, artifacts, command, code, signal, stderr, stdout }));
         });
       });
     },

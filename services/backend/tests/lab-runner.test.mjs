@@ -32,6 +32,21 @@ function createSpawn({ code = 0, stderr = '', stdout = '' } = {}) {
   return { calls, spawnImpl };
 }
 
+function createErrorSpawn(error) {
+  return function spawnImpl() {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => {};
+
+    process.nextTick(() => {
+      child.emit('error', error);
+    });
+
+    return child;
+  };
+}
+
 test('lab runner executes a low-risk fixture command inside the workspace boundary', async () => {
   const { calls, spawnImpl } = createSpawn({ stdout: 'accuracy: 0.91\n' });
   const runner = createLabRunnerAdapter({ rootDir: '/workspace', spawnImpl });
@@ -185,4 +200,62 @@ test('lab runner captures declared artifact files from the fixture workspace', a
   } finally {
     await rm(rootDir, { force: true, recursive: true });
   }
+});
+
+test('lab runner reports missing expected metrics as a typed failure', async () => {
+  const { spawnImpl } = createSpawn({ stdout: 'completed\n' });
+  const runner = createLabRunnerAdapter({ rootDir: '/workspace', spawnImpl });
+
+  const result = await runner.run({
+    args: ['scripts/eval.py'],
+    command: 'python',
+    cwd: 'fixtures/repro',
+    expectedMetrics: ['accuracy'],
+  });
+
+  assert.equal(result.status, 'error');
+  assert.equal(result.failure.type, 'metric_missing');
+  assert.deepEqual(result.failure.missingMetrics, ['accuracy']);
+});
+
+test('lab runner reports missing executable as a dependency failure', async () => {
+  const error = new Error('spawn python ENOENT');
+  error.code = 'ENOENT';
+  const runner = createLabRunnerAdapter({ rootDir: '/workspace', spawnImpl: createErrorSpawn(error) });
+
+  const result = await runner.run({
+    args: ['scripts/eval.py'],
+    command: 'python',
+    cwd: 'fixtures/repro',
+  });
+
+  assert.equal(result.status, 'error');
+  assert.equal(result.failure.type, 'dependency');
+  assert.match(result.failure.message, /ENOENT/);
+});
+
+test('lab runner reports timeout as a typed failure and terminates the child', async () => {
+  const killCalls = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = (signal) => {
+      killCalls.push(signal);
+      child.emit('close', null, signal);
+    };
+    return child;
+  };
+  const runner = createLabRunnerAdapter({ rootDir: '/workspace', spawnImpl });
+
+  const result = await runner.run({
+    args: ['scripts/eval.py'],
+    command: 'python',
+    cwd: 'fixtures/repro',
+    timeoutMs: 5,
+  });
+
+  assert.equal(result.status, 'error');
+  assert.equal(result.failure.type, 'timeout');
+  assert.deepEqual(killCalls, ['SIGTERM']);
 });

@@ -156,9 +156,9 @@
 - [x] log/artifact/metric capture를 구현한다.
   - 산출물: run log, artifact files, parsed metrics
   - 검증: fixture command log/metric/artifact capture test in `services/backend/tests/lab-runner.test.mjs`
-- [ ] typed failure result를 저장한다.
+- [x] typed failure result를 저장한다.
   - 산출물: timeout, non-zero exit, dependency missing, OOM categories
-  - 검증: failure fixture tests
+  - 검증: timeout/dependency/metric-missing failure matrix test in `services/backend/tests/lab-runner.test.mjs`
 - [ ] ResultDossier 자동 생성을 연결한다.
   - 산출물: paper metric vs observed metric comparison
   - 검증: successful run creates dossier test
