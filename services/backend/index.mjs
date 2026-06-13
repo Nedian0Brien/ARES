@@ -4,6 +4,7 @@ import { promises as fs, watch as watchDirectory } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { createAgentRunService } from './lib/agent-runs.mjs';
+import { createAuthService } from './lib/auth.mjs';
 import { normalizeRequestPath } from './lib/path-utils.mjs';
 import { createReadingService } from './lib/reading-service.mjs';
 import { createConfiguredRetrievalScorer } from './lib/retrieval-scorer.mjs';
@@ -94,6 +95,7 @@ const store = await createStore({
   seedFile: SEED_FILE,
   runtimeFile: RUNTIME_FILE,
 });
+const authService = createAuthService(process.env);
 const retrievalScorer = createConfiguredRetrievalScorer(process.env);
 const readingService = createReadingService({
   enableDemoPdf: DEMO_PDF_ENABLED,
@@ -108,6 +110,7 @@ const handleReadingRoute = createReadingRoutes({
   json,
   notFound,
   parseProjectRoute,
+  requireProjectAccess,
   readJsonBody,
   readRequestBody,
   readingService,
@@ -119,6 +122,7 @@ const handleReadingRoute = createReadingRoutes({
 const handleAssetRoute = createAssetRoutes({
   json,
   parseProjectRoute,
+  requireProjectAccess,
   readJsonBody,
   sendError,
   store,
@@ -195,6 +199,41 @@ function uploadErrorStatus(error) {
     return 400;
   }
   return 500;
+}
+
+function requireAuthenticatedUser(request, response) {
+  const authContext = authService.resolveRequest(request);
+  if (authContext.error) {
+    sendError(response, new Error(authContext.error), authContext.statusCode);
+    return null;
+  }
+
+  return authContext.user;
+}
+
+function requireProjectAccess(request, response, projectId, action = 'read') {
+  const user = requireAuthenticatedUser(request, response);
+  if (!user) {
+    return null;
+  }
+
+  let project;
+  try {
+    project = store.getProject(projectId);
+  } catch {
+    notFound(response);
+    return null;
+  }
+
+  if (!authService.canAccessProject(user, project, action)) {
+    sendError(response, new Error('Project access is forbidden.'), 403);
+    return null;
+  }
+
+  return {
+    project,
+    user,
+  };
 }
 
 function sendSseEvent(response, event, payload) {
@@ -505,13 +544,18 @@ async function serveStatic(requestPath, response) {
 
 const stopLiveReloadWatcher = await startLiveReloadWatcher();
 
-async function handleSearchRequest(response, searchInput) {
+async function handleSearchRequest(request, response, searchInput) {
   if (!searchInput.projectId) {
     sendError(response, new Error('projectId is required.'), 400);
     return;
   }
 
-  const project = store.getProject(searchInput.projectId);
+  const access = requireProjectAccess(request, response, searchInput.projectId, 'read');
+  if (!access) {
+    return;
+  }
+
+  const project = access.project;
   const query = searchInput.q || project.defaultQuery;
   const providerPayload = await searchService.search({
     project,
@@ -574,6 +618,9 @@ const server = http.createServer(async (request, response) => {
           ref: ARES_DEPLOY_REF,
         },
         ok: true,
+        auth: {
+          mode: authService.mode,
+        },
         profileDetails: profiles,
         profiles: profiles.map((profile) => profile.id),
         providerConfigured: Boolean(OPENALEX_API_KEY),
@@ -582,21 +629,41 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'GET' && requestPath === '/api/projects') {
+    if (request.method === 'GET' && requestPath === '/api/auth/me') {
+      const user = requireAuthenticatedUser(request, response);
+      if (!user) {
+        return;
+      }
+
       json(response, 200, {
-        projects: store.getProjects(),
+        auth: {
+          mode: authService.mode,
+        },
+        user,
+      });
+      return;
+    }
+
+    if (request.method === 'GET' && requestPath === '/api/projects') {
+      const user = requireAuthenticatedUser(request, response);
+      if (!user) {
+        return;
+      }
+
+      json(response, 200, {
+        projects: store.getProjects().filter((project) => authService.canAccessProject(user, project, 'read')),
       });
       return;
     }
 
     if (request.method === 'GET' && requestPath === '/api/search') {
-      await handleSearchRequest(response, parseSearchQuery(url.searchParams));
+      await handleSearchRequest(request, response, parseSearchQuery(url.searchParams));
       return;
     }
 
     if (request.method === 'POST' && requestPath === '/api/search') {
       const body = await readJsonBody(request);
-      await handleSearchRequest(response, parseSearchPayload(body));
+      await handleSearchRequest(request, response, parseSearchPayload(body));
       return;
     }
 
@@ -606,6 +673,9 @@ const server = http.createServer(async (request, response) => {
       const stage = String(body.stage || '').trim();
       if (!projectId || !stage) {
         sendError(response, new Error('projectId and stage are required.'), 400);
+        return;
+      }
+      if (!requireProjectAccess(request, response, projectId, 'write')) {
         return;
       }
 
@@ -633,13 +703,26 @@ const server = http.createServer(async (request, response) => {
         notFound(response);
         return;
       }
+      if (!requireProjectAccess(request, response, payload.projectId, 'read')) {
+        return;
+      }
 
       json(response, 200, payload);
       return;
     }
 
     if (request.method === 'GET' && /^\/api\/agent-runs\/[^/]+\/events$/.test(requestPath)) {
-      registerAgentRunEventClient(request, response, parseAgentRunEventsId(requestPath));
+      const runId = parseAgentRunEventsId(requestPath);
+      const payload = agentRunService.getRun(runId);
+      if (!payload) {
+        notFound(response);
+        return;
+      }
+      if (!requireProjectAccess(request, response, payload.projectId, 'read')) {
+        return;
+      }
+
+      registerAgentRunEventClient(request, response, runId);
       return;
     }
 
@@ -650,6 +733,14 @@ const server = http.createServer(async (request, response) => {
 
       if (action !== 'abort' && action !== 'retry') {
         sendError(response, new Error('Unsupported action. Use abort or retry.'), 400);
+        return;
+      }
+      const currentRun = agentRunService.getRun(runId);
+      if (!currentRun) {
+        notFound(response);
+        return;
+      }
+      if (!requireProjectAccess(request, response, currentRun.projectId, action === 'abort' ? 'destructive' : 'write')) {
         return;
       }
 
@@ -666,6 +757,9 @@ const server = http.createServer(async (request, response) => {
         sendError(response, new Error('projectId is required.'), 400);
         return;
       }
+      if (!requireProjectAccess(request, response, projectId, 'read')) {
+        return;
+      }
 
       json(response, 200, {
         results: filterSavedLibrary(projectId, query),
@@ -675,6 +769,9 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/library$/.test(requestPath)) {
       const projectId = parseProjectRoute(requestPath, 'library');
+      if (!requireProjectAccess(request, response, projectId, 'read')) {
+        return;
+      }
       json(response, 200, {
         results: store.getLibrary(projectId),
       });
@@ -684,11 +781,27 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && requestPath === '/api/agent-runs') {
       const projectId = String(url.searchParams.get('projectId') || '').trim();
       const stage = String(url.searchParams.get('stage') || '').trim();
+      if (projectId && !requireProjectAccess(request, response, projectId, 'read')) {
+        return;
+      }
+      const user = projectId ? null : requireAuthenticatedUser(request, response);
+      if (!projectId && !user) {
+        return;
+      }
+      const accessibleProjectIds = projectId
+        ? null
+        : new Set(
+            store
+              .getProjects()
+              .filter((project) => authService.canAccessProject(user, project, 'read'))
+              .map((project) => project.id),
+          );
+      const runs = store.listAgentRuns({
+        projectId: projectId || undefined,
+        stage: stage || undefined,
+      });
       json(response, 200, {
-        runs: store.listAgentRuns({
-          projectId: projectId || undefined,
-          stage: stage || undefined,
-        }),
+        runs: accessibleProjectIds ? runs.filter((run) => accessibleProjectIds.has(run.projectId)) : runs,
       });
       return;
     }
@@ -703,6 +816,9 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/library$/.test(requestPath)) {
       const [, , , projectId] = requestPath.split('/');
+      if (!requireProjectAccess(request, response, projectId, 'write')) {
+        return;
+      }
       const body = await readJsonBody(request);
       const paper = sanitisePaperPayload(body.paper);
       const saved = await store.savePaper(projectId, paper);
@@ -717,6 +833,9 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'DELETE' && /^\/api\/projects\/[^/]+\/library\/.+/.test(requestPath)) {
       const parts = requestPath.split('/');
       const projectId = parts[3];
+      if (!requireProjectAccess(request, response, projectId, 'destructive')) {
+        return;
+      }
       const paperId = decodeURIComponent(parts.slice(5).join('/'));
       await store.removePaper(projectId, paperId);
 
@@ -729,6 +848,9 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/queue$/.test(requestPath)) {
       const [, , , projectId] = requestPath.split('/');
+      if (!requireProjectAccess(request, response, projectId, 'write')) {
+        return;
+      }
       const body = await readJsonBody(request);
       const paper = sanitisePaperPayload(body.paper);
       const session =

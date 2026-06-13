@@ -51,10 +51,13 @@ function parseProjectAssetItemRoute(requestPath) {
   };
 }
 
-export function createAssetRoutes({ json, parseProjectRoute, readJsonBody, sendError, store }) {
+export function createAssetRoutes({ json, parseProjectRoute, requireProjectAccess, readJsonBody, sendError, store }) {
   return async function handleAssetRoute(request, response, { requestPath }) {
     if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/graph$/.test(requestPath)) {
       const projectId = parseProjectRoute(requestPath, 'graph');
+      if (!requireProjectAccess(request, response, projectId, 'read')) {
+        return true;
+      }
       json(response, 200, store.getProjectGraph(projectId));
       return true;
     }
@@ -62,6 +65,9 @@ export function createAssetRoutes({ json, parseProjectRoute, readJsonBody, sendE
     if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/[a-z-]+$/.test(requestPath)) {
       const assetRoute = parseProjectAssetRoute(requestPath);
       if (assetRoute && assetRoute.collection !== 'readingSessions') {
+        if (!requireProjectAccess(request, response, assetRoute.projectId, 'read')) {
+          return true;
+        }
         json(response, 200, {
           results: store.listProjectAssets(assetRoute.projectId, assetRoute.collection),
         });
@@ -72,6 +78,9 @@ export function createAssetRoutes({ json, parseProjectRoute, readJsonBody, sendE
     if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/[a-z-]+$/.test(requestPath)) {
       const assetRoute = parseProjectAssetRoute(requestPath);
       if (assetRoute && assetRoute.collection !== 'readingSessions') {
+        if (!requireProjectAccess(request, response, assetRoute.projectId, 'write')) {
+          return true;
+        }
         const body = await readJsonBody(request);
         const asset = await store.upsertProjectAsset(assetRoute.collection, {
           ...body,
@@ -88,6 +97,9 @@ export function createAssetRoutes({ json, parseProjectRoute, readJsonBody, sendE
     if (request.method === 'DELETE' && /^\/api\/projects\/[^/]+\/[a-z-]+\/[^/]+$/.test(requestPath)) {
       const assetRoute = parseProjectAssetItemRoute(requestPath);
       if (assetRoute && assetRoute.collection !== 'readingSessions') {
+        if (!requireProjectAccess(request, response, assetRoute.projectId, 'destructive')) {
+          return true;
+        }
         if (typeof store.deleteProjectAsset !== 'function') {
           sendError(response, new Error('Asset deletion is not supported by this store.'), 501);
           return true;

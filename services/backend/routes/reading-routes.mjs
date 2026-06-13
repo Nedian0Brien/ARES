@@ -31,6 +31,7 @@ export function createReadingRoutes({
   json,
   notFound,
   parseProjectRoute,
+  requireProjectAccess,
   readJsonBody,
   readRequestBody,
   readingService,
@@ -43,6 +44,14 @@ export function createReadingRoutes({
     if (request.method === 'GET' && /^\/api\/reading-sessions\/[^/]+\/pdf$/.test(requestPath)) {
       const sessionId = parseReadingSessionId(requestPath);
       try {
+        const session = store.getReadingSession(sessionId);
+        if (!session) {
+          notFound(response);
+          return true;
+        }
+        if (!requireProjectAccess(request, response, session.projectId, 'read')) {
+          return true;
+        }
         const { buffer } = await readingService.getSessionPdf(sessionId);
         response.writeHead(200, {
           'cache-control': 'no-store',
@@ -63,6 +72,14 @@ export function createReadingRoutes({
       }
 
       try {
+        const session = store.getReadingSession(route.sessionId);
+        if (!session) {
+          notFound(response);
+          return true;
+        }
+        if (!requireProjectAccess(request, response, session.projectId, 'read')) {
+          return true;
+        }
         const payload = await readingService.getSessionAssetFile(route.sessionId, {
           assetId: route.assetId,
           kind: String(url.searchParams.get('kind') || 'thumb').trim(),
@@ -80,6 +97,14 @@ export function createReadingRoutes({
 
     if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/parse$/.test(requestPath)) {
       const sessionId = parseReadingSessionId(requestPath);
+      const session = store.getReadingSession(sessionId);
+      if (!session) {
+        notFound(response);
+        return true;
+      }
+      if (!requireProjectAccess(request, response, session.projectId, 'write')) {
+        return true;
+      }
       json(response, 200, await readingService.parseSession(sessionId));
       return true;
     }
@@ -88,6 +113,14 @@ export function createReadingRoutes({
       const sessionId = parseReadingSessionId(requestPath);
       const body = await readJsonBody(request);
       try {
+        const session = store.getReadingSession(sessionId);
+        if (!session) {
+          notFound(response);
+          return true;
+        }
+        if (!requireProjectAccess(request, response, session.projectId, 'write')) {
+          return true;
+        }
         json(response, 200, await readingService.importTextSession(sessionId, body));
       } catch (error) {
         sendError(response, error, 409);
@@ -98,6 +131,14 @@ export function createReadingRoutes({
     if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/summarize$/.test(requestPath)) {
       const sessionId = parseReadingSessionId(requestPath);
       try {
+        const session = store.getReadingSession(sessionId);
+        if (!session) {
+          notFound(response);
+          return true;
+        }
+        if (!requireProjectAccess(request, response, session.projectId, 'write')) {
+          return true;
+        }
         json(response, 200, await readingService.summarizeSession(sessionId));
       } catch (error) {
         sendError(response, error, 409);
@@ -108,6 +149,14 @@ export function createReadingRoutes({
     if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/extract-assets$/.test(requestPath)) {
       const sessionId = parseReadingSessionId(requestPath);
       try {
+        const session = store.getReadingSession(sessionId);
+        if (!session) {
+          notFound(response);
+          return true;
+        }
+        if (!requireProjectAccess(request, response, session.projectId, 'write')) {
+          return true;
+        }
         json(response, 200, await readingService.extractAssets(sessionId));
       } catch (error) {
         sendError(response, error, 409);
@@ -119,6 +168,14 @@ export function createReadingRoutes({
       const sessionId = parseReadingSessionId(requestPath);
       const body = await readJsonBody(request);
       try {
+        const session = store.getReadingSession(sessionId);
+        if (!session) {
+          notFound(response);
+          return true;
+        }
+        if (!requireProjectAccess(request, response, session.projectId, 'write')) {
+          return true;
+        }
         json(response, 200, await readingService.chat(sessionId, body));
       } catch (error) {
         sendError(response, error, 409);
@@ -133,6 +190,14 @@ export function createReadingRoutes({
       const route = parseReadingSessionNoteRoute(requestPath);
       if (!route) {
         notFound(response);
+        return true;
+      }
+      const session = store.getReadingSession(route.sessionId);
+      if (!session) {
+        notFound(response);
+        return true;
+      }
+      if (!requireProjectAccess(request, response, session.projectId, request.method === 'DELETE' ? 'destructive' : 'write')) {
         return true;
       }
 
@@ -159,6 +224,9 @@ export function createReadingRoutes({
 
     if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/reading-sessions$/.test(requestPath)) {
       const projectId = parseProjectRoute(requestPath, 'reading-sessions');
+      if (!requireProjectAccess(request, response, projectId, 'read')) {
+        return true;
+      }
       json(response, 200, {
         results: await readingService.listProjectSessions(projectId),
       });
@@ -167,6 +235,9 @@ export function createReadingRoutes({
 
     if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/reading-sessions$/.test(requestPath)) {
       const projectId = parseProjectRoute(requestPath, 'reading-sessions');
+      if (!requireProjectAccess(request, response, projectId, 'write')) {
+        return true;
+      }
       const body = await readJsonBody(request);
       const paper = body.paper
         ? sanitisePaperPayload(body.paper)
@@ -199,6 +270,9 @@ export function createReadingRoutes({
 
     if (request.method === 'POST' && /^\/api\/projects\/[^/]+\/reading-sessions\/upload$/.test(requestPath)) {
       const projectId = parseProjectRoute(requestPath, 'reading-sessions/upload');
+      if (!requireProjectAccess(request, response, projectId, 'write')) {
+        return true;
+      }
       try {
         const contentType = String(request.headers['content-type'] || '');
         const fileNameHeader = String(request.headers['x-file-name'] || '');
