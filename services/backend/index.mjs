@@ -102,7 +102,7 @@ const store = await createStore({
   seedFile: SEED_FILE,
   runtimeFile: RUNTIME_FILE,
 });
-const authService = createAuthService(process.env);
+const authService = createAuthService(process.env, { store });
 const retrievalScorer = createConfiguredRetrievalScorer(process.env);
 const readingService = createReadingService({
   enableDemoPdf: DEMO_PDF_ENABLED,
@@ -234,6 +234,12 @@ function requireAuthenticatedUser(request, response) {
     return null;
   }
 
+  const csrfError = authService.csrfError(request, authContext);
+  if (csrfError) {
+    sendError(response, new Error(csrfError), 403);
+    return null;
+  }
+
   return authContext.user;
 }
 
@@ -251,7 +257,9 @@ function requireProjectAccess(request, response, projectId, action = 'read') {
     return null;
   }
 
-  if (!authService.canAccessProject(user, project, action)) {
+  const projectAccess =
+    typeof store.listProjectAccess === 'function' ? store.listProjectAccess({ projectId }) : project.projectAccess || [];
+  if (!authService.canAccessProject(user, { ...project, projectAccess }, action)) {
     sendError(response, new Error('Project access is forbidden.'), 403);
     return null;
   }
@@ -670,7 +678,36 @@ const server = http.createServer(async (request, response) => {
         auth: {
           mode: authService.mode,
         },
+        csrfToken: authService.resolveRequest(request).csrfToken || '',
         user,
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && requestPath === '/api/auth/login') {
+      const body = await readJsonBody(request);
+      const userId = String(body.userId || body.email || '').trim();
+      const user = store.getUser ? store.getUser(userId) : null;
+      if (!user || user.status !== 'active') {
+        sendError(response, new Error('Invalid login user.'), 401);
+        return;
+      }
+
+      const session = await authService.createSession(user.id);
+      response.setHeader('set-cookie', session.cookie);
+      json(response, 200, {
+        csrfToken: session.csrfToken,
+        expiresAt: session.expiresAt,
+        user,
+      });
+      return;
+    }
+
+    if (request.method === 'POST' && requestPath === '/api/auth/logout') {
+      const revoked = await authService.revokeRequestSession(request);
+      response.setHeader('set-cookie', revoked.cookie);
+      json(response, 200, {
+        ok: true,
       });
       return;
     }
@@ -682,7 +719,19 @@ const server = http.createServer(async (request, response) => {
       }
 
       json(response, 200, {
-        projects: store.getProjects().filter((project) => authService.canAccessProject(user, project, 'read')),
+        projects: store.getProjects().filter((project) =>
+          authService.canAccessProject(
+            user,
+            {
+              ...project,
+              projectAccess:
+                typeof store.listProjectAccess === 'function'
+                  ? store.listProjectAccess({ projectId: project.id })
+                  : project.projectAccess || [],
+            },
+            'read',
+          ),
+        ),
       });
       return;
     }
@@ -824,7 +873,19 @@ const server = http.createServer(async (request, response) => {
         : new Set(
             store
               .getProjects()
-              .filter((project) => authService.canAccessProject(user, project, 'read'))
+              .filter((project) =>
+                authService.canAccessProject(
+                  user,
+                  {
+                    ...project,
+                    projectAccess:
+                      typeof store.listProjectAccess === 'function'
+                        ? store.listProjectAccess({ projectId: project.id })
+                        : project.projectAccess || [],
+                  },
+                  'read',
+                ),
+              )
               .map((project) => project.id),
           );
       const runs = store.listAgentRuns({

@@ -3,9 +3,17 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { ASSET_COLLECTIONS, normaliseAsset, normalisePaper } from './asset-model.mjs';
+import {
+  normalizeAuthSession,
+  normalizeMembership,
+  normalizeOrganization,
+  normalizeProjectAccess,
+  normalizeUser,
+} from './identity-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
+const IDENTITY_COLLECTIONS = ['users', 'organizations', 'memberships', 'projectAccess', 'authSessions'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
 const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
 const MAX_AGENT_PROGRESS_EVENTS = 80;
@@ -42,6 +50,19 @@ function migrateStoreState(state) {
     state.projects = [];
     changed = true;
   }
+
+  for (const key of IDENTITY_COLLECTIONS) {
+    if (!Array.isArray(state[key])) {
+      state[key] = [];
+      changed = true;
+    }
+  }
+
+  state.users = state.users.map((entry) => normalizeUser(entry));
+  state.organizations = state.organizations.map((entry) => normalizeOrganization(entry));
+  state.memberships = state.memberships.map((entry) => normalizeMembership(entry));
+  state.projectAccess = state.projectAccess.map((entry) => normalizeProjectAccess(entry));
+  state.authSessions = state.authSessions.map((entry) => normalizeAuthSession(entry));
 
   for (const key of PROJECT_MAP_COLLECTIONS) {
     changed = ensureArrayMap(state, key) || changed;
@@ -177,6 +198,28 @@ export async function createFileStore({ seedFile, runtimeFile }) {
 
     state[name] ||= [];
     return state[name];
+  }
+
+  function identityCollectionFor(name) {
+    if (!IDENTITY_COLLECTIONS.includes(name)) {
+      throw new Error(`Unknown identity collection: ${name}`);
+    }
+
+    state[name] ||= [];
+    return state[name];
+  }
+
+  function upsertIdentity(collectionName, input, normalize, matcher) {
+    const collection = identityCollectionFor(collectionName);
+    const existingIndex = collection.findIndex((entry) => matcher(entry));
+    const existing = existingIndex >= 0 ? collection[existingIndex] : null;
+    const next = normalize(input, existing || null);
+    if (existingIndex >= 0) {
+      collection[existingIndex] = next;
+    } else {
+      collection.unshift(next);
+    }
+    return next;
   }
 
   function projectSummary(project) {
@@ -366,6 +409,126 @@ export async function createFileStore({ seedFile, runtimeFile }) {
 
     getProjects() {
       return state.projects.map(projectSummary);
+    },
+
+    listUsers() {
+      return clone(identityCollectionFor('users'));
+    },
+
+    getUser(userId) {
+      const match = identityCollectionFor('users').find((entry) => entry.id === userId || entry.email === userId);
+      return match ? clone(match) : null;
+    },
+
+    async upsertUser(input) {
+      const next = upsertIdentity('users', input, normalizeUser, (entry) => {
+        const id = String(input.id || input.userId || '').trim();
+        const email = String(input.email || '').trim();
+        return (id && entry.id === id) || (email && entry.email === email);
+      });
+      await persist();
+      return clone(next);
+    },
+
+    listOrganizations() {
+      return clone(identityCollectionFor('organizations'));
+    },
+
+    getOrganization(organizationId) {
+      const match = identityCollectionFor('organizations').find((entry) => entry.id === organizationId);
+      return match ? clone(match) : null;
+    },
+
+    async upsertOrganization(input) {
+      const next = upsertIdentity('organizations', input, normalizeOrganization, (entry) => {
+        const id = String(input.id || input.organizationId || '').trim();
+        return id && entry.id === id;
+      });
+      await persist();
+      return clone(next);
+    },
+
+    listMemberships({ organizationId, userId } = {}) {
+      let values = identityCollectionFor('memberships');
+      if (organizationId) {
+        values = values.filter((entry) => entry.organizationId === organizationId);
+      }
+      if (userId) {
+        values = values.filter((entry) => entry.userId === userId);
+      }
+      return clone(values);
+    },
+
+    async upsertMembership(input) {
+      const next = upsertIdentity('memberships', input, normalizeMembership, (entry) => {
+        const id = String(input.id || '').trim();
+        return (
+          (id && entry.id === id) ||
+          (entry.organizationId === input.organizationId && entry.userId === input.userId)
+        );
+      });
+      await persist();
+      return clone(next);
+    },
+
+    listProjectAccess({ projectId, userId } = {}) {
+      let values = identityCollectionFor('projectAccess');
+      if (projectId) {
+        values = values.filter((entry) => entry.projectId === projectId);
+      }
+      if (userId) {
+        values = values.filter((entry) => entry.userId === userId);
+      }
+      return clone(values);
+    },
+
+    async upsertProjectAccess(input) {
+      ensureProject(input.projectId);
+      const next = upsertIdentity('projectAccess', input, normalizeProjectAccess, (entry) => {
+        const id = String(input.id || '').trim();
+        return (
+          (id && entry.id === id) ||
+          (entry.projectId === input.projectId && entry.userId === input.userId)
+        );
+      });
+      await persist();
+      return clone(next);
+    },
+
+    async createAuthSession(input) {
+      const user = this.getUser(String(input.userId || '').trim());
+      if (!user) {
+        throw new Error(`Unknown user: ${input.userId}`);
+      }
+      const session = normalizeAuthSession(input);
+      identityCollectionFor('authSessions').unshift(session);
+      await persist();
+      return clone(session);
+    },
+
+    getAuthSessionByToken(token) {
+      const now = Date.now();
+      const match = identityCollectionFor('authSessions').find((entry) => {
+        if (entry.token !== token || entry.revokedAt) {
+          return false;
+        }
+        if (!entry.expiresAt) {
+          return true;
+        }
+        return (Date.parse(entry.expiresAt) || 0) > now;
+      });
+      return match ? clone(match) : null;
+    },
+
+    async revokeAuthSession(token) {
+      const session = identityCollectionFor('authSessions').find((entry) => entry.token === token && !entry.revokedAt);
+      if (!session) {
+        return { revoked: false };
+      }
+      session.revokedAt = nowIso();
+      session.updatedAt = nowIso();
+      await persist();
+      return { revoked: true };
     },
 
     getProject(projectId) {

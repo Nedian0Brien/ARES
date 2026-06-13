@@ -30,15 +30,15 @@
 
 ### 1. Auth, Tenancy, Permission
 
-- [ ] 사용자 계정 모델을 추가한다.
+- [x] 사용자 계정 모델을 추가한다.
   - 산출물: `User`, `Organization`, `Membership`, `ProjectAccess` store contract
-  - 검증: model normalization/unit test
+  - 검증: `services/backend/lib/identity-model.mjs`, `services/backend/tests/asset-store.test.mjs`
 - [x] 개발/운영 auth mode를 분리한다.
   - 산출물: local dev user fallback, production auth-required mode
   - 검증: `services/backend/lib/auth.mjs`, `services/backend/tests/auth-access.test.mjs`
-- [ ] session cookie 기반 로그인 흐름을 추가한다.
+- [x] session cookie 기반 로그인 흐름을 추가한다.
   - 산출물: login/logout/me API, secure cookie policy, CSRF policy
-  - 검증: login/logout route test
+  - 검증: `services/backend/tests/auth-access.test.mjs`
 - [x] project ownership을 모든 project-scoped API에 적용한다.
   - 산출물: access guard, project resolver, 403 response contract
   - 검증: `services/backend/index.mjs`, `services/backend/tests/auth-access.test.mjs`

@@ -41,6 +41,18 @@ async function createDataRoot() {
           owned: [],
           private: [],
         },
+        users: [
+          { email: 'owner@example.test', id: 'owner-user', name: 'Owner User', role: 'viewer' },
+          { email: 'editor@example.test', id: 'editor-user', name: 'Editor User', role: 'viewer' },
+          { email: 'viewer@example.test', id: 'viewer-user', name: 'Viewer User', role: 'viewer' },
+          { email: 'intruder@example.test', id: 'intruder-user', name: 'Intruder User', role: 'viewer' },
+        ],
+        organizations: [{ id: 'org-demo', name: 'Demo Org', slug: 'demo' }],
+        memberships: [
+          { organizationId: 'org-demo', role: 'owner', userId: 'owner-user' },
+          { organizationId: 'org-demo', role: 'editor', userId: 'editor-user' },
+          { organizationId: 'org-demo', role: 'viewer', userId: 'viewer-user' },
+        ],
         projects: [
           {
             color: '#5e6ad2',
@@ -48,12 +60,7 @@ async function createDataRoot() {
             focus: 'Owned focus',
             id: 'owned',
             keywords: ['rag'],
-            members: [
-              { role: 'editor', userId: 'editor-user' },
-              { role: 'viewer', userId: 'viewer-user' },
-            ],
             name: 'Owned',
-            ownerId: 'owner-user',
           },
           {
             color: '#111111',
@@ -62,8 +69,13 @@ async function createDataRoot() {
             id: 'private',
             keywords: ['private'],
             name: 'Private',
-            ownerId: 'private-owner',
           },
+        ],
+        projectAccess: [
+          { projectId: 'owned', role: 'owner', userId: 'owner-user' },
+          { projectId: 'owned', role: 'editor', userId: 'editor-user' },
+          { projectId: 'owned', role: 'viewer', userId: 'viewer-user' },
+          { projectId: 'private', role: 'owner', userId: 'private-owner' },
         ],
         readingQueue: {
           owned: [],
@@ -175,6 +187,74 @@ test('required auth mode rejects anonymous API access and filters project lists'
     runsPayload.runs.map((run) => run.id),
     ['run-owned'],
   );
+});
+
+test('cookie login exposes current user and enforces CSRF on mutating requests', async (t) => {
+  const dataRootDir = await createDataRoot();
+  const server = await startServer(dataRootDir);
+  t.after(async () => {
+    await server.close();
+  });
+
+  const loginResponse = await fetch(new URL('/api/auth/login', server.url), {
+    body: JSON.stringify({ userId: 'owner-user' }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const loginPayload = await loginResponse.json();
+  const cookie = loginResponse.headers.get('set-cookie');
+  assert.equal(loginResponse.status, 200);
+  assert.equal(loginPayload.user.id, 'owner-user');
+  assert.match(loginPayload.csrfToken, /^csrf-/);
+  assert.match(cookie, /ares_session=/);
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /SameSite=Lax/);
+
+  const meResponse = await fetch(new URL('/api/auth/me', server.url), {
+    headers: { cookie },
+  });
+  const mePayload = await meResponse.json();
+  assert.equal(meResponse.status, 200);
+  assert.equal(mePayload.user.id, 'owner-user');
+  assert.equal(mePayload.csrfToken, loginPayload.csrfToken);
+
+  const blockedCreateResponse = await fetch(new URL('/api/projects/owned/insight-cards', server.url), {
+    body: JSON.stringify({
+      claim: 'Missing CSRF should block cookie writes.',
+      type: 'claim',
+    }),
+    headers: {
+      'content-type': 'application/json',
+      cookie,
+    },
+    method: 'POST',
+  });
+  assert.equal(blockedCreateResponse.status, 403);
+
+  const createResponse = await fetch(new URL('/api/projects/owned/insight-cards', server.url), {
+    body: JSON.stringify({
+      claim: 'CSRF token allows cookie writes.',
+      type: 'claim',
+    }),
+    headers: {
+      'content-type': 'application/json',
+      cookie,
+      'x-csrf-token': loginPayload.csrfToken,
+    },
+    method: 'POST',
+  });
+  assert.equal(createResponse.status, 201);
+
+  const logoutResponse = await fetch(new URL('/api/auth/logout', server.url), {
+    headers: { cookie },
+    method: 'POST',
+  });
+  assert.equal(logoutResponse.status, 200);
+
+  const revokedMeResponse = await fetch(new URL('/api/auth/me', server.url), {
+    headers: { cookie },
+  });
+  assert.equal(revokedMeResponse.status, 401);
 });
 
 test('project access guard separates read, write, and destructive permissions', async (t) => {

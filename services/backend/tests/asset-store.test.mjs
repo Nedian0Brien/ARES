@@ -90,6 +90,45 @@ test('file store persists graph asset collections through generic project asset 
   assert.deepEqual(graph.readingPackets[0].evidenceLinkIds, [evidence.id]);
 });
 
+test('file store persists users, organizations, memberships, project access, and auth sessions', async () => {
+  const store = await createDemoStore();
+
+  const user = await store.upsertUser({
+    email: 'owner@example.test',
+    id: 'owner-user',
+    name: 'Owner User',
+  });
+  const organization = await store.upsertOrganization({
+    id: 'org-demo',
+    name: 'Demo Org',
+  });
+  const membership = await store.upsertMembership({
+    organizationId: organization.id,
+    role: 'owner',
+    userId: user.id,
+  });
+  const access = await store.upsertProjectAccess({
+    projectId: 'demo',
+    role: 'owner',
+    userId: user.id,
+  });
+  const session = await store.createAuthSession({
+    expiresAt: '2999-01-01T00:00:00.000Z',
+    userId: user.id,
+  });
+
+  assert.equal(store.getUser(user.id).email, 'owner@example.test');
+  assert.equal(store.listUsers().length, 1);
+  assert.equal(store.getOrganization(organization.id).name, 'Demo Org');
+  assert.deepEqual(store.listMemberships({ userId: user.id }).map((entry) => entry.id), [membership.id]);
+  assert.deepEqual(store.listProjectAccess({ projectId: 'demo' }).map((entry) => entry.id), [access.id]);
+  assert.equal(store.getAuthSessionByToken(session.token).userId, user.id);
+
+  const revoked = await store.revokeAuthSession(session.token);
+  assert.equal(revoked.revoked, true);
+  assert.equal(store.getAuthSessionByToken(session.token), null);
+});
+
 test('file store removes deleted insight ids from draft section references', async () => {
   const store = await createDemoStore();
   const insight = await store.upsertProjectAsset('insightCards', {

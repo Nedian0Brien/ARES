@@ -4,9 +4,17 @@ import { promises as fs } from 'node:fs';
 import { Pool } from 'pg';
 
 import { ASSET_COLLECTIONS, normaliseAsset, normalisePaper } from './asset-model.mjs';
+import {
+  normalizeAuthSession,
+  normalizeMembership,
+  normalizeOrganization,
+  normalizeProjectAccess,
+  normalizeUser,
+} from './identity-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
+const IDENTITY_COLLECTIONS = ['users', 'organizations', 'memberships', 'projectAccess', 'authSessions'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
 const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
 const MAX_AGENT_PROGRESS_EVENTS = 80;
@@ -46,6 +54,13 @@ function migrateStoreState(state) {
   if (!Array.isArray(state.projects)) {
     state.projects = [];
     changed = true;
+  }
+
+  for (const key of IDENTITY_COLLECTIONS) {
+    if (!Array.isArray(state[key])) {
+      state[key] = [];
+      changed = true;
+    }
   }
 
   for (const key of PROJECT_MAP_COLLECTIONS) {
@@ -208,6 +223,44 @@ function upsertBy(collection, nextValue, matcher) {
 async function ensureSchema(pool) {
   const statements = [
     `
+      CREATE TABLE IF NOT EXISTS ares_users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb
+      )
+    `,
+    `
+      CREATE UNIQUE INDEX IF NOT EXISTS ares_users_email_unique_idx
+      ON ares_users (email)
+      WHERE email <> ''
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS ares_organizations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS ares_memberships (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL REFERENCES ares_organizations(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES ares_users(id) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'viewer',
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        UNIQUE (organization_id, user_id)
+      )
+    `,
+    `
       CREATE TABLE IF NOT EXISTS ares_projects (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -218,6 +271,33 @@ async function ensureSchema(pool) {
         payload JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS ares_project_access (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES ares_projects(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES ares_users(id) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'viewer',
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+        UNIQUE (project_id, user_id)
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS ares_auth_sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES ares_users(id) ON DELETE CASCADE,
+        token TEXT NOT NULL UNIQUE,
+        csrf_token TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NULL,
+        revoked_at TIMESTAMPTZ NULL,
+        last_seen_at TIMESTAMPTZ NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        payload JSONB NOT NULL DEFAULT '{}'::jsonb
       )
     `,
     `
@@ -284,6 +364,9 @@ async function ensureSchema(pool) {
     'CREATE INDEX IF NOT EXISTS ares_agent_runs_project_updated_idx ON ares_agent_runs (project_id, updated_at DESC)',
     'CREATE INDEX IF NOT EXISTS ares_agent_runs_project_stage_idx ON ares_agent_runs (project_id, stage, updated_at DESC)',
     'CREATE INDEX IF NOT EXISTS ares_project_assets_collection_project_updated_idx ON ares_project_assets (collection_name, project_id, updated_at DESC)',
+    'CREATE INDEX IF NOT EXISTS ares_project_access_project_idx ON ares_project_access (project_id, user_id)',
+    'CREATE INDEX IF NOT EXISTS ares_memberships_user_idx ON ares_memberships (user_id, organization_id)',
+    'CREATE INDEX IF NOT EXISTS ares_auth_sessions_token_idx ON ares_auth_sessions (token)',
   ];
 
   for (const statement of statements) {
@@ -292,6 +375,77 @@ async function ensureSchema(pool) {
 }
 
 async function importBootstrapState(client, state) {
+  for (const user of state.users || []) {
+    const normalized = normalizeUser(user);
+    await client.query(
+      `
+        INSERT INTO ares_users (id, email, status, created_at, updated_at, payload)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+        ON CONFLICT (id) DO UPDATE SET
+          email = EXCLUDED.email,
+          status = EXCLUDED.status,
+          updated_at = EXCLUDED.updated_at,
+          payload = EXCLUDED.payload
+      `,
+      [
+        normalized.id,
+        normalized.email,
+        normalized.status,
+        normalized.createdAt,
+        normalized.updatedAt,
+        jsonPayload(normalized),
+      ],
+    );
+  }
+
+  for (const organization of state.organizations || []) {
+    const normalized = normalizeOrganization(organization);
+    await client.query(
+      `
+        INSERT INTO ares_organizations (id, name, status, created_at, updated_at, payload)
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          status = EXCLUDED.status,
+          updated_at = EXCLUDED.updated_at,
+          payload = EXCLUDED.payload
+      `,
+      [
+        normalized.id,
+        normalized.name,
+        normalized.status,
+        normalized.createdAt,
+        normalized.updatedAt,
+        jsonPayload(normalized),
+      ],
+    );
+  }
+
+  for (const membership of state.memberships || []) {
+    const normalized = normalizeMembership(membership);
+    await client.query(
+      `
+        INSERT INTO ares_memberships (id, organization_id, user_id, role, status, created_at, updated_at, payload)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+        ON CONFLICT (organization_id, user_id) DO UPDATE SET
+          role = EXCLUDED.role,
+          status = EXCLUDED.status,
+          updated_at = EXCLUDED.updated_at,
+          payload = EXCLUDED.payload
+      `,
+      [
+        normalized.id,
+        normalized.organizationId,
+        normalized.userId,
+        normalized.role,
+        normalized.status,
+        normalized.createdAt,
+        normalized.updatedAt,
+        jsonPayload(normalized),
+      ],
+    );
+  }
+
   for (const project of state.projects) {
     await client.query(
       `
@@ -314,6 +468,31 @@ async function importBootstrapState(client, state) {
         project.defaultQuery,
         jsonPayload(ensureStringArray(project.keywords)),
         jsonPayload(project),
+      ],
+    );
+  }
+
+  for (const access of state.projectAccess || []) {
+    const normalized = normalizeProjectAccess(access);
+    await client.query(
+      `
+        INSERT INTO ares_project_access (id, project_id, user_id, role, status, created_at, updated_at, payload)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+        ON CONFLICT (project_id, user_id) DO UPDATE SET
+          role = EXCLUDED.role,
+          status = EXCLUDED.status,
+          updated_at = EXCLUDED.updated_at,
+          payload = EXCLUDED.payload
+      `,
+      [
+        normalized.id,
+        normalized.projectId,
+        normalized.userId,
+        normalized.role,
+        normalized.status,
+        normalized.createdAt,
+        normalized.updatedAt,
+        jsonPayload(normalized),
       ],
     );
   }
@@ -477,6 +656,27 @@ function inflatePayload(row, extra = {}) {
 }
 
 async function loadState(pool) {
+  const usersResult = await pool.query(
+    `
+      SELECT id, email, status, created_at, updated_at, payload
+      FROM ares_users
+      ORDER BY created_at ASC
+    `,
+  );
+  const organizationsResult = await pool.query(
+    `
+      SELECT id, name, status, created_at, updated_at, payload
+      FROM ares_organizations
+      ORDER BY created_at ASC
+    `,
+  );
+  const membershipsResult = await pool.query(
+    `
+      SELECT id, organization_id, user_id, role, status, created_at, updated_at, payload
+      FROM ares_memberships
+      ORDER BY created_at ASC
+    `,
+  );
   const projectsResult = await pool.query(
     `
       SELECT id, name, color, focus, default_query, keywords, payload
@@ -519,10 +719,78 @@ async function loadState(pool) {
       ORDER BY updated_at DESC
     `,
   );
+  const projectAccessResult = await pool.query(
+    `
+      SELECT id, project_id, user_id, role, status, created_at, updated_at, payload
+      FROM ares_project_access
+      ORDER BY created_at ASC
+    `,
+  );
+  const authSessionsResult = await pool.query(
+    `
+      SELECT id, user_id, token, csrf_token, expires_at, revoked_at, last_seen_at, created_at, updated_at, payload
+      FROM ares_auth_sessions
+      ORDER BY created_at DESC
+    `,
+  );
 
   const state = migrateStoreState({
     projects: projectsResult.rows.map(inflateProject),
   }).state;
+
+  state.users = usersResult.rows.map((row) =>
+    inflatePayload(row, {
+      createdAt: toIsoString(row.created_at),
+      email: ensureText(row.email),
+      id: ensureText(row.id),
+      status: ensureText(row.status, 'active'),
+      updatedAt: toIsoString(row.updated_at),
+    }),
+  );
+  state.organizations = organizationsResult.rows.map((row) =>
+    inflatePayload(row, {
+      createdAt: toIsoString(row.created_at),
+      id: ensureText(row.id),
+      name: ensureText(row.name),
+      status: ensureText(row.status, 'active'),
+      updatedAt: toIsoString(row.updated_at),
+    }),
+  );
+  state.memberships = membershipsResult.rows.map((row) =>
+    inflatePayload(row, {
+      createdAt: toIsoString(row.created_at),
+      id: ensureText(row.id),
+      organizationId: ensureText(row.organization_id),
+      role: ensureText(row.role, 'viewer'),
+      status: ensureText(row.status, 'active'),
+      updatedAt: toIsoString(row.updated_at),
+      userId: ensureText(row.user_id),
+    }),
+  );
+  state.projectAccess = projectAccessResult.rows.map((row) =>
+    inflatePayload(row, {
+      createdAt: toIsoString(row.created_at),
+      id: ensureText(row.id),
+      projectId: ensureText(row.project_id),
+      role: ensureText(row.role, 'viewer'),
+      status: ensureText(row.status, 'active'),
+      updatedAt: toIsoString(row.updated_at),
+      userId: ensureText(row.user_id),
+    }),
+  );
+  state.authSessions = authSessionsResult.rows.map((row) =>
+    inflatePayload(row, {
+      createdAt: toIsoString(row.created_at),
+      csrfToken: ensureText(row.csrf_token),
+      expiresAt: toIsoString(row.expires_at) || '',
+      id: ensureText(row.id),
+      lastSeenAt: toIsoString(row.last_seen_at) || '',
+      revokedAt: toIsoString(row.revoked_at) || '',
+      token: ensureText(row.token),
+      updatedAt: toIsoString(row.updated_at),
+      userId: ensureText(row.user_id),
+    }),
+  );
 
   for (const row of libraryResult.rows) {
     state.library[row.project_id] ||= [];
@@ -699,6 +967,122 @@ async function upsertProjectAssetRow(pool, collectionName, asset) {
   );
 }
 
+async function upsertUserRow(pool, user) {
+  await pool.query(
+    `
+      INSERT INTO ares_users (id, email, status, created_at, updated_at, payload)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+      ON CONFLICT (id) DO UPDATE SET
+        email = EXCLUDED.email,
+        status = EXCLUDED.status,
+        updated_at = EXCLUDED.updated_at,
+        payload = EXCLUDED.payload
+    `,
+    [user.id, user.email, user.status, user.createdAt || nowIso(), user.updatedAt || nowIso(), jsonPayload(user)],
+  );
+}
+
+async function upsertOrganizationRow(pool, organization) {
+  await pool.query(
+    `
+      INSERT INTO ares_organizations (id, name, status, created_at, updated_at, payload)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        status = EXCLUDED.status,
+        updated_at = EXCLUDED.updated_at,
+        payload = EXCLUDED.payload
+    `,
+    [
+      organization.id,
+      organization.name,
+      organization.status,
+      organization.createdAt || nowIso(),
+      organization.updatedAt || nowIso(),
+      jsonPayload(organization),
+    ],
+  );
+}
+
+async function upsertMembershipRow(pool, membership) {
+  await pool.query(
+    `
+      INSERT INTO ares_memberships (id, organization_id, user_id, role, status, created_at, updated_at, payload)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+      ON CONFLICT (organization_id, user_id) DO UPDATE SET
+        role = EXCLUDED.role,
+        status = EXCLUDED.status,
+        updated_at = EXCLUDED.updated_at,
+        payload = EXCLUDED.payload
+    `,
+    [
+      membership.id,
+      membership.organizationId,
+      membership.userId,
+      membership.role,
+      membership.status,
+      membership.createdAt || nowIso(),
+      membership.updatedAt || nowIso(),
+      jsonPayload(membership),
+    ],
+  );
+}
+
+async function upsertProjectAccessRow(pool, access) {
+  await pool.query(
+    `
+      INSERT INTO ares_project_access (id, project_id, user_id, role, status, created_at, updated_at, payload)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+      ON CONFLICT (project_id, user_id) DO UPDATE SET
+        role = EXCLUDED.role,
+        status = EXCLUDED.status,
+        updated_at = EXCLUDED.updated_at,
+        payload = EXCLUDED.payload
+    `,
+    [
+      access.id,
+      access.projectId,
+      access.userId,
+      access.role,
+      access.status,
+      access.createdAt || nowIso(),
+      access.updatedAt || nowIso(),
+      jsonPayload(access),
+    ],
+  );
+}
+
+async function upsertAuthSessionRow(pool, session) {
+  await pool.query(
+    `
+      INSERT INTO ares_auth_sessions (
+        id, user_id, token, csrf_token, expires_at, revoked_at, last_seen_at, created_at, updated_at, payload
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+      ON CONFLICT (id) DO UPDATE SET
+        token = EXCLUDED.token,
+        csrf_token = EXCLUDED.csrf_token,
+        expires_at = EXCLUDED.expires_at,
+        revoked_at = EXCLUDED.revoked_at,
+        last_seen_at = EXCLUDED.last_seen_at,
+        updated_at = EXCLUDED.updated_at,
+        payload = EXCLUDED.payload
+    `,
+    [
+      session.id,
+      session.userId,
+      session.token,
+      session.csrfToken,
+      session.expiresAt || null,
+      session.revokedAt || null,
+      session.lastSeenAt || null,
+      session.createdAt || nowIso(),
+      session.updatedAt || nowIso(),
+      jsonPayload(session),
+    ],
+  );
+}
+
 export async function createPostgresStore({
   databaseSsl,
   databaseUrl,
@@ -754,6 +1138,28 @@ export async function createPostgresStore({
 
     state[name] ||= [];
     return state[name];
+  }
+
+  function identityCollectionFor(name) {
+    if (!IDENTITY_COLLECTIONS.includes(name)) {
+      throw new Error(`Unknown identity collection: ${name}`);
+    }
+
+    state[name] ||= [];
+    return state[name];
+  }
+
+  function upsertIdentity(collectionName, input, normalize, matcher) {
+    const collection = identityCollectionFor(collectionName);
+    const existingIndex = collection.findIndex((entry) => matcher(entry));
+    const existing = existingIndex >= 0 ? collection[existingIndex] : null;
+    const next = normalize(input, existing || null);
+    if (existingIndex >= 0) {
+      collection[existingIndex] = next;
+    } else {
+      collection.unshift(next);
+    }
+    return next;
   }
 
   function projectSummary(project) {
@@ -930,6 +1336,126 @@ export async function createPostgresStore({
 
     getProjects() {
       return state.projects.map(projectSummary);
+    },
+
+    listUsers() {
+      return clone(identityCollectionFor('users'));
+    },
+
+    getUser(userId) {
+      const match = identityCollectionFor('users').find((entry) => entry.id === userId || entry.email === userId);
+      return match ? clone(match) : null;
+    },
+
+    async upsertUser(input) {
+      const next = upsertIdentity('users', input, normalizeUser, (entry) => {
+        const id = String(input.id || input.userId || '').trim();
+        const email = String(input.email || '').trim();
+        return (id && entry.id === id) || (email && entry.email === email);
+      });
+      await upsertUserRow(pool, next);
+      return clone(next);
+    },
+
+    listOrganizations() {
+      return clone(identityCollectionFor('organizations'));
+    },
+
+    getOrganization(organizationId) {
+      const match = identityCollectionFor('organizations').find((entry) => entry.id === organizationId);
+      return match ? clone(match) : null;
+    },
+
+    async upsertOrganization(input) {
+      const next = upsertIdentity('organizations', input, normalizeOrganization, (entry) => {
+        const id = String(input.id || input.organizationId || '').trim();
+        return id && entry.id === id;
+      });
+      await upsertOrganizationRow(pool, next);
+      return clone(next);
+    },
+
+    listMemberships({ organizationId, userId } = {}) {
+      let values = identityCollectionFor('memberships');
+      if (organizationId) {
+        values = values.filter((entry) => entry.organizationId === organizationId);
+      }
+      if (userId) {
+        values = values.filter((entry) => entry.userId === userId);
+      }
+      return clone(values);
+    },
+
+    async upsertMembership(input) {
+      const next = upsertIdentity('memberships', input, normalizeMembership, (entry) => {
+        const id = String(input.id || '').trim();
+        return (
+          (id && entry.id === id) ||
+          (entry.organizationId === input.organizationId && entry.userId === input.userId)
+        );
+      });
+      await upsertMembershipRow(pool, next);
+      return clone(next);
+    },
+
+    listProjectAccess({ projectId, userId } = {}) {
+      let values = identityCollectionFor('projectAccess');
+      if (projectId) {
+        values = values.filter((entry) => entry.projectId === projectId);
+      }
+      if (userId) {
+        values = values.filter((entry) => entry.userId === userId);
+      }
+      return clone(values);
+    },
+
+    async upsertProjectAccess(input) {
+      ensureProject(input.projectId);
+      const next = upsertIdentity('projectAccess', input, normalizeProjectAccess, (entry) => {
+        const id = String(input.id || '').trim();
+        return (
+          (id && entry.id === id) ||
+          (entry.projectId === input.projectId && entry.userId === input.userId)
+        );
+      });
+      await upsertProjectAccessRow(pool, next);
+      return clone(next);
+    },
+
+    async createAuthSession(input) {
+      const user = this.getUser(String(input.userId || '').trim());
+      if (!user) {
+        throw new Error(`Unknown user: ${input.userId}`);
+      }
+      const session = normalizeAuthSession(input);
+      identityCollectionFor('authSessions').unshift(session);
+      await upsertAuthSessionRow(pool, session);
+      return clone(session);
+    },
+
+    getAuthSessionByToken(token) {
+      const now = Date.now();
+      const match = identityCollectionFor('authSessions').find((entry) => {
+        if (entry.token !== token || entry.revokedAt) {
+          return false;
+        }
+        if (!entry.expiresAt) {
+          return true;
+        }
+        return (Date.parse(entry.expiresAt) || 0) > now;
+      });
+      return match ? clone(match) : null;
+    },
+
+    async revokeAuthSession(token) {
+      const session = identityCollectionFor('authSessions').find((entry) => entry.token === token && !entry.revokedAt);
+      if (!session) {
+        return { revoked: false };
+      }
+      session.revokedAt = nowIso();
+      session.updatedAt = nowIso();
+      await upsertAuthSessionRow(pool, session);
+      return { revoked: true };
     },
 
     getProject(projectId) {
