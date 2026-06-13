@@ -12,8 +12,8 @@
 
 ## 전체 상태
 
-- [ ] P0. Auth, tenancy, access check
-- [ ] P0. Migration, backup, file storage
+- [x] P0. Auth, tenancy, access check
+- [x] P0. Migration, backup, file storage
 - [ ] P0. Worker lease/recovery
 - [ ] P0. Runner sandbox safety
 - [ ] P1. Reader validation corpus
@@ -69,9 +69,9 @@
 - [x] object storage adapter를 추가한다.
   - 산출물: S3-compatible adapter 또는 provider 결정 문서
   - 검증: signed URL test with mock adapter in `services/backend/tests/artifact-store.test.mjs`, provider decision in `docs/object-storage-provider-decision.md`
-- [ ] backup/restore runbook과 rehearsal script를 추가한다.
+- [x] backup/restore runbook과 rehearsal script를 추가한다.
   - 산출물: DB backup, object backup, restore script
-  - 검증: staging 또는 temp DB restore dry-run
+  - 검증: dry-run rehearsal test in `services/backend/tests/backup-restore-rehearsal.test.mjs`, runbook in `docs/backup-restore-runbook.md`
 
 ### 3. Observability Foundation
 
