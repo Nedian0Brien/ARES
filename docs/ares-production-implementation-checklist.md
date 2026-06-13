@@ -147,9 +147,9 @@
 - [x] runner sandbox threat model을 문서화한다.
   - 산출물: `docs/lab-runner-sandbox-threat-model.md`
   - 검증: destructive/network/secret/path policy checklist in `docs/lab-runner-sandbox-threat-model.md`
-- [ ] sandboxed runner adapter를 추가한다.
+- [x] sandboxed runner adapter를 추가한다.
   - 산출물: local safe runner, Docker 또는 VM adapter boundary
-  - 검증: fixture command success/failure test
+  - 검증: fixture command success/failure/block test in `services/backend/tests/lab-runner.test.mjs`
 - [ ] human approval gate를 추가한다.
   - 산출물: command preview, risk score, approval state
   - 검증: unapproved run blocked test
