@@ -76,6 +76,44 @@ function ensureObjectArray(value, limit = 64) {
     .slice(0, limit);
 }
 
+function normaliseHandoff(input = {}) {
+  const value = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+
+  return {
+    assetIds: ensureTextArray(value.assetIds, 64),
+    noteIds: ensureTextArray(value.noteIds, 64),
+    readingSessionId: ensureText(value.readingSessionId),
+    sectionIds: ensureTextArray(value.sectionIds, 64),
+  };
+}
+
+function normaliseInsightQualityCriteria(input = {}) {
+  const value = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+
+  return {
+    contradictionFlag: ensureText(value.contradictionFlag, 'unchecked'),
+    evidenceCoverage: ensureText(value.evidenceCoverage, 'unrated'),
+    followUpExperimentId: ensureText(value.followUpExperimentId),
+  };
+}
+
+function normaliseClaimCluster(input = {}) {
+  const value = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const id = ensureText(value.id);
+  const label = ensureText(value.label);
+  if (!id && !label) {
+    return null;
+  }
+
+  return {
+    evidenceLinkCount: Math.max(0, ensureNumber(value.evidenceLinkCount, 0) || 0),
+    id: id || label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+    label: label || id,
+    relatedInsightCardIds: ensureTextArray(value.relatedInsightCardIds, 32),
+    sharedTerms: ensureTextArray(value.sharedTerms, 12),
+  };
+}
+
 function normaliseStatus(value, allowed, fallback) {
   const next = ensureText(value).toLowerCase();
   return allowed.has(next) ? next : fallback;
@@ -158,6 +196,7 @@ export function normaliseReadingPacket(input = {}, options = {}) {
     notes: ensureObjectArray(input.notes, 64),
     paperId: ensureText(input.paperId),
     questionId: ensureText(input.questionId),
+    readingSessionId: ensureText(input.readingSessionId || input.sessionId),
     sections: ensureObjectArray(input.sections, 64),
     summary: ensureText(input.summary),
   };
@@ -175,9 +214,11 @@ export function normaliseReproductionPlan(input = {}, options = {}) {
     datasets: ensureTextArray(input.datasets, 32),
     environment: input.environment && typeof input.environment === 'object' ? clone(input.environment) : {},
     evidenceLinkIds: ensureTextArray(input.evidenceLinkIds, 64),
+    handoff: normaliseHandoff(input.handoff),
     metrics: ensureTextArray(input.metrics, 32),
     questionId: ensureText(input.questionId),
     readingPacketId: ensureText(input.readingPacketId),
+    sourceRefs: ensureObjectArray(input.sourceRefs, 64),
   };
 }
 
@@ -219,13 +260,20 @@ export function normaliseInsightCard(input = {}, options = {}) {
 
   return {
     ...base,
+    claimCluster: normaliseClaimCluster(input.claimCluster),
     claim: ensureText(input.claim || input.title, 'Untitled insight'),
     confidence: ensureText(input.confidence, 'medium'),
     createdBy: ensureText(input.createdBy, 'user'),
     evidenceLinkIds: ensureTextArray(input.evidenceLinkIds, 64),
+    experimentRunIds: ensureTextArray(input.experimentRunIds, 32),
+    failureCause: ensureText(input.failureCause),
+    followUpExperiment: ensureText(input.followUpExperiment),
     implication: ensureText(input.implication),
     nextAction: ensureText(input.nextAction),
     questionId: ensureText(input.questionId),
+    qualityCriteria: normaliseInsightQualityCriteria(input.qualityCriteria),
+    resultDossierIds: ensureTextArray(input.resultDossierIds, 32),
+    sourceRefs: ensureObjectArray(input.sourceRefs, 64),
     type: VALID_INSIGHT_TYPES.has(type) ? type : 'claim',
   };
 }
@@ -286,4 +334,3 @@ export function normaliseAsset(collectionName, input = {}, options = {}) {
       };
   }
 }
-

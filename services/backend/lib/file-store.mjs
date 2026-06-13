@@ -7,8 +7,15 @@ import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
 const RUNNING_STATUSES = new Set(['queue', 'running']);
-const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error']);
+const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
 const MAX_AGENT_PROGRESS_EVENTS = 80;
+const EVIDENCE_LINK_REFERENCE_COLLECTIONS = [
+  'readingPackets',
+  'reproductionPlans',
+  'resultDossiers',
+  'insightCards',
+  'draftSections',
+];
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -76,6 +83,14 @@ function sortByUpdatedDesc(left, right) {
   const leftStamp = Date.parse(left.updatedAt || left.createdAt || 0) || 0;
   const rightStamp = Date.parse(right.updatedAt || right.createdAt || 0) || 0;
   return rightStamp - leftStamp;
+}
+
+function removeAssetId(values, id) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.filter((value) => value !== id);
 }
 
 function ensureText(value, fallback = '') {
@@ -526,6 +541,77 @@ export async function createFileStore({ seedFile, runtimeFile }) {
       return clone(next);
     },
 
+    async deleteProjectAsset(collectionName, id, { projectId } = {}) {
+      if (!ASSET_COLLECTIONS.includes(collectionName) || collectionName === 'agentRuns' || collectionName === 'readingSessions') {
+        throw new Error(`Unsupported asset collection: ${collectionName}`);
+      }
+
+      const assetId = String(id || '').trim();
+      if (!assetId) {
+        throw new Error(`${collectionName} id is required.`);
+      }
+
+      const collection = collectionFor(collectionName);
+      const index = collection.findIndex((entry) => {
+        if (entry.id !== assetId) {
+          return false;
+        }
+
+        return !projectId || entry.projectId === projectId;
+      });
+
+      if (index < 0) {
+        return { deleted: false, id: assetId };
+      }
+
+      collection.splice(index, 1);
+      if (collectionName === 'insightCards') {
+        for (const section of collectionFor('draftSections')) {
+          if (projectId && section.projectId !== projectId) {
+            continue;
+          }
+
+          const nextInsightCardIds = removeAssetId(section.insightCardIds, assetId);
+          if (nextInsightCardIds.length !== (section.insightCardIds || []).length) {
+            section.insightCardIds = nextInsightCardIds;
+            section.updatedAt = nowIso();
+          }
+        }
+      }
+      if (collectionName === 'evidenceLinks') {
+        for (const referenceCollectionName of EVIDENCE_LINK_REFERENCE_COLLECTIONS) {
+          for (const asset of collectionFor(referenceCollectionName)) {
+            if (projectId && asset.projectId !== projectId) {
+              continue;
+            }
+
+            const nextEvidenceLinkIds = removeAssetId(asset.evidenceLinkIds, assetId);
+            if (nextEvidenceLinkIds.length !== (asset.evidenceLinkIds || []).length) {
+              asset.evidenceLinkIds = nextEvidenceLinkIds;
+              asset.updatedAt = nowIso();
+            }
+          }
+        }
+      }
+      if (collectionName === 'drafts') {
+        const draftSections = collectionFor('draftSections');
+        for (let draftSectionIndex = draftSections.length - 1; draftSectionIndex >= 0; draftSectionIndex -= 1) {
+          const section = draftSections[draftSectionIndex];
+          if (section.draftId !== assetId) {
+            continue;
+          }
+
+          if (projectId && section.projectId !== projectId) {
+            continue;
+          }
+
+          draftSections.splice(draftSectionIndex, 1);
+        }
+      }
+      await persist();
+      return { deleted: true, id: assetId };
+    },
+
     async createAgentRun(input) {
       const projectId = String(input.projectId || '').trim();
       if (!projectId) {
@@ -538,6 +624,8 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         agent: ensureText(input.agent, 'Agent'),
         assetRefs: ensureObjectArray(input.assetRefs),
         candidateAssetIds: ensureStringArray(input.candidateAssetIds, 128),
+        cancelReason: ensureText(input.cancelReason),
+        cancelRequestedAt: input.cancelRequestedAt || null,
         createdAt,
         createdAssetIds: ensureStringArray(input.createdAssetIds, 128),
         error: ensureText(input.error),
@@ -575,6 +663,8 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         assetRefs: patch.assetRefs !== undefined ? ensureObjectArray(patch.assetRefs) : existing.assetRefs,
         candidateAssetIds:
           patch.candidateAssetIds !== undefined ? ensureStringArray(patch.candidateAssetIds, 128) : ensureStringArray(existing.candidateAssetIds, 128),
+        cancelReason: patch.cancelReason !== undefined ? ensureText(patch.cancelReason) : ensureText(existing.cancelReason),
+        cancelRequestedAt: patch.cancelRequestedAt !== undefined ? patch.cancelRequestedAt : existing.cancelRequestedAt || null,
         createdAssetIds:
           patch.createdAssetIds !== undefined ? ensureStringArray(patch.createdAssetIds, 128) : ensureStringArray(existing.createdAssetIds, 128),
         finishedAt: patch.finishedAt !== undefined ? patch.finishedAt : existing.finishedAt,

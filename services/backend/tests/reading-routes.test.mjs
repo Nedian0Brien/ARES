@@ -106,6 +106,7 @@ async function startServer(dataRootDir) {
     env: {
       ...process.env,
       ARES_DATA_ROOT_DIR: dataRootDir,
+      ARES_ENABLE_DEMO_PDF: 'true',
       HOST: '127.0.0.1',
       PORT: String(port),
     },
@@ -213,6 +214,42 @@ test('reading routes deliver binary PDF, enforce summarize prerequisite, and par
   assert.equal(parsed.session.parseStatus, 'done');
   assert.ok(parsed.session.pageCount >= 1);
   assert.ok(parsed.session.assets.length >= 1);
+});
+
+test('reading routes import external OCR text for parse recovery', async (t) => {
+  const dataRootDir = await createDataRoot();
+  const server = await startServer(dataRootDir);
+  t.after(async () => {
+    await server.close();
+  });
+
+  const createResponse = await fetch(new URL('/api/projects/demo/reading-sessions', server.url), {
+    body: JSON.stringify({ paper: buildDemoPaper({ pdfUrl: null }) }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const created = await createResponse.json();
+  const sessionId = created.readingSession.id;
+
+  const importResponse = await fetch(new URL(`/api/reading-sessions/${sessionId}/import-text`, server.url), {
+    body: JSON.stringify({
+      generatedAt: '2026-06-12T08:30:00.000Z',
+      sourceLabel: 'Manual OCR text',
+      text: 'Abstract\nManual OCR text restores Reader parsing.\nMethod\nPaste extracted text from an external OCR tool.',
+      tool: 'OCRmyPDF',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const imported = await importResponse.json();
+
+  assert.equal(importResponse.status, 200);
+  assert.equal(imported.session.parseStatus, 'done');
+  assert.equal(imported.session.sourceProvider, 'external-ocr');
+  assert.equal(imported.session.ocrProvenance.generatedAt, '2026-06-12T08:30:00.000Z');
+  assert.equal(imported.session.ocrProvenance.sourceLabel, 'Manual OCR text');
+  assert.equal(imported.session.ocrProvenance.tool, 'OCRmyPDF');
+  assert.ok(imported.session.parsedArtifactPath);
 });
 
 test('reading routes create sessions from uploaded PDFs', async (t) => {

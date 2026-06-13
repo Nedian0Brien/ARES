@@ -267,6 +267,7 @@ export function buildCodexExecArgs({
 export function createAgentRuntime({
   cwd,
   env = process.env,
+  killProcess = process.kill,
   runtimeName = DEFAULT_CODEX_RUNTIME,
   spawnImpl = spawn,
 } = {}) {
@@ -290,6 +291,7 @@ export function createAgentRuntime({
     });
     const child = spawnImpl(runtimeName, args, {
       cwd: taskCwd,
+      detached: true,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -310,6 +312,23 @@ export function createAgentRuntime({
       threadId: '',
     };
     let eventChain = Promise.resolve();
+
+    function terminateChildTree(signal = 'SIGTERM') {
+      if (child.exitCode !== null) {
+        return;
+      }
+
+      if (Number.isInteger(child.pid) && child.pid > 0 && typeof killProcess === 'function') {
+        try {
+          killProcess(-child.pid, signal);
+          return;
+        } catch {
+          // Fall back to the direct child when process-group signaling is unavailable.
+        }
+      }
+
+      child.kill(signal);
+    }
 
     function queueProgressEvent(event) {
       if (typeof onEvent !== 'function') {
@@ -355,7 +374,7 @@ export function createAgentRuntime({
 
     const timeout = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      terminateChildTree('SIGTERM');
     }, timeoutMs);
     timeout.unref?.();
 
@@ -398,7 +417,7 @@ export function createAgentRuntime({
       abort() {
         if (child.exitCode === null) {
           aborted = true;
-          child.kill('SIGTERM');
+          terminateChildTree('SIGTERM');
         }
       },
       promise,

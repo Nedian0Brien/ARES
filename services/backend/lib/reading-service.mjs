@@ -9,14 +9,32 @@ import { createAgentRuntime, DEFAULT_AGENT_TIMEOUT_MS } from './agent-runtime.mj
 import {
   buildReadingSessionSeed,
   normaliseReadingSession,
+  normaliseSourceBounds,
   nowIso,
 } from './reading-model.mjs';
 
 const READING_RUNTIME_DIR = path.join('data', 'runtime', 'reading');
 const DEMO_PDF_HOST = 'example.org';
 const MAX_CHAT_CHUNKS = 4;
+const MIN_CHAT_EVIDENCE_SCORE = 4;
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MAX_UPLOAD_MB = Math.round(MAX_UPLOAD_BYTES / 1024 / 1024);
+const PDF_CROP_SCALE = 1.35;
+const PDF_OCR_SCALE = 2;
+const DEFAULT_OCR_MAX_PAGES = 12;
+const SEMANTIC_QUERY_ALIASES = new Map([
+  ['accuracy', ['quality', 'performance', 'score', 'scores']],
+  ['cost', ['compute', 'efficient', 'efficiency', 'expensive', 'latency', 'runtime']],
+  ['decrease', ['avoid', 'avoiding', 'lower', 'lowers', 'reduce', 'reduces']],
+  ['expense', ['compute', 'cost', 'expensive', 'latency', 'runtime']],
+  ['improve', ['increase', 'increases', 'quality', 'performance']],
+  ['limit', ['failure', 'limitation', 'limitations', 'risk', 'weakness']],
+  ['quality', ['accuracy', 'performance', 'score', 'scores']],
+  ['reduce', ['avoid', 'avoiding', 'decrease', 'lower', 'lowers', 'efficient', 'efficiency']],
+  ['result', ['benchmark', 'evaluation', 'experiment', 'metric', 'metrics']],
+]);
+
+let pdfCropRuntimePromise = null;
 
 function ensureString(value, fallback = '') {
   if (value === null || value === undefined) {
@@ -60,6 +78,68 @@ function tokenize(value) {
     .replace(/[^a-z0-9가-힣\s]/g, ' ')
     .split(/\s+/)
     .filter((token) => token.length >= 2);
+}
+
+const CHAT_QUERY_STOPWORDS = new Set([
+  'and',
+  'about',
+  'are',
+  'concludes',
+  'conclude',
+  'does',
+  'for',
+  'from',
+  'how',
+  'is',
+  'main',
+  'of',
+  'that',
+  'the',
+  'this',
+  'with',
+  'paper',
+  'what',
+]);
+
+function chatQueryFocusTerms(message) {
+  return tokenize(message).filter((token) => !CHAT_QUERY_STOPWORDS.has(token));
+}
+
+function expandSemanticTerms(tokens) {
+  const expanded = new Set();
+  for (const token of tokens) {
+    if (CHAT_QUERY_STOPWORDS.has(token)) {
+      continue;
+    }
+
+    expanded.add(token);
+    for (const alias of SEMANTIC_QUERY_ALIASES.get(token) || []) {
+      expanded.add(alias);
+    }
+  }
+
+  return expanded;
+}
+
+function hasReadingEvidenceForPrompt(message, chunks, selection, retrievalTrace = null) {
+  if (selection?.quote) {
+    return true;
+  }
+
+  if (!chunks.length) {
+    return false;
+  }
+
+  if (Number(retrievalTrace?.topScore) >= MIN_CHAT_EVIDENCE_SCORE) {
+    return true;
+  }
+
+  const focusTerms = chatQueryFocusTerms(message);
+  if (!focusTerms.length) {
+    return true;
+  }
+
+  return false;
 }
 
 function wrapText(value, width = 78) {
@@ -401,6 +481,39 @@ function buildChunksFromPages(pages, sections) {
   return chunks;
 }
 
+function buildPagesFromImportedText(text, sourceLabel) {
+  const normalized = ensureTrimmedString(text, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (!normalized || normalized.length < 40) {
+    throw new Error('Imported OCR text must include at least 40 characters.');
+  }
+
+  const explicitPages = normalized
+    .split(/\n?---+\s*page\s+\d+\s*---+\n?|\f/gi)
+    .map((pageText) => pageText.trim())
+    .filter(Boolean);
+  const chunks = explicitPages.length
+    ? explicitPages
+    : normalized.match(/[\s\S]{1,4000}(?=\s|$)/g)?.map((pageText) => pageText.trim()).filter(Boolean) || [normalized];
+
+  return chunks.map((pageText, index) => ({
+    num: index + 1,
+    sourceLabel,
+    text: pageText,
+  }));
+}
+
+function buildMetadataText(session) {
+  return [
+    session.title ? `Title\n${session.title}` : '',
+    session.abstract ? `Abstract\n${session.abstract}` : '',
+    session.summary ? `Summary\n${session.summary}` : '',
+    Array.isArray(session.keyPoints) && session.keyPoints.length ? `Key points\n${session.keyPoints.join('\n')}` : '',
+    Array.isArray(session.keywords) && session.keywords.length ? `Keywords\n${session.keywords.join(', ')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 function pickSectionByName(sections, pattern) {
   return sections.find((section) => pattern.test(section.label || section.id || '')) || null;
 }
@@ -433,12 +546,15 @@ function buildHighlights(sections, chunks, session) {
       if (!text) {
         return null;
       }
+      const sectionMatched = Boolean(entry.section && chunk?.sectionId === entry.section.id);
 
       return {
+        confidence: sectionMatched && chunk?.quality >= 12 ? 0.84 : sectionMatched ? 0.68 : 0.52,
         id: `highlight-${index + 1}`,
         page: chunk?.page || entry.section?.pageStart || 1,
         quote: text,
         sectionId: entry.section?.id || '',
+        selectionMethod: sectionMatched ? 'section-keyword-chunk' : 'document-best-chunk',
         text,
         type: entry.type,
       };
@@ -461,6 +577,8 @@ function buildSeedNotes(highlights, existingNotes = []) {
     page: highlight.page,
     quote: highlight.quote || highlight.text,
     sectionId: highlight.sectionId || '',
+    confidence: highlight.confidence || 0.5,
+    seedMethod: highlight.selectionMethod || 'parse-seed',
     sourceHighlightId: highlight.id,
     updatedAt: timestamp,
   }));
@@ -501,8 +619,9 @@ function findCaptionLines(pageText, kind) {
   return ensureTrimmedString(pageText, '')
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
+    .map((line, lineIndex) => ({ line, lineIndex }))
+    .filter((entry) => entry.line)
+    .map(({ line, lineIndex }) => {
       const match = line.match(regex);
       if (!match) {
         return null;
@@ -510,10 +629,207 @@ function findCaptionLines(pageText, kind) {
 
       return {
         caption: clipText(`${kind === 'table' ? 'Table' : 'Figure'} ${match[1]}. ${match[2]}`, 180),
+        lineIndex,
         number: Number(match[1]) || 1,
+        sourceText: line,
       };
     })
     .filter(Boolean);
+}
+
+function buildAssetSourceRegion(pageText, { lineIndex = 0, lineSpan = 1, page = 1, sourceText = '' } = {}) {
+  const lines = ensureTrimmedString(pageText, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const total = Math.max(lines.length, 1);
+  const safeLine = Math.min(Math.max(Number(lineIndex) || 0, 0), total - 1);
+  const safeSpan = Math.min(Math.max(Number(lineSpan) || 1, 1), total - safeLine);
+  const y = Math.max(0, Math.min(0.94, safeLine / total));
+  const height = Math.max(0.06, Math.min(0.5, safeSpan / total + 0.04));
+
+  return {
+    sourceBounds: {
+      height,
+      page: Math.max(1, Number(page) || 1),
+      unit: 'page-ratio',
+      width: 0.84,
+      x: 0.08,
+      y,
+    },
+    sourceText: clipText(sourceText || lines.slice(safeLine, safeLine + safeSpan).join(' '), 420),
+  };
+}
+
+async function loadPdfCropRuntime() {
+  if (!pdfCropRuntimePromise) {
+    pdfCropRuntimePromise = Promise.all([
+      import(new URL('../../../node_modules/pdf-parse/node_modules/pdfjs-dist/legacy/build/pdf.mjs', import.meta.url)),
+      import('@napi-rs/canvas'),
+    ]).then(([pdfjs, canvasModule]) => ({
+      createCanvas: canvasModule.createCanvas,
+      pdfjs,
+    }));
+  }
+
+  return pdfCropRuntimePromise;
+}
+
+function clampRatio(value, fallback = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+
+  return Math.min(1, Math.max(0, number));
+}
+
+async function renderPdfCropPng(pdfBuffer, sourceBounds) {
+  if (!pdfBuffer?.length || !sourceBounds || sourceBounds.unit !== 'page-ratio') {
+    return null;
+  }
+
+  const { createCanvas, pdfjs } = await loadPdfCropRuntime();
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(pdfBuffer),
+    disableWorker: true,
+  });
+  const document = await loadingTask.promise;
+
+  try {
+    const pageNumber = Math.min(Math.max(1, Number(sourceBounds.page) || 1), document.numPages);
+    const page = await document.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: PDF_CROP_SCALE });
+    const pageCanvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    const pageContext = pageCanvas.getContext('2d');
+    await page.render({ canvasContext: pageContext, viewport }).promise;
+
+    const x = clampRatio(sourceBounds.x);
+    const y = clampRatio(sourceBounds.y);
+    const width = Math.max(0.04, clampRatio(sourceBounds.width, 0.84));
+    const height = Math.max(0.04, clampRatio(sourceBounds.height, 0.12));
+    const sx = Math.floor(x * pageCanvas.width);
+    const sy = Math.floor(y * pageCanvas.height);
+    const sw = Math.max(24, Math.min(pageCanvas.width - sx, Math.ceil(width * pageCanvas.width)));
+    const sh = Math.max(24, Math.min(pageCanvas.height - sy, Math.ceil(height * pageCanvas.height)));
+    const cropCanvas = createCanvas(sw, sh);
+    const cropContext = cropCanvas.getContext('2d');
+    cropContext.drawImage(pageCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    const encoded = cropCanvas.encode('png');
+    return encoded instanceof Promise ? encoded : await encoded;
+  } finally {
+    await document.destroy();
+  }
+}
+
+async function renderPdfPagesPng(pdfBuffer, { maxPages = DEFAULT_OCR_MAX_PAGES } = {}) {
+  if (!pdfBuffer?.length) {
+    return [];
+  }
+
+  const { createCanvas, pdfjs } = await loadPdfCropRuntime();
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(pdfBuffer),
+    disableWorker: true,
+  });
+  const document = await loadingTask.promise;
+
+  try {
+    const limit = Math.min(document.numPages, Math.max(1, Number(maxPages) || DEFAULT_OCR_MAX_PAGES));
+    const pages = [];
+    for (let pageNumber = 1; pageNumber <= limit; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: PDF_OCR_SCALE });
+      const pageCanvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const pageContext = pageCanvas.getContext('2d');
+      await page.render({ canvasContext: pageContext, viewport }).promise;
+      const encoded = pageCanvas.encode('png');
+      pages.push({
+        buffer: encoded instanceof Promise ? await encoded : encoded,
+        num: pageNumber,
+      });
+    }
+    return pages;
+  } finally {
+    await document.destroy();
+  }
+}
+
+export function createTesseractOcrEngine({ language = 'eng' } = {}) {
+  const safeLanguage = ensureTrimmedString(language, 'eng');
+  return {
+    provider: 'tesseract.js',
+    async recognizePdf({ maxPages = DEFAULT_OCR_MAX_PAGES, pdfBuffer } = {}) {
+      const { createWorker } = await import('tesseract.js');
+      const renderedPages = await renderPdfPagesPng(pdfBuffer, { maxPages });
+      const worker = await createWorker(safeLanguage);
+
+      try {
+        const pages = [];
+        for (const page of renderedPages) {
+          const result = await worker.recognize(page.buffer);
+          pages.push({
+            num: page.num,
+            text: ensureTrimmedString(result?.data?.text, ''),
+          });
+        }
+
+        return {
+          generatedAt: nowIso(),
+          pages,
+          tool: `tesseract.js:${safeLanguage}`,
+        };
+      } finally {
+        await worker.terminate();
+      }
+    },
+  };
+}
+
+function normaliseOcrPages(pages = [], sourceLabel = 'Built-in OCR') {
+  return (Array.isArray(pages) ? pages : [])
+    .map((page, index) => ({
+      num: Math.max(1, Number(page?.num || page?.page || index + 1) || index + 1),
+      sourceLabel,
+      text: ensureTrimmedString(page?.text, ''),
+    }))
+    .filter((page) => page.text);
+}
+
+function buildAssetQuality(asset = {}) {
+  const checks = [];
+  if (asset.sourceBounds?.unit === 'page-ratio') {
+    checks.push('source-bounds');
+  }
+  if (ensureTrimmedString(asset.sourceText, '')) {
+    checks.push('source-text');
+  }
+  if (asset.kind === 'table' && Array.isArray(asset.rows) && asset.rows.length) {
+    checks.push('table-rows');
+  }
+  if (asset.dataPath) {
+    checks.push('data-file');
+  }
+  if (asset.thumbPath) {
+    checks.push(asset.thumbPath.endsWith('.png') ? 'rendered-thumbnail' : 'synthetic-thumbnail');
+  }
+
+  const sourceBacked = checks.includes('source-bounds') && checks.includes('source-text');
+  const score = Math.min(
+    1,
+    0.2 +
+      (checks.includes('source-bounds') ? 0.32 : 0) +
+      (checks.includes('source-text') ? 0.18 : 0) +
+      (checks.includes('table-rows') || checks.includes('rendered-thumbnail') ? 0.18 : 0) +
+      (checks.includes('data-file') ? 0.08 : 0) +
+      (checks.includes('synthetic-thumbnail') ? 0.04 : 0),
+  );
+
+  return {
+    checks,
+    score: Number(score.toFixed(2)),
+    status: sourceBacked ? 'source-backed' : checks.length ? 'partial' : 'synthetic',
+  };
 }
 
 function buildFigureSvg(caption) {
@@ -534,8 +850,21 @@ function inferTableRows(pageText) {
   return ensureTrimmedString(pageText, '')
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => /\s{2,}/.test(line))
-    .map((line) => line.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean))
+    .map((line) => {
+      if (line.includes('|')) {
+        return line.split('|').map((cell) => cell.trim()).filter(Boolean);
+      }
+
+      if (line.includes('\t')) {
+        return line.split('\t').map((cell) => cell.trim()).filter(Boolean);
+      }
+
+      if (/\s{2,}/.test(line)) {
+        return line.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+      }
+
+      return [];
+    })
     .filter((row) => row.length >= 2);
 }
 
@@ -571,9 +900,15 @@ function summariseFromSections(sections, session) {
   };
 }
 
-function scoreChunk(queryTerms, chunk, { message = '', note = null } = {}) {
+function scoreChunkFeatures(queryTerms, chunk, { message = '', note = null } = {}) {
   if (!queryTerms.length) {
-    return 0;
+    return {
+      lexicalScore: 0,
+      noteBoost: 0,
+      phraseBoost: 0,
+      score: 0,
+      titleBoost: 0,
+    };
   }
 
   const bag = new Map();
@@ -581,14 +916,118 @@ function scoreChunk(queryTerms, chunk, { message = '', note = null } = {}) {
     bag.set(token, (bag.get(token) || 0) + 1);
   }
 
-  const lexical = queryTerms.reduce((score, token) => score + (bag.get(token) || 0), 0);
+  const focusTerms = queryTerms.filter((token) => !CHAT_QUERY_STOPWORDS.has(token));
+  const lexical = focusTerms.reduce((score, token) => score + (bag.get(token) || 0), 0);
   const text = ensureTrimmedString(chunk.text, '').toLowerCase();
   const phrase = ensureTrimmedString(message, '').toLowerCase();
   const phraseBoost = phrase.length >= 12 && text.includes(phrase.slice(0, 80)) ? 8 : 0;
   const noteSectionBoost = note?.sectionId && note.sectionId === chunk.sectionId ? 6 : 0;
   const notePageBoost = note?.page && Number(note.page) === Number(chunk.page) ? 4 : 0;
-  const titleBoost = /method|result|limit|claim|contribution|experiment|evaluation/i.test(chunk.sectionLabel || '') ? 2 : 0;
-  return lexical + phraseBoost + noteSectionBoost + notePageBoost + titleBoost;
+  const titleBoost =
+    lexical + phraseBoost + noteSectionBoost + notePageBoost > 0 &&
+    /method|result|limit|claim|contribution|experiment|evaluation/i.test(chunk.sectionLabel || '')
+      ? 3
+      : 0;
+  const noteBoost = noteSectionBoost + notePageBoost;
+  return {
+    lexicalScore: lexical,
+    noteBoost,
+    phraseBoost,
+    score: lexical + phraseBoost + noteBoost + titleBoost,
+    titleBoost,
+  };
+}
+
+function scoreChunk(queryTerms, chunk, { message = '', note = null } = {}) {
+  return scoreChunkFeatures(queryTerms, chunk, { message, note }).score;
+}
+
+function normaliseSemanticScores(result) {
+  const scores = new Map();
+  if (!Array.isArray(result)) {
+    return scores;
+  }
+
+  for (const entry of result) {
+    const chunkId = ensureTrimmedString(entry?.chunkId || entry?.id, '');
+    const score = Number(entry?.score) || 0;
+    if (!chunkId || score <= 0) {
+      continue;
+    }
+
+    scores.set(chunkId, score);
+  }
+
+  return scores;
+}
+
+function createHeuristicRetrievalScorer() {
+  return {
+    async scoreChunks({ chunks, queryTerms }) {
+      const expandedTerms = expandSemanticTerms(queryTerms || []);
+      if (!expandedTerms.size) {
+        return [];
+      }
+
+      return chunks
+        .map((chunk) => {
+          const terms = new Set(chunk.terms || tokenize(chunk.text));
+          let score = 0;
+          for (const term of expandedTerms) {
+            if (terms.has(term)) {
+              score += 2;
+            }
+          }
+
+          return {
+            chunkId: chunk.id,
+            score,
+          };
+        })
+        .filter((entry) => entry.score > 0);
+    },
+  };
+}
+
+function retrievalConfidence(topScore) {
+  if (topScore >= 12) {
+    return 'high';
+  }
+
+  if (topScore >= 6) {
+    return 'medium';
+  }
+
+  if (topScore >= MIN_CHAT_EVIDENCE_SCORE) {
+    return 'low';
+  }
+
+  return 'none';
+}
+
+function buildRetrievalTrace({ rankedChunks, queryTerms, scorer }) {
+  const topScore = Number(rankedChunks[0]?.score) || 0;
+  const confidence = retrievalConfidence(topScore);
+  return {
+    chunks: rankedChunks.map((chunk) => ({
+      chunkId: chunk.id,
+      lexicalScore: Number(chunk.lexicalScore) || 0,
+      page: chunk.page || null,
+      phraseBoost: Number(chunk.phraseBoost) || 0,
+      score: Number(chunk.score) || 0,
+      sectionId: chunk.sectionId || '',
+      semanticScore: Number(chunk.semanticScore) || 0,
+      titleBoost: Number(chunk.titleBoost) || 0,
+    })),
+    confidence,
+    lowConfidence: confidence === 'low' || confidence === 'none',
+    minEvidenceScore: MIN_CHAT_EVIDENCE_SCORE,
+    mode: 'hybrid',
+    queryTerms: Array.from(new Set(queryTerms.filter((term) => !CHAT_QUERY_STOPWORDS.has(term)))).slice(0, 10),
+    scorer,
+    topK: rankedChunks.length,
+    topScore,
+  };
 }
 
 async function fileExists(filePath) {
@@ -603,8 +1042,13 @@ async function fileExists(filePath) {
 export function createReadingService({
   agentTimeoutMs = DEFAULT_AGENT_TIMEOUT_MS,
   agentRuntime = null,
+  enableDemoPdf = false,
   fetchImpl = globalThis.fetch,
+  ocrEngine = createTesseractOcrEngine(),
+  ocrMaxPages = DEFAULT_OCR_MAX_PAGES,
   pdfParseFactory = (options) => new PDFParse(options),
+  requireAgentRuntime = false,
+  retrievalScorer = null,
   rootDir,
   runtimeName = 'codex',
   store,
@@ -623,6 +1067,10 @@ export function createReadingService({
       cwd: rootDir,
       runtimeName,
     });
+  const activeRetrievalScorer = retrievalScorer || createHeuristicRetrievalScorer();
+  const retrievalScorerLabel = retrievalScorer
+    ? ensureTrimmedString(retrievalScorer.provider || retrievalScorer.name, 'custom')
+    : 'heuristic-semantic-alias';
 
   let runtimeAvailablePromise = null;
 
@@ -737,13 +1185,19 @@ export function createReadingService({
       throw new Error('PDF URL is not available for this reading session.');
     }
 
-    try {
-      const parsed = new URL(pdfUrl);
-      if (parsed.hostname === DEMO_PDF_HOST) {
-        return buildDemoPdfForSession(session);
+    const parsedPdfUrl = (() => {
+      try {
+        return new URL(pdfUrl);
+      } catch {
+        return null;
       }
-    } catch {
-      // Continue to network fetch for non-URL strings.
+    })();
+
+    if (parsedPdfUrl?.hostname === DEMO_PDF_HOST) {
+      if (!enableDemoPdf) {
+        throw new Error('Demo PDF generation is disabled. Set ARES_ENABLE_DEMO_PDF=true to use example.org fixtures.');
+      }
+      return buildDemoPdfForSession(session);
     }
 
     if (typeof fetchImpl !== 'function') {
@@ -809,7 +1263,7 @@ export function createReadingService({
     return syncReadingPacket(await store.upsertReadingSession(next));
   }
 
-  async function buildAssetsFromArtifact(sessionId, artifact) {
+  async function buildAssetsFromArtifact(sessionId, artifact, { pdfBuffer = null } = {}) {
     const assets = [];
     const figureCandidates = [];
     const tableCandidates = [];
@@ -822,13 +1276,23 @@ export function createReadingService({
     }
 
     for (const figure of figureCandidates) {
-      const thumbPath = await writeTextAsset(sessionId, `figure-${figure.number}.svg`, buildFigureSvg(figure.caption));
+      const pageText = (artifact.pages || []).find((page) => page.num === figure.page)?.text || figure.sourceText || '';
+      const sourceRegion = buildAssetSourceRegion(pageText, {
+        lineIndex: figure.lineIndex,
+        page: figure.page,
+        sourceText: figure.sourceText || figure.caption,
+      });
+      const cropBuffer = await renderPdfCropPng(pdfBuffer, sourceRegion.sourceBounds).catch(() => null);
+      const thumbPath = cropBuffer
+        ? await writeBinaryAsset(sessionId, `figure-${figure.number}.png`, cropBuffer)
+        : await writeTextAsset(sessionId, `figure-${figure.number}.svg`, buildFigureSvg(figure.caption));
       assets.push({
         caption: figure.caption,
         id: `figure-${figure.number}`,
         kind: 'figure',
         number: figure.number,
         page: figure.page,
+        ...sourceRegion,
         thumbPath,
       });
     }
@@ -844,6 +1308,10 @@ export function createReadingService({
             kind: 'figure',
             number: assets.filter((asset) => asset.kind === 'figure').length + 1,
             page: page.num || page.pageNumber || 1,
+            ...buildAssetSourceRegion('', {
+              page: page.num || page.pageNumber || 1,
+              sourceText: image.name || `Figure ${assets.length + 1}`,
+            }),
             thumbPath,
           });
         }
@@ -855,9 +1323,17 @@ export function createReadingService({
       for (const page of tablePages) {
         for (let index = 0; index < (page.tables || []).length; index += 1) {
           const rows = page.tables[index];
-          const caption = tableCandidates.find((entry) => entry.page === page.num)?.caption || `Table ${index + 1}`;
-          const number = tableCandidates.find((entry) => entry.page === page.num)?.number || index + 1;
+          const tableMeta = tableCandidates.find((entry) => entry.page === page.num);
+          const caption = tableMeta?.caption || `Table ${index + 1}`;
+          const number = tableMeta?.number || index + 1;
           const dataPath = await writeJsonAsset(sessionId, `table-${page.num}-${index + 1}.json`, rows);
+          const pageText = (artifact.pages || []).find((entry) => entry.num === page.num)?.text || '';
+          const sourceRegion = buildAssetSourceRegion(pageText, {
+            lineIndex: tableMeta?.lineIndex,
+            lineSpan: Math.max(1, rows.length + 1),
+            page: page.num,
+            sourceText: [caption, ...rows.map((row) => row.join(' '))].join(' '),
+          });
           assets.push({
             caption,
             dataPath,
@@ -866,6 +1342,7 @@ export function createReadingService({
             number,
             page: page.num,
             rows,
+            ...sourceRegion,
           });
         }
       }
@@ -883,6 +1360,12 @@ export function createReadingService({
           number: assets.filter((asset) => asset.kind === 'table').length + 1,
         };
         const dataPath = await writeJsonAsset(sessionId, `table-${page.num}.json`, rows);
+        const sourceRegion = buildAssetSourceRegion(page.text, {
+          lineIndex: meta.lineIndex,
+          lineSpan: Math.max(1, rows.length + 1),
+          page: page.num,
+          sourceText: [meta.caption, ...rows.map((row) => row.join(' '))].join(' '),
+        });
         assets.push({
           caption: meta.caption,
           dataPath,
@@ -891,11 +1374,114 @@ export function createReadingService({
           number: meta.number,
           page: page.num,
           rows,
+          ...sourceRegion,
         });
       }
     }
 
-    return assets;
+    return assets.map((asset) => ({
+      ...asset,
+      quality: buildAssetQuality(asset),
+    }));
+  }
+
+  async function materializeParsedSession(
+    session,
+    {
+      artifactPatch = {},
+      imagePages = [],
+      pageCount = null,
+      pages = [],
+      parseFinishedAt: suppliedParseFinishedAt = null,
+      pdfBuffer = null,
+      sessionPatch = {},
+      sourceName = '',
+      sourceProvider = '',
+      summarySession = null,
+      tablePages = [],
+    } = {},
+  ) {
+    const sections = buildSectionsFromPages(pages, session);
+    const chunks = buildChunksFromPages(pages, sections);
+    const highlights = buildHighlights(sections, chunks, session);
+    const notes = buildSeedNotes(highlights, session.notes);
+    const reproParams = buildReproParams(session, sections);
+    const artifact = {
+      chunks,
+      createdAt: nowIso(),
+      imagePages,
+      pageCount: pageCount || pages.length,
+      pages,
+      sections,
+      tablePages,
+      ...artifactPatch,
+    };
+    const parsedArtifactPath = await writeParsedArtifact(session.id, artifact);
+    const assets = await buildAssetsFromArtifact(session.id, artifact, { pdfBuffer });
+    const evidenceCoverage = buildEvidenceCoverageReport({ artifact, assets });
+    const summaryCards = summariseFromSections(sections, summarySession || session);
+    const parseFinishedAt = suppliedParseFinishedAt || nowIso();
+    const extraSessionPatch =
+      typeof sessionPatch === 'function'
+        ? sessionPatch({ artifact, chunks, parseFinishedAt, sections, summaryCards })
+        : sessionPatch;
+
+    const nextPatch = {
+      assets,
+      evidenceCoverage,
+      highlights,
+      notes,
+      pageCount: artifact.pageCount,
+      parsedArtifactPath,
+      parseError: '',
+      parseFinishedAt,
+      parseStatus: 'done',
+      reproParams,
+      sections,
+      summaryCards,
+      ...extraSessionPatch,
+    };
+
+    if (sourceName) {
+      nextPatch.sourceName = sourceName;
+    }
+    if (sourceProvider) {
+      nextPatch.sourceProvider = sourceProvider;
+    }
+
+    const nextSession = await updateSession(session.id, nextPatch);
+
+    return {
+      artifact,
+      session: nextSession,
+    };
+  }
+
+  function buildEvidenceCoverageReport({ artifact = {}, assets = [], chatMessages = [], previous = null } = {}) {
+    const chunks = Array.isArray(artifact.chunks) ? artifact.chunks : [];
+    const sections = Array.isArray(artifact.sections) ? artifact.sections : [];
+    const figures = assets.filter((asset) => asset.kind === 'figure');
+    const tables = assets.filter((asset) => asset.kind === 'table');
+    const assistantMessages = chatMessages.filter((message) => message.role === 'assistant');
+    const retrievalMessages = assistantMessages.filter((message) => message.retrieval);
+    const lowConfidenceChatCount = retrievalMessages.filter((message) => message.retrieval?.lowConfidence).length;
+    const citedChatCount = assistantMessages.filter((message) => Array.isArray(message.citations) && message.citations.length).length;
+    const lastRetrieval = retrievalMessages.at(-1)?.retrieval || previous?.lastRetrieval || null;
+
+    return {
+      assetCount: assets.length,
+      chunkCount: chunks.length,
+      citedChatCount,
+      figureCount: figures.length,
+      generatedAt: nowIso(),
+      lastRetrievalConfidence: lastRetrieval?.confidence || previous?.lastRetrievalConfidence || '',
+      lastRetrievalTopScore: Number(lastRetrieval?.topScore || previous?.lastRetrievalTopScore || 0),
+      lowConfidenceChatCount,
+      retrievalReady: chunks.length > 0,
+      sectionCount: sections.length,
+      sourceBoundedAssetCount: assets.filter((asset) => asset.sourceBounds?.unit === 'page-ratio').length,
+      tableCount: tables.length,
+    };
   }
 
   function buildChatFallback({ chunks, message, summaryCards }) {
@@ -1027,7 +1613,7 @@ Rules:
       value.lineCount === undefined || value.lineCount === null || value.lineCount === ''
         ? null
         : Math.max(1, Math.round(Number(value.lineCount) || 1));
-    return { lineCount, page, quote };
+    return { lineCount, page, quote, sourceBounds: normaliseSourceBounds(value.sourceBounds, page || 1) };
   }
 
   function buildChatPrompt(session, summaryCards, message, chunks, note, selection) {
@@ -1172,8 +1758,25 @@ Rules:
 
       try {
         if (!initial.pdfUrl) {
+          const metadataText = buildMetadataText(initial);
+          if (metadataText) {
+            const sourceLabel = 'Paper metadata';
+            const pages = buildPagesFromImportedText(metadataText, sourceLabel);
+            return materializeParsedSession(initial, {
+              artifactPatch: {
+                importSource: 'metadata',
+              },
+              imagePages: [],
+              pageCount: pages.length,
+              pages,
+              sourceName: sourceLabel,
+              sourceProvider: 'metadata',
+              tablePages: [],
+            });
+          }
+
           const failed = await updateSession(sessionId, {
-            parseError: 'PDF URL is not available for this paper.',
+            parseError: 'PDF URL and usable paper metadata are not available for this paper.',
             parseFinishedAt: nowIso(),
             parseStatus: 'error',
           });
@@ -1198,52 +1801,67 @@ Rules:
           .filter((page) => page.text);
 
         if (!pages.length || !ensureTrimmedString(textResult.text, '')) {
+          const pageCount = Number(infoResult.total || textResult.total) || null;
+          if (ocrEngine?.recognizePdf) {
+            const ocrResult = await ocrEngine.recognizePdf({
+              maxPages: ocrMaxPages,
+              pageCount,
+              pdfBuffer: cached.buffer,
+              session: initial,
+            });
+            const sourceLabel = 'Built-in OCR';
+            const ocrPages = normaliseOcrPages(ocrResult?.pages, sourceLabel);
+            if (ocrPages.length) {
+              return materializeParsedSession(initial, {
+                artifactPatch: {
+                  importProvenance: {
+                    generatedAt: ocrResult?.generatedAt || null,
+                    sourceLabel,
+                    textLength: ocrPages.reduce((sum, page) => sum + page.text.length, 0),
+                    tool: ocrResult?.tool || ocrEngine.provider || 'built-in-ocr',
+                  },
+                  importSource: 'built-in-ocr',
+                },
+                imagePages: imageResult.pages || [],
+                pageCount: pageCount || ocrPages.length,
+                pages: ocrPages,
+                pdfBuffer: cached.buffer,
+                sessionPatch: ({ artifact, parseFinishedAt }) => ({
+                  ocrProvenance: {
+                    generatedAt: ocrResult?.generatedAt || null,
+                    importedAt: parseFinishedAt,
+                    sourceLabel,
+                    textLength: artifact.importProvenance.textLength,
+                    tool: artifact.importProvenance.tool,
+                  },
+                  summaryGeneratedBy: 'built-in-ocr',
+                  summaryRuntimeUsed: true,
+                  summaryStatus: 'done',
+                }),
+                sourceName: sourceLabel,
+                sourceProvider: 'built-in-ocr',
+                tablePages: [],
+              });
+            }
+          }
+
           const failed = await updateSession(sessionId, {
-            parseError: 'This PDF does not expose a usable text layer. OCR is not supported in v1.',
+            parseError:
+              'This PDF does not expose a usable text layer, and built-in OCR did not produce usable text. Import OCR text to recover this session.',
             parseFinishedAt: nowIso(),
             parseStatus: 'error',
-            pageCount: Number(infoResult.total || textResult.total) || null,
+            pageCount,
           });
           return { session: failed };
         }
 
-        const pageCount = Number(infoResult.total || textResult.total) || pages.length;
-        const sections = buildSectionsFromPages(pages, initial);
-        const chunks = buildChunksFromPages(pages, sections);
-        const highlights = buildHighlights(sections, chunks, initial);
-        const notes = buildSeedNotes(highlights, initial.notes);
-        const reproParams = buildReproParams(initial, sections);
-        const artifact = {
-          chunks,
-          createdAt: nowIso(),
+        return materializeParsedSession(initial, {
           imagePages: imageResult.pages || [],
-          pageCount,
+          pageCount: Number(infoResult.total || textResult.total) || pages.length,
           pages,
-          sections,
+          pdfBuffer: cached.buffer,
           tablePages: tableResult.pages || [],
-        };
-        const parsedArtifactPath = await writeParsedArtifact(sessionId, artifact);
-        const assets = await buildAssetsFromArtifact(sessionId, artifact);
-        const summaryCards = summariseFromSections(sections, initial);
-
-        const session = await updateSession(sessionId, {
-          assets,
-          highlights,
-          notes,
-          pageCount,
-          parsedArtifactPath,
-          parseError: '',
-          parseFinishedAt: nowIso(),
-          parseStatus: 'done',
-          reproParams,
-          sections,
-          summaryCards,
         });
-
-        return {
-          artifact,
-          session,
-        };
       } catch (error) {
         const failed = await updateSession(sessionId, {
           parseError: error instanceof Error ? error.message : String(error),
@@ -1252,6 +1870,55 @@ Rules:
         });
         return { session: failed };
       }
+    },
+
+    async importTextSession(sessionId, { generatedAt = null, sourceLabel = 'External OCR text', text = '', tool = '' } = {}) {
+      const initial = await updateSession(sessionId, {
+        parseError: '',
+        parseFinishedAt: null,
+        parseStartedAt: nowIso(),
+        parseStatus: 'running',
+        status: 'running',
+      });
+
+      const label = clipText(ensureTrimmedString(sourceLabel, 'External OCR text'), 120);
+      const importedAt = nowIso();
+      const ocrProvenance = {
+        generatedAt,
+        importedAt,
+        sourceLabel: label,
+        textLength: ensureTrimmedString(text, '').length,
+        tool: clipText(ensureTrimmedString(tool, ''), 120),
+      };
+      const pages = buildPagesFromImportedText(text, label);
+      return materializeParsedSession(initial, {
+        artifactPatch: {
+          importProvenance: ocrProvenance,
+          importSource: 'external-ocr',
+        },
+        imagePages: [],
+        pageCount: pages.length,
+        pages,
+        parseFinishedAt: importedAt,
+        sessionPatch: ({ summaryCards }) => ({
+          keyPoints: summaryCards.keyPoints,
+          ocrProvenance,
+          summary: clipText(summaryCards.tldr, 320),
+          summaryError: '',
+          summaryFinishedAt: importedAt,
+          summaryGeneratedBy: 'external-ocr',
+          summaryRuntimeUsed: true,
+          summaryStatus: 'done',
+        }),
+        sourceName: label,
+        sourceProvider: 'external-ocr',
+        summarySession: {
+          ...initial,
+          abstract: '',
+          summary: '',
+        },
+        tablePages: [],
+      });
     },
 
     async summarizeSession(sessionId) {
@@ -1272,7 +1939,9 @@ Rules:
       }
 
       const fallback = () => summariseFromSections(artifact.sections || [], running);
-      const generated = await runRuntimeJsonTask(buildSummaryPrompt(running, artifact), fallback);
+      const generated = await runRuntimeJsonTask(buildSummaryPrompt(running, artifact), fallback, {
+        fallbackOnFailure: !requireAgentRuntime,
+      });
       if (!generated.payload) {
         const failed = await updateSession(sessionId, {
           keyPoints: [],
@@ -1329,9 +1998,19 @@ Rules:
         throw new Error('Parsed artifact is missing for this session.');
       }
 
-      const assets = await buildAssetsFromArtifact(sessionId, artifact);
+      const pdfBuffer = session.pdfCachePath
+        ? await fs.readFile(resolveSafePath(rootDir, session.pdfCachePath)).catch(() => null)
+        : null;
+      const assets = await buildAssetsFromArtifact(sessionId, artifact, { pdfBuffer });
+      const evidenceCoverage = buildEvidenceCoverageReport({
+        artifact,
+        assets,
+        chatMessages: session.chatMessages,
+        previous: session.evidenceCoverage,
+      });
       const next = await updateSession(sessionId, {
         assets,
+        evidenceCoverage,
       });
 
       return { assets, session: next };
@@ -1387,14 +2066,45 @@ Rules:
       const note = session.notes.find((entry) => entry.id === noteId) || null;
       const selection = normaliseChatSelection(selectionInput);
       const queryTerms = tokenize([prompt, note?.quote, note?.body, selection?.quote].filter(Boolean).join(' '));
+      let semanticScores = new Map();
+      if (activeRetrievalScorer) {
+        try {
+          semanticScores = normaliseSemanticScores(
+            await activeRetrievalScorer.scoreChunks({
+              chunks: artifact.chunks || [],
+              message: prompt,
+              note,
+              queryTerms,
+              selection,
+              session,
+            }),
+          );
+        } catch {
+          semanticScores = new Map();
+        }
+      }
       const rankedChunks = (artifact.chunks || [])
-        .map((chunk) => ({
-          ...chunk,
-          score: scoreChunk(queryTerms, chunk, { message: prompt, note }),
-        }))
+        .map((chunk) => {
+          const lexicalFeatures = scoreChunkFeatures(queryTerms, chunk, { message: prompt, note });
+          const semanticScore = semanticScores.get(chunk.id) || 0;
+          return {
+            ...chunk,
+            lexicalScore: lexicalFeatures.lexicalScore,
+            noteBoost: lexicalFeatures.noteBoost,
+            phraseBoost: lexicalFeatures.phraseBoost,
+            score: lexicalFeatures.score + semanticScore,
+            semanticScore,
+            titleBoost: lexicalFeatures.titleBoost,
+          };
+        })
         .sort((left, right) => right.score - left.score || left.page - right.page)
         .filter((chunk) => chunk.score > 0)
         .slice(0, MAX_CHAT_CHUNKS);
+      const retrievalTrace = buildRetrievalTrace({
+        queryTerms,
+        rankedChunks,
+        scorer: retrievalScorerLabel,
+      });
       const fallback = () => {
         const base = buildChatFallback({
           chunks: rankedChunks,
@@ -1422,11 +2132,30 @@ Rules:
           citations: [selectedCitation, ...(Array.isArray(base.citations) ? base.citations : [])],
         };
       };
-      const generated = await runRuntimeJsonTask(
-        buildChatPrompt(session, session.summaryCards, prompt, rankedChunks, note, selection),
-        fallback,
-      );
-      const raw = generated.payload || {};
+      const hasEvidence = hasReadingEvidenceForPrompt(prompt, rankedChunks, selection, retrievalTrace);
+      const fallbackPayload = fallback();
+      const shouldForceUnsupportedFallback = !hasEvidence;
+      const unsupportedFallbackPayload = shouldForceUnsupportedFallback
+        ? buildChatFallback({ chunks: [], message: prompt, summaryCards: session.summaryCards })
+        : fallbackPayload;
+      const generated = shouldForceUnsupportedFallback
+        ? null
+        : await runRuntimeJsonTask(
+            buildChatPrompt(session, session.summaryCards, prompt, rankedChunks, note, selection),
+            fallback,
+            { fallbackOnFailure: !requireAgentRuntime },
+          );
+      if (!shouldForceUnsupportedFallback && !generated?.payload) {
+        throw new Error(`AI chat generation failed: ${generated?.provenance?.fallbackReason || 'agent runtime unavailable'}`);
+      }
+      const raw = shouldForceUnsupportedFallback ? unsupportedFallbackPayload : generated.payload || {};
+      const provenance = shouldForceUnsupportedFallback
+        ? {
+            fallbackReason: 'no matching reading evidence',
+            generatedBy: 'fallback',
+            runtimeUsed: false,
+          }
+        : generated.provenance;
 
       const userMessage = {
         createdAt: nowIso(),
@@ -1438,17 +2167,25 @@ Rules:
       const assistantMessage = {
         citations: Array.isArray(raw?.citations)
           ? raw.citations
-          : fallback().citations,
+          : fallbackPayload.citations,
         createdAt: nowIso(),
-        fallbackReason: generated.provenance.fallbackReason,
-        generatedBy: generated.provenance.generatedBy,
+        fallbackReason: provenance.fallbackReason,
+        generatedBy: provenance.generatedBy,
         id: `chat-assistant-${Date.now()}`,
+        retrieval: retrievalTrace,
         role: 'assistant',
-        text: clipText(raw?.answer || fallback().answer, 480),
+        text: clipText(raw?.answer || fallbackPayload.answer, 480),
       };
       const chatMessages = [...session.chatMessages, userMessage, assistantMessage];
+      const evidenceCoverage = buildEvidenceCoverageReport({
+        artifact,
+        assets: session.assets,
+        chatMessages,
+        previous: session.evidenceCoverage,
+      });
       const next = await updateSession(sessionId, {
         chatMessages,
+        evidenceCoverage,
       });
 
       return {
@@ -1472,6 +2209,7 @@ Rules:
         page: payload.page === undefined || payload.page === null || payload.page === '' ? null : Number(payload.page) || 1,
         quote: clipText(payload.quote, 900),
         sectionId: ensureTrimmedString(payload.sectionId, ''),
+        sourceBounds: normaliseSourceBounds(payload.sourceBounds, payload.page || 1),
         sourceHighlightId: ensureTrimmedString(payload.sourceHighlightId, '') || null,
         updatedAt: timestamp,
       };
@@ -1479,6 +2217,7 @@ Rules:
         createdAt: timestamp,
         createdBy: 'user',
         id: evidenceLinkId,
+        locator: note.sourceBounds ? { sourceBounds: note.sourceBounds } : {},
         page: note.page,
         paperId: session.paperId,
         projectId: session.projectId,
@@ -1516,6 +2255,7 @@ Rules:
               : note.page,
           quote: payload.quote !== undefined ? clipText(payload.quote, 900) : note.quote,
           sectionId: payload.sectionId !== undefined ? ensureTrimmedString(payload.sectionId, '') : note.sectionId,
+          sourceBounds: payload.sourceBounds !== undefined ? normaliseSourceBounds(payload.sourceBounds, payload.page || note.page || 1) : note.sourceBounds,
           updatedAt: nowIso(),
         };
       });
@@ -1529,6 +2269,7 @@ Rules:
           createdAt: note.createdAt,
           createdBy: 'user',
           id: note.evidenceLinkId,
+          locator: note.sourceBounds ? { sourceBounds: note.sourceBounds } : {},
           page: note.page,
           paperId: session.paperId,
           projectId: session.projectId,
@@ -1549,12 +2290,18 @@ Rules:
 
     async deleteNote(sessionId, noteId) {
       const session = await getSessionOrThrow(sessionId);
+      const note = session.notes.find((entry) => entry.id === noteId);
       const notes = session.notes.filter((note) => note.id !== noteId);
       if (notes.length === session.notes.length) {
         throw new Error(`Unknown note: ${noteId}`);
       }
 
       const next = await updateSession(sessionId, { notes });
+      if (note?.evidenceLinkId && typeof store.deleteProjectAsset === 'function') {
+        await store.deleteProjectAsset('evidenceLinks', note.evidenceLinkId, {
+          projectId: session.projectId,
+        });
+      }
       return {
         ok: true,
         session: next,

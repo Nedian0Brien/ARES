@@ -89,3 +89,143 @@ test('file store persists graph asset collections through generic project asset 
   assert.equal(graph.readingPackets[0].id, packet.id);
   assert.deepEqual(graph.readingPackets[0].evidenceLinkIds, [evidence.id]);
 });
+
+test('file store removes deleted insight ids from draft section references', async () => {
+  const store = await createDemoStore();
+  const insight = await store.upsertProjectAsset('insightCards', {
+    claim: 'Adaptive skipping can reduce reranker cost.',
+    confidence: 'medium',
+    evidenceLinkIds: ['evidence-1'],
+    projectId: 'demo',
+    type: 'claim',
+  });
+  const retainedInsight = await store.upsertProjectAsset('insightCards', {
+    claim: 'Calibration remains necessary.',
+    confidence: 'medium',
+    evidenceLinkIds: ['evidence-2'],
+    projectId: 'demo',
+    type: 'claim',
+  });
+  const draft = await store.upsertProjectAsset('drafts', {
+    projectId: 'demo',
+    title: 'Demo draft',
+  });
+  const section = await store.upsertProjectAsset('draftSections', {
+    body: 'Adaptive skipping can reduce cost when calibrated.',
+    draftId: draft.id,
+    evidenceLinkIds: ['evidence-1', 'evidence-2'],
+    insightCardIds: [insight.id, retainedInsight.id],
+    projectId: 'demo',
+    sectionType: 'method',
+    title: 'Method',
+  });
+
+  const deleted = await store.deleteProjectAsset('insightCards', insight.id, { projectId: 'demo' });
+
+  assert.equal(deleted.deleted, true);
+  const graph = store.getProjectGraph('demo');
+  assert.ok(!graph.insightCards.some((entry) => entry.id === insight.id));
+  const updatedSection = graph.draftSections.find((entry) => entry.id === section.id);
+  assert.deepEqual(updatedSection.insightCardIds, [retainedInsight.id]);
+});
+
+test('file store removes deleted evidence ids from graph asset references', async () => {
+  const store = await createDemoStore();
+  const removedEvidence = await store.upsertProjectAsset('evidenceLinks', {
+    paperId: 'paper-1',
+    projectId: 'demo',
+    quote: 'Adaptive skipping reduces latency.',
+    sourceId: 'note-removed',
+    sourceType: 'note',
+  });
+  const retainedEvidence = await store.upsertProjectAsset('evidenceLinks', {
+    paperId: 'paper-1',
+    projectId: 'demo',
+    quote: 'Calibration remains necessary.',
+    sourceId: 'note-retained',
+    sourceType: 'note',
+  });
+  const sharedEvidenceLinkIds = [removedEvidence.id, retainedEvidence.id];
+
+  const readingPacket = await store.upsertProjectAsset('readingPackets', {
+    evidenceLinkIds: sharedEvidenceLinkIds,
+    paperId: 'paper-1',
+    projectId: 'demo',
+    summary: 'Packet summary',
+  });
+  const reproductionPlan = await store.upsertProjectAsset('reproductionPlans', {
+    evidenceLinkIds: sharedEvidenceLinkIds,
+    projectId: 'demo',
+    readingPacketId: readingPacket.id,
+  });
+  const resultDossier = await store.upsertProjectAsset('resultDossiers', {
+    evidenceLinkIds: sharedEvidenceLinkIds,
+    experimentRunIds: [],
+    projectId: 'demo',
+  });
+  const insightCard = await store.upsertProjectAsset('insightCards', {
+    claim: 'Adaptive skipping can reduce reranker cost.',
+    evidenceLinkIds: sharedEvidenceLinkIds,
+    projectId: 'demo',
+    type: 'claim',
+  });
+  const draft = await store.upsertProjectAsset('drafts', {
+    projectId: 'demo',
+    title: 'Demo draft',
+  });
+  const draftSection = await store.upsertProjectAsset('draftSections', {
+    body: 'Adaptive skipping can reduce cost when calibrated.',
+    draftId: draft.id,
+    evidenceLinkIds: sharedEvidenceLinkIds,
+    insightCardIds: [insightCard.id],
+    projectId: 'demo',
+    title: 'Method',
+  });
+
+  const deleted = await store.deleteProjectAsset('evidenceLinks', removedEvidence.id, { projectId: 'demo' });
+
+  assert.equal(deleted.deleted, true);
+  const graph = store.getProjectGraph('demo');
+  assert.ok(!graph.evidenceLinks.some((entry) => entry.id === removedEvidence.id));
+  assert.deepEqual(graph.readingPackets.find((entry) => entry.id === readingPacket.id).evidenceLinkIds, [retainedEvidence.id]);
+  assert.deepEqual(graph.reproductionPlans.find((entry) => entry.id === reproductionPlan.id).evidenceLinkIds, [
+    retainedEvidence.id,
+  ]);
+  assert.deepEqual(graph.resultDossiers.find((entry) => entry.id === resultDossier.id).evidenceLinkIds, [
+    retainedEvidence.id,
+  ]);
+  assert.deepEqual(graph.insightCards.find((entry) => entry.id === insightCard.id).evidenceLinkIds, [retainedEvidence.id]);
+  assert.deepEqual(graph.draftSections.find((entry) => entry.id === draftSection.id).evidenceLinkIds, [retainedEvidence.id]);
+});
+
+test('file store deletes draft sections that belong to a deleted draft', async () => {
+  const store = await createDemoStore();
+  const draft = await store.upsertProjectAsset('drafts', {
+    projectId: 'demo',
+    title: 'Demo draft',
+  });
+  const retainedDraft = await store.upsertProjectAsset('drafts', {
+    projectId: 'demo',
+    title: 'Retained draft',
+  });
+  const deletedSection = await store.upsertProjectAsset('draftSections', {
+    body: 'Section that should be deleted.',
+    draftId: draft.id,
+    projectId: 'demo',
+    title: 'Deleted section',
+  });
+  const retainedSection = await store.upsertProjectAsset('draftSections', {
+    body: 'Section that should remain.',
+    draftId: retainedDraft.id,
+    projectId: 'demo',
+    title: 'Retained section',
+  });
+
+  const deleted = await store.deleteProjectAsset('drafts', draft.id, { projectId: 'demo' });
+
+  assert.equal(deleted.deleted, true);
+  const graph = store.getProjectGraph('demo');
+  assert.ok(!graph.drafts.some((entry) => entry.id === draft.id));
+  assert.ok(!graph.draftSections.some((entry) => entry.id === deletedSection.id));
+  assert.ok(graph.draftSections.some((entry) => entry.id === retainedSection.id));
+});

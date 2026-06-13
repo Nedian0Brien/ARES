@@ -1,4 +1,20 @@
 import { createAgentRuntime } from './agent-runtime.mjs';
+import {
+  buildInsightFallback,
+  buildReadingFallback,
+  buildResearchFallback,
+  buildResultFallback,
+  buildSearchFallback,
+  buildWritingFallback,
+} from './agent-run-fallbacks.mjs';
+import {
+  buildInsightPrompt,
+  buildReadingPrompt,
+  buildResearchPrompt,
+  buildResultPrompt,
+  buildSearchPrompt,
+  buildWritingPrompt,
+} from './agent-run-prompts.mjs';
 import { sanitiseSearchResultsPayload } from './search-contract.mjs';
 
 const DEFAULT_TIMEOUTS = {
@@ -10,15 +26,6 @@ const DEFAULT_TIMEOUTS = {
   writing: 25000,
 };
 const MAX_PROGRESS_EVENTS = 80;
-
-const SECTION_ORDER = [
-  ['abstract', 'Abstract'],
-  ['introduction', 'Introduction'],
-  ['method', 'Method'],
-  ['experiments', 'Experiments'],
-  ['analysis', 'Analysis'],
-  ['conclusion', 'Conclusion'],
-];
 
 export const CAPABILITY_PROFILES = {
   analyst: {
@@ -170,233 +177,6 @@ function assetIdsFromOutputRefs(refs) {
   return uniqueStrings(ensureArray(refs).flatMap((ref) => ensureArray(ref?.ids)));
 }
 
-function serialiseJson(value) {
-  return JSON.stringify(value, null, 2);
-}
-
-function sectionSummaryFromPaper(sectionId, project, paper) {
-  const abstract = String(paper.abstract || paper.summary || '').trim();
-  const keyPoints = uniqueStrings(paper.keyPoints || []);
-  const keywords = uniqueStrings([...(paper.keywords || []), ...(paper.matchedKeywords || [])]);
-
-  if (sectionId === 'abstract') {
-    return firstSentence(paper.summary || abstract || `${paper.title} is relevant to ${project.name}.`);
-  }
-
-  if (sectionId === 'introduction') {
-    return firstSentence(
-      `${paper.title} aligns with the project focus on ${project.focus || project.name}.`,
-      `${paper.title} introduces a direction relevant to ${project.name}.`,
-    );
-  }
-
-  if (sectionId === 'method') {
-    return firstSentence(
-      keyPoints[0] || `${paper.title} appears to center on ${keywords.slice(0, 3).join(', ') || 'its core method'}.`,
-      'Method details require a deeper read.',
-    );
-  }
-
-  if (sectionId === 'experiments') {
-    return firstSentence(
-      keyPoints[1] || `${paper.title} reports evaluation outcomes around ${keywords.slice(0, 2).join(', ') || 'the target benchmarks'}.`,
-      'Experiment details should be validated in the full paper.',
-    );
-  }
-
-  if (sectionId === 'analysis') {
-    return firstSentence(
-      keyPoints[2] || `${paper.title} still leaves open questions around robustness, efficiency, or reproducibility.`,
-      'Analysis notes can be expanded after a closer pass.',
-    );
-  }
-
-  return firstSentence(
-    `${paper.title} looks worth carrying into reproduction if the project prioritises ${keywords[0] || 'this topic'}.`,
-    'Conclusion notes will be refined as the reading progresses.',
-  );
-}
-
-function buildReadingSections(project, paper) {
-  return SECTION_ORDER.map(([id, label], index) => ({
-    id,
-    label,
-    status: index < 2 ? 'done' : index < 4 ? 'queue' : 'todo',
-    summary: sectionSummaryFromPaper(id, project, paper),
-  }));
-}
-
-function buildHighlights(paper) {
-  const keyPoints = uniqueStrings(paper.keyPoints || []);
-  const summary = String(paper.summary || paper.abstract || '').trim();
-  const fallbackPoints = summary ? summary.split(/[.!?]\s+/).filter(Boolean).slice(0, 3) : [];
-  const candidates = [...keyPoints, ...fallbackPoints].slice(0, 4);
-  const types = ['claim', 'method', 'result', 'limit'];
-  const sections = ['abstract', 'method', 'experiments', 'analysis'];
-
-  return candidates.map((text, index) => ({
-    id: `${paper.paperId}-highlight-${index + 1}`,
-    section: sections[index] || 'analysis',
-    text: truncate(text, 180),
-    type: types[index] || 'claim',
-  }));
-}
-
-function buildReproParams(project, paper) {
-  const keywords = uniqueStrings([...(paper.keywords || []), ...(paper.matchedKeywords || [])]);
-  return [
-    {
-      label: 'Primary topic',
-      value: keywords.slice(0, 3).join(', ') || project.name,
-    },
-    {
-      label: 'Venue / year',
-      value: `${paper.venue || 'Unknown'}${paper.year ? ` · ${paper.year}` : ''}`.trim(),
-    },
-    {
-      label: 'Access path',
-      value: paper.pdfUrl || paper.paperUrl || 'Metadata only',
-    },
-    {
-      label: 'Replication focus',
-      value: keywords[0] || firstSentence(project.focus || paper.summary || paper.abstract || project.name),
-    },
-    {
-      label: 'Compute note',
-      value: paper.openAccess ? 'Likely reproducible with public resources' : 'Expect manual environment validation',
-    },
-  ];
-}
-
-function buildReadingFallback({ context, error }) {
-  const { paper, project } = context;
-  const sections = buildReadingSections(project, paper);
-
-  return {
-    outputSummary: `Reading session prepared for ${paper.title}.`,
-    readingSessions: [
-      {
-        abstract: paper.abstract || '',
-        authors: ensureArray(paper.authors).slice(0, 8),
-        citedByCount: Number(paper.citedByCount) || 0,
-        highlights: buildHighlights(paper),
-        keyPoints: ensureArray(paper.keyPoints).slice(0, 6),
-        keywords: ensureArray(paper.keywords).slice(0, 8),
-        matchedKeywords: ensureArray(paper.matchedKeywords).slice(0, 8),
-        notes: [
-          {
-            id: `${paper.paperId}-reader-note`,
-            label: 'Reader summary',
-            value: firstSentence(paper.summary || paper.abstract || `${paper.title} is queued for deeper reading.`),
-          },
-        ],
-        openAccess: Boolean(paper.openAccess),
-        paperId: paper.paperId,
-        paperUrl: paper.paperUrl || null,
-        pdfUrl: paper.pdfUrl || null,
-        relevance: Number(paper.relevance) || 0,
-        reproParams: buildReproParams(project, paper),
-        sections,
-        sourceName: paper.sourceName || 'ARES',
-        sourceProvider: paper.sourceProvider || 'reader-fallback',
-        status: 'done',
-        summary: firstSentence(paper.summary || paper.abstract || `${paper.title} is ready for structured reading.`),
-        title: paper.title,
-        venue: paper.venue || 'Unknown',
-        warning: error ? `Reader fallback used: ${error.message}` : '',
-        year: paper.year ?? null,
-      },
-    ],
-  };
-}
-
-function buildResearchFallback({ context, error }) {
-  const paper = context.paper;
-  const readingSession = context.readingSession;
-  const sourceRefs = uniqueSourceRefs([
-    assetRef('paper', paper.paperId, { label: paper.title }),
-    readingSession ? assetRef('readingSession', readingSession.id, { label: readingSession.title }) : null,
-  ]);
-  const focus = firstSentence(
-    readingSession?.summary || paper.summary || paper.abstract || `${paper.title} reproduction plan`,
-    `${paper.title} reproduction plan`,
-  );
-
-  return {
-    experimentRuns: [
-      {
-        title: `${paper.title} baseline reproduction`,
-        kind: 'baseline',
-        metricTarget: truncate(focus, 120),
-        sourceRefs,
-        status: 'queue',
-        summary: 'Establish the original paper setting and verify that the reported setup can run locally.',
-      },
-      {
-        title: `${paper.title} scoped ablation`,
-        kind: 'ablation',
-        metricTarget: 'Validate one controllable simplification before broader experimentation.',
-        sourceRefs,
-        status: 'todo',
-        summary: 'After the baseline, isolate a single parameter or component change to measure sensitivity.',
-      },
-    ],
-    outputSummary: `Research plan drafted for ${paper.title}.`,
-    reproChecklistItems: [
-      {
-        category: 'repo',
-        detail: 'Locate the reference implementation or closest public baseline.',
-        sourceRefs,
-        status: 'queue',
-        title: 'Confirm code availability',
-      },
-      {
-        category: 'env',
-        detail: 'Capture package versions, runtime requirements, and any GPU assumptions.',
-        sourceRefs,
-        status: 'todo',
-        title: 'Validate environment setup',
-      },
-      {
-        category: 'data',
-        detail: 'Confirm the datasets, splits, and preprocessing steps implied by the paper.',
-        sourceRefs,
-        status: 'todo',
-        title: 'Reconstruct data recipe',
-      },
-      {
-        category: 'eval',
-        detail: 'List the primary metrics and expected variance before running experiments.',
-        sourceRefs,
-        status: 'todo',
-        title: 'Lock evaluation protocol',
-        warning: error ? `Runtime fallback used: ${error.message}` : '',
-      },
-    ],
-  };
-}
-
-function searchContextSummary(context) {
-  const query = String(context.searchQuery || '').trim() || context.project?.defaultQuery || 'untitled search';
-  const scopes = ensureArray(context.searchScopes)
-    .map((scope) => String(scope?.label || '').trim())
-    .filter(Boolean);
-
-  return {
-    query,
-    scopeLabel: scopes.length ? scopes.join(', ') : 'project-wide',
-  };
-}
-
-function buildSearchFallback({ context, error }) {
-  const { query, scopeLabel } = searchContextSummary(context);
-  const suffix = error?.message ? ` Runtime fallback: ${error.message}` : '';
-
-  return {
-    outputSummary: `Agentic search prepared for "${truncate(query, 120)}" across ${scopeLabel}.${suffix}`,
-  };
-}
-
 function toSearchPage(value) {
   const page = Number(value);
   return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -407,6 +187,11 @@ function searchOutputSummary(payload, query) {
   const provider = payload.provider || 'search provider';
   const suffix = count === 1 ? 'result' : 'results';
   return `Scout returned ${count} ${suffix} for "${truncate(query, 120)}" via ${provider}.`;
+}
+
+function isRunCancelRequested(store, runId) {
+  const run = store.getAgentRun(runId);
+  return run?.status === 'canceled' || Boolean(run?.cancelRequestedAt);
 }
 
 async function executeSearchRun({ context, run, searchService, store }) {
@@ -425,6 +210,10 @@ async function executeSearchRun({ context, run, searchService, store }) {
       scopes: context.searchScopes,
     }),
   );
+  if (isRunCancelRequested(store, run.id)) {
+    return;
+  }
+
   const queuedIds = new Set();
 
   for (const paper of payload.results) {
@@ -461,94 +250,6 @@ async function executeSearchRun({ context, run, searchService, store }) {
     status: 'done',
     warning: combineWarnings(payload.warning),
   });
-}
-
-function buildResultFallback({ context, error }) {
-  const paper = context.paper;
-  const experimentRuns = ensureArray(context.experimentRuns);
-  const baseline = experimentRuns[0];
-  const sourceRefs = uniqueSourceRefs([
-    assetRef('paper', paper.paperId, { label: paper.title }),
-    ...experimentRuns.map((run) => assetRef('experimentRun', run.id, { label: run.title })),
-  ]);
-
-  return {
-    outputSummary: `Result comparison prepared for ${paper.title}.`,
-    resultComparisons: [
-      {
-        metric: 'Primary outcome',
-        paperValue: 'Reported in paper',
-        reproducedValue: baseline?.observedValue || 'Pending run',
-        delta: baseline?.observedValue ? 'Compare against paper claim' : 'Awaiting experiment output',
-        sourceRefs,
-        status: baseline?.observedValue ? 'done' : 'queue',
-        summary: error
-          ? `Fallback comparison created after runtime failure: ${error.message}`
-          : 'Use this comparison record to log reproduction deltas once the first baseline completes.',
-        title: `${paper.title} comparison`,
-      },
-    ],
-  };
-}
-
-function buildInsightFallback({ context, error }) {
-  const paper = context.paper;
-  const comparisons = ensureArray(context.resultComparisons);
-  const firstComparison = comparisons[0];
-
-  return {
-    insightNotes: [
-      {
-        hypothesis: 'The strongest follow-up direction is likely to come from the first unstable assumption in the pipeline.',
-        sourceRefs: uniqueSourceRefs([
-          assetRef('paper', paper.paperId, { label: paper.title }),
-          ...comparisons.map((comparison) => assetRef('resultComparison', comparison.id, { label: comparison.title })),
-        ]),
-        status: firstComparison?.status === 'done' ? 'done' : 'queue',
-        summary: firstComparison?.summary || firstSentence(paper.summary || paper.abstract || `${paper.title} remains promising.`),
-        title: `${paper.title} insight note`,
-        validationState: firstComparison?.status === 'done' ? 'supported-by-results' : 'needs-results',
-        warning: error ? `Runtime fallback used: ${error.message}` : '',
-      },
-    ],
-    outputSummary: `Insight note drafted for ${paper.title}.`,
-  };
-}
-
-function buildWritingFallback({ context, error }) {
-  const paper = context.paper;
-  const insights = ensureArray(context.insightNotes);
-  const comparisons = ensureArray(context.resultComparisons);
-  const summary = firstSentence(paper.summary || paper.abstract || `${paper.title} draft`);
-  const paragraphs = [
-    `## Motivation\n${summary}`,
-    `## Reading Notes\n${firstSentence(context.readingSession?.summary || summary)}`,
-    `## Result Snapshot\n${firstSentence(comparisons[0]?.summary || 'Result comparison is still being filled in.')}`,
-    `## Insight\n${firstSentence(insights[0]?.summary || 'The next step is to validate the first unstable assumption.')}`,
-  ];
-
-  return {
-    outputSummary: `Writing draft created for ${paper.title}.`,
-    writingDrafts: [
-      {
-        sections: [
-          { id: 'motivation', label: 'Motivation', text: paragraphs[0] },
-          { id: 'reading-notes', label: 'Reading Notes', text: paragraphs[1] },
-          { id: 'result-snapshot', label: 'Result Snapshot', text: paragraphs[2] },
-          { id: 'insight', label: 'Insight', text: paragraphs[3] },
-        ],
-        sourceRefs: uniqueSourceRefs([
-          assetRef('paper', paper.paperId, { label: paper.title }),
-          ...insights.map((note) => assetRef('insightNote', note.id, { label: note.title })),
-          ...comparisons.map((comparison) => assetRef('resultComparison', comparison.id, { label: comparison.title })),
-        ]),
-        status: 'done',
-        summary,
-        title: `${paper.title} draft`,
-        warning: error ? `Runtime fallback used: ${error.message}` : '',
-      },
-    ],
-  };
 }
 
 function uniqueSourceRefs(refs) {
@@ -603,192 +304,6 @@ async function appendRunProgressEvent(store, runId, event) {
   await store.updateAgentRun(runId, {
     progressEvents: [...progressEvents, normaliseProgressEvent(event)].slice(-MAX_PROGRESS_EVENTS),
   });
-}
-
-function buildSearchPrompt({ context }) {
-  const { query, scopeLabel } = searchContextSummary(context);
-  const keywords = (context.project?.keywords || []).length
-    ? context.project.keywords.map((keyword) => `- ${keyword}`).join('\n')
-    : '- none';
-  const scopes = ensureArray(context.searchScopes).length
-    ? context.searchScopes.map((scope) => `- ${scope.type || 'scope'}: ${scope.label || scope.id}`).join('\n')
-    : '- none';
-
-  return `
-You are the Scout agentic search planner for ARES.
-
-Return only JSON:
-{
-  "outputSummary": "one concise sentence describing the live search plan"
-}
-
-Project:
-- id: ${context.project?.id || 'unknown'}
-- focus: ${context.project?.focus || 'n/a'}
-
-Project keywords:
-${keywords}
-
-User query:
-- ${query}
-
-Active scopes:
-${scopes}
-
-Plan requirements:
-- Treat this as an agentic literature-search run, not a keyword-only lookup.
-- Mention the first live phase: Reader.
-- Scope summary: ${scopeLabel}
-- Keep the sentence short enough for a status badge or run header.
-`.trim();
-}
-
-function buildReadingPrompt({ context }) {
-  const { paper, project } = context;
-
-  return `
-You are the Reader agent for ARES.
-
-Task:
-- Build a structured reading session for the paper below.
-- Do not use shell commands.
-- Return JSON only.
-
-Project:
-${serialiseJson({
-    focus: project.focus,
-    id: project.id,
-    keywords: project.keywords,
-    name: project.name,
-  })}
-
-Paper:
-${serialiseJson(paper)}
-
-Return shape:
-{
-  "readingSessions": [
-    {
-      "summary": "string",
-      "sections": [{ "id": "abstract", "label": "Abstract", "status": "done|queue|todo", "summary": "string" }],
-      "highlights": [{ "id": "string", "type": "claim|method|result|limit", "section": "string", "text": "string" }],
-      "reproParams": [{ "label": "string", "value": "string" }],
-      "notes": [{ "id": "string", "label": "string", "value": "string" }]
-    }
-  ],
-  "outputSummary": "string"
-}
-`.trim();
-}
-
-function buildResearchPrompt({ context }) {
-  const { handoff, paper, project, readingSession } = context;
-
-  return `
-You are the Reproduction agent for ARES.
-
-Task:
-- Produce a reproduction checklist and initial experiment plan.
-- Shell access is allowed if needed, but keep the response as JSON only.
-
-Project:
-${serialiseJson({
-    focus: project.focus,
-    id: project.id,
-    keywords: project.keywords,
-    name: project.name,
-  })}
-
-Paper:
-${serialiseJson(paper)}
-
-Reading session:
-${serialiseJson(readingSession || {})}
-
-Reading handoff:
-${serialiseJson(handoff || {})}
-
-Return shape:
-{
-  "reproChecklistItems": [{ "title": "string", "category": "string", "detail": "string", "status": "todo|queue|running|done" }],
-  "experimentRuns": [{ "title": "string", "kind": "baseline|ablation|sweep", "summary": "string", "status": "todo|queue|running|done" }],
-  "outputSummary": "string"
-}
-`.trim();
-}
-
-function buildResultPrompt({ context }) {
-  return `
-You are the Analyst report agent for ARES.
-
-Task:
-- Compare reproduced evidence with the original paper claims.
-- Return JSON only.
-
-Context:
-${serialiseJson({
-    experimentRuns: context.experimentRuns || [],
-    paper: context.paper,
-    readingSession: context.readingSession || null,
-  })}
-
-Return shape:
-{
-  "resultComparisons": [{ "title": "string", "metric": "string", "paperValue": "string", "reproducedValue": "string", "delta": "string", "summary": "string", "status": "todo|queue|running|done" }],
-  "outputSummary": "string"
-}
-`.trim();
-}
-
-function buildInsightPrompt({ context }) {
-  return `
-You are the Analyst agent for ARES.
-
-Task:
-- Write a concise insight note grounded in the available comparisons.
-- Return JSON only.
-
-Context:
-${serialiseJson({
-    paper: context.paper,
-    resultComparisons: context.resultComparisons || [],
-  })}
-
-Return shape:
-{
-  "insightNotes": [{ "title": "string", "summary": "string", "hypothesis": "string", "validationState": "string", "status": "todo|queue|running|done" }],
-  "outputSummary": "string"
-}
-`.trim();
-}
-
-function buildWritingPrompt({ context }) {
-  return `
-You are the Writing agent for ARES.
-
-Task:
-- Create a concise research draft from the upstream assets.
-- Return JSON only.
-
-Context:
-${serialiseJson({
-    insightNotes: context.insightNotes || [],
-    paper: context.paper,
-    readingSession: context.readingSession || null,
-    resultComparisons: context.resultComparisons || [],
-  })}
-
-Return shape:
-{
-  "writingDrafts": [{
-    "title": "string",
-    "summary": "string",
-    "status": "todo|queue|running|done",
-    "sections": [{ "id": "string", "label": "string", "text": "string" }]
-  }],
-  "outputSummary": "string"
-}
-`.trim();
 }
 
 async function bootstrapReadingRun({ context, run, store }) {
@@ -1102,9 +617,24 @@ export function createAgentRunService({
     return updated;
   };
 
+  async function markRunCanceled(runId, patch = {}) {
+    return notifyingStore.updateAgentRun(runId, {
+      cancelReason: 'user',
+      cancelRequestedAt: patch.cancelRequestedAt || nowIso(),
+      error: 'Canceled by user.',
+      finishedAt: nowIso(),
+      status: 'canceled',
+      ...patch,
+    });
+  }
+
   async function executeRun(runId) {
     const run = notifyingStore.getAgentRun(runId);
     if (!run) {
+      return;
+    }
+    if (isRunCancelRequested(notifyingStore, runId)) {
+      await markRunCanceled(runId, { cancelRequestedAt: run.cancelRequestedAt || nowIso() });
       return;
     }
 
@@ -1127,8 +657,18 @@ export function createAgentRunService({
         status: 'running',
       });
 
+      if (isRunCancelRequested(notifyingStore, runId)) {
+        await markRunCanceled(runId);
+        return;
+      }
+
       if (definition.bootstrap) {
         await definition.bootstrap({ context, run, store: notifyingStore });
+      }
+
+      if (isRunCancelRequested(notifyingStore, runId)) {
+        await markRunCanceled(runId);
+        return;
       }
 
       if (definition.stage === 'search') {
@@ -1148,6 +688,12 @@ export function createAgentRunService({
       const summary = await task.promise;
       const payload = runtime.parseJsonFromMessages(summary);
       const output = normaliseAgentPayload(payload, definition);
+
+      if (isRunCancelRequested(notifyingStore, runId)) {
+        await markRunCanceled(runId);
+        return;
+      }
+
       const persisted = await persistTaskOutputs({
         context,
         definition,
@@ -1168,11 +714,7 @@ export function createAgentRunService({
       const message = error instanceof Error ? error.message : String(error);
 
       if (/aborted/i.test(message)) {
-        await notifyingStore.updateAgentRun(runId, {
-          error: 'Aborted by user.',
-          finishedAt: nowIso(),
-          status: definition.stage === 'search' ? 'error' : 'done',
-        });
+        await markRunCanceled(runId);
         return;
       }
 
@@ -1246,15 +788,22 @@ export function createAgentRunService({
   }
 
   async function abortRun(runId) {
+    const run = store.getAgentRun(runId);
+    if (!run) {
+      throw new Error(`Unknown agent run: ${runId}`);
+    }
+
+    const cancelRequestedAt = nowIso();
+    await notifyingStore.updateAgentRun(runId, {
+      cancelReason: 'user',
+      cancelRequestedAt,
+    });
+
     const abort = activeRuns.get(runId);
     if (abort) {
       abort();
     } else {
-      await notifyingStore.updateAgentRun(runId, {
-        error: 'Aborted by user.',
-        finishedAt: nowIso(),
-        status: 'done',
-      });
+      await markRunCanceled(runId, { cancelRequestedAt });
     }
 
     return getRun(runId);
@@ -1298,6 +847,26 @@ export function createAgentRunService({
     };
   }
 
+  async function recoverInterruptedRuns() {
+    const activeStatuses = new Set(['queue', 'running']);
+    const interrupted = store
+      .listAgentRuns()
+      .filter((run) => activeStatuses.has(String(run.status || '').toLowerCase()));
+    const recovered = [];
+
+    for (const run of interrupted) {
+      const updated = await notifyingStore.updateAgentRun(run.id, {
+        error: 'Agent run was interrupted by server restart. Retry the run to continue.',
+        finishedAt: nowIso(),
+        status: 'error',
+        warning: combineWarnings(run.warning, 'interrupted by server restart'),
+      });
+      recovered.push(updated);
+    }
+
+    return recovered;
+  }
+
   return {
     async checkAvailability() {
       return runtime.checkAvailability();
@@ -1310,6 +879,7 @@ export function createAgentRunService({
     abortRun,
     createRun,
     getRun,
+    recoverInterruptedRuns,
     retryRun,
     subscribeRun,
   };

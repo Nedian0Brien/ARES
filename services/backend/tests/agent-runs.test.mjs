@@ -231,6 +231,157 @@ test('agent run service notifies subscribers when run state changes', async () =
   assert.ok(events.includes('done'));
 });
 
+test('agent run service marks persisted active runs as interrupted on startup', async () => {
+  const store = await createDemoStore();
+  const queued = await store.createAgentRun({
+    agent: 'Reader agent',
+    input: { paper: paperFixture() },
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'queue',
+    taskKind: 'create-reading-session',
+  });
+  const running = await store.createAgentRun({
+    agent: 'Writing agent',
+    input: { draftId: 'draft-1' },
+    projectId: 'demo',
+    stage: 'writing',
+    startedAt: '2026-06-12T00:00:00.000Z',
+    status: 'running',
+    taskKind: 'create-writing-draft',
+  });
+  const done = await store.createAgentRun({
+    agent: 'Reader agent',
+    finishedAt: '2026-06-12T00:02:00.000Z',
+    input: { paper: paperFixture({ paperId: 'done-paper' }) },
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'done',
+    taskKind: 'create-reading-session',
+  });
+
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+  const recovered = await service.recoverInterruptedRuns();
+
+  assert.deepEqual(recovered.map((run) => run.id).sort(), [queued.id, running.id].sort());
+  assert.equal(store.getAgentRun(queued.id).status, 'error');
+  assert.equal(store.getAgentRun(running.id).status, 'error');
+  assert.equal(store.getAgentRun(done.id).status, 'done');
+  assert.match(store.getAgentRun(queued.id).error, /interrupted by server restart/i);
+  assert.match(store.getAgentRun(running.id).error, /interrupted by server restart/i);
+  assert.ok(store.getAgentRun(queued.id).finishedAt);
+  assert.ok(store.getAgentRun(running.id).finishedAt);
+});
+
+test('agent run service persists abort requests and recovers them as canceled after restart', async () => {
+  const store = await createDemoStore();
+  const queued = await store.createAgentRun({
+    agent: 'Reader agent',
+    input: { paper: paperFixture() },
+    projectId: 'demo',
+    stage: 'reading',
+    status: 'queue',
+    taskKind: 'create-reading-session',
+  });
+
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+
+  const aborted = await service.abortRun(queued.id);
+  const persisted = store.getAgentRun(queued.id);
+
+  assert.equal(aborted.run.status, 'canceled');
+  assert.equal(persisted.status, 'canceled');
+  assert.match(persisted.error, /canceled by user/i);
+  assert.ok(persisted.cancelRequestedAt);
+  assert.equal(persisted.cancelReason, 'user');
+
+  const recovered = await service.recoverInterruptedRuns();
+
+  assert.deepEqual(recovered, []);
+  assert.equal(store.getAgentRun(queued.id).status, 'canceled');
+});
+
+test('agent run service keeps canceled search runs from queueing late results', async () => {
+  const store = await createDemoStore();
+  let resolveSearch;
+  const searchFinished = new Promise((resolve) => {
+    resolveSearch = resolve;
+  });
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    searchService: {
+      async search() {
+        await searchFinished;
+        return {
+          provider: 'delayed-scout',
+          query: 'local inference',
+          results: [paperFixture({ paperId: 'late-paper' })],
+          total: 1,
+        };
+      },
+    },
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      query: 'local inference',
+      scopes: [],
+    },
+    projectId: 'demo',
+    stage: 'search',
+  });
+
+  await service.abortRun(run.id);
+  resolveSearch();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(store.getAgentRun(run.id).status, 'canceled');
+  assert.equal(store.getProject('demo').queueCount, 0);
+});
+
+test('agent run service stops queued reading side effects when cancellation wins the start race', async () => {
+  const store = await createDemoStore();
+  let runtimeCallCount = 0;
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl(command, args = [], options = {}) {
+      const child = createDelayedFailingSpawn()(command, args, options);
+      if (!args.includes('--version')) {
+        runtimeCallCount += 1;
+      }
+      return child;
+    },
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      paper: paperFixture({ paperId: 'cancel-race-paper' }),
+    },
+    projectId: 'demo',
+    stage: 'reading',
+    taskKind: 'create-reading-session',
+  });
+
+  await service.abortRun(run.id);
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  assert.equal(store.getAgentRun(run.id).status, 'canceled');
+  assert.equal(store.getReadingSessions('demo').length, 0);
+  assert.equal(store.getProject('demo').queueCount, 0);
+  assert.equal(runtimeCallCount, 0);
+});
+
 test('search agent run reports an error when Scout service is unavailable', async () => {
   const store = await createDemoStore();
   const service = createAgentRunService({

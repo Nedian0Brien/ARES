@@ -75,3 +75,45 @@ test('agent runtime streams normalized progress events while task is running', a
   assert.ok(progressEvents.some((event) => event.type === 'agent_message' && /rankedPaperIds/.test(event.detail)));
   assert.ok(progressEvents.some((event) => event.type === 'status' && event.status === 'done'));
 });
+
+function createHangingSpawn({ pid = 4242, spawnedOptions = [] } = {}) {
+  const children = [];
+  function spawnImpl(_command, _args, options) {
+    spawnedOptions.push(options);
+    const child = new EventEmitter();
+    child.pid = pid;
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.exitCode = null;
+    child.kill = (signal) => {
+      child.exitCode = 0;
+      child.emit('close', null, signal);
+    };
+    children.push(child);
+    return child;
+  }
+
+  return { children, spawnImpl, spawnedOptions };
+}
+
+test('agent runtime abort terminates the spawned process group', async () => {
+  const spawnedOptions = [];
+  const { children, spawnImpl } = createHangingSpawn({ pid: 4321, spawnedOptions });
+  const killCalls = [];
+  const runtime = createAgentRuntime({
+    cwd: '/workspace',
+    killProcess(pid, signal) {
+      killCalls.push({ pid, signal });
+      children[0].exitCode = 0;
+      children[0].emit('close', null, signal);
+    },
+    spawnImpl,
+  });
+
+  const task = runtime.startJsonTask({ prompt: 'stay busy', timeoutMs: 1000 });
+  task.abort();
+
+  await assert.rejects(task.promise, /aborted/i);
+  assert.equal(spawnedOptions[0].detached, true);
+  assert.deepEqual(killCalls, [{ pid: -4321, signal: 'SIGTERM' }]);
+});
