@@ -142,6 +142,46 @@ export function validateValidationSampleCorpus(
   };
 }
 
+function emptyQualityStatusCounts() {
+  return {
+    partial: 0,
+    'source-backed': 0,
+    synthetic: 0,
+    unknown: 0,
+  };
+}
+
+function qualityStatusCounts(assets = []) {
+  return assets.reduce((counts, asset) => {
+    const status = asset?.quality?.status || 'unknown';
+    counts[status in counts ? status : 'unknown'] += 1;
+    return counts;
+  }, emptyQualityStatusCounts());
+}
+
+function mergeQualityStatusCounts(left = {}, right = {}) {
+  const counts = emptyQualityStatusCounts();
+  for (const status of Object.keys(counts)) {
+    counts[status] = (Number(left[status]) || 0) + (Number(right[status]) || 0);
+  }
+  return counts;
+}
+
+function qualityStatusReport(counts = {}) {
+  const normalized = mergeQualityStatusCounts(counts);
+  const total = Object.values(normalized).reduce((sum, count) => sum + count, 0);
+  const ratios = emptyQualityStatusCounts();
+  for (const status of Object.keys(ratios)) {
+    ratios[status] = total ? Number((normalized[status] / total).toFixed(2)) : 0;
+  }
+
+  return {
+    counts: normalized,
+    ratios,
+    total,
+  };
+}
+
 export function summariseReadingValidation(session) {
   const assets = Array.isArray(session?.assets) ? session.assets : [];
   const tables = assets.filter((asset) => asset.kind === 'table');
@@ -153,6 +193,7 @@ export function summariseReadingValidation(session) {
   return {
     averageAssetQuality,
     assetCount: assets.length,
+    assetQualityStatusCounts: qualityStatusCounts(assets),
     assets: assets.slice(0, 12).map((asset) => ({
       caption: asset.caption || '',
       dataPath: asset.dataPath || '',
@@ -167,12 +208,14 @@ export function summariseReadingValidation(session) {
       thumbPath: asset.thumbPath || '',
     })),
     figureCount: figures.length,
+    figureQualityStatusCounts: qualityStatusCounts(figures),
     pageCount: Number(session?.pageCount) || 0,
     parseStatus: session?.parseStatus || '',
     sectionCount: Array.isArray(session?.sections) ? session.sections.length : 0,
     sourceBackedAssetCount: assets.filter((asset) => asset.quality?.status === 'source-backed').length,
     sourceBoundedAssetCount: assets.filter((asset) => asset.sourceBounds?.unit === 'page-ratio').length,
     tableCount: tables.length,
+    tableQualityStatusCounts: qualityStatusCounts(tables),
   };
 }
 
@@ -217,18 +260,33 @@ export function buildValidationReport(results = []) {
       const summary = result.summary || result;
       return {
         assetCount: memo.assetCount + (Number(summary.assetCount) || 0),
+        assetQualityStatusCounts: mergeQualityStatusCounts(
+          memo.assetQualityStatusCounts,
+          summary.assetQualityStatusCounts,
+        ),
         figureCount: memo.figureCount + (Number(summary.figureCount) || 0),
+        figureQualityStatusCounts: mergeQualityStatusCounts(
+          memo.figureQualityStatusCounts,
+          summary.figureQualityStatusCounts,
+        ),
         sourceBackedAssetCount: memo.sourceBackedAssetCount + (Number(summary.sourceBackedAssetCount) || 0),
         sourceBoundedAssetCount: memo.sourceBoundedAssetCount + (Number(summary.sourceBoundedAssetCount) || 0),
         tableCount: memo.tableCount + (Number(summary.tableCount) || 0),
+        tableQualityStatusCounts: mergeQualityStatusCounts(
+          memo.tableQualityStatusCounts,
+          summary.tableQualityStatusCounts,
+        ),
       };
     },
     {
       assetCount: 0,
+      assetQualityStatusCounts: emptyQualityStatusCounts(),
       figureCount: 0,
+      figureQualityStatusCounts: emptyQualityStatusCounts(),
       sourceBackedAssetCount: 0,
       sourceBoundedAssetCount: 0,
       tableCount: 0,
+      tableQualityStatusCounts: emptyQualityStatusCounts(),
     },
   );
   const failedCount = samples.filter((sample) => sample.status === 'failed').length;
@@ -236,6 +294,11 @@ export function buildValidationReport(results = []) {
   return {
     failedCount,
     passedCount: samples.length - failedCount,
+    qualityReport: {
+      assets: qualityStatusReport(totals.assetQualityStatusCounts),
+      figures: qualityStatusReport(totals.figureQualityStatusCounts),
+      tables: qualityStatusReport(totals.tableQualityStatusCounts),
+    },
     sampleCount: samples.length,
     samples,
     status: failedCount ? 'failed' : 'passed',

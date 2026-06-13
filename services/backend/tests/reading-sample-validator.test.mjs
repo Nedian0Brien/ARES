@@ -38,7 +38,7 @@ test('reading sample validator summarizes asset kind counts and source bounds', 
       {
         id: 'figure-1',
         kind: 'figure',
-        quality: { score: 0.74, status: 'source-backed' },
+        quality: { score: 0.74, status: 'partial' },
         sourceBounds: { unit: 'page-ratio' },
         thumbPath: 'figure-1.png',
       },
@@ -51,8 +51,16 @@ test('reading sample validator summarizes asset kind counts and source bounds', 
   assert.equal(summary.tableCount, 1);
   assert.equal(summary.figureCount, 1);
   assert.equal(summary.sourceBoundedAssetCount, 2);
-  assert.equal(summary.sourceBackedAssetCount, 2);
+  assert.equal(summary.sourceBackedAssetCount, 1);
   assert.equal(summary.averageAssetQuality, 0.8);
+  assert.deepEqual(summary.assetQualityStatusCounts, {
+    partial: 1,
+    'source-backed': 1,
+    synthetic: 0,
+    unknown: 0,
+  });
+  assert.deepEqual(summary.figureQualityStatusCounts.partial, 1);
+  assert.deepEqual(summary.tableQualityStatusCounts['source-backed'], 1);
   assert.equal(summary.assets[0].rows, 1);
   assert.equal(summary.assets[0].qualityStatus, 'source-backed');
 });
@@ -133,10 +141,13 @@ test('reading sample validator builds an aggregate report across samples', () =>
       failures: [],
       summary: {
         assetCount: 4,
+        assetQualityStatusCounts: { partial: 1, 'source-backed': 3, synthetic: 0, unknown: 0 },
         figureCount: 1,
+        figureQualityStatusCounts: { partial: 1, 'source-backed': 0, synthetic: 0, unknown: 0 },
         sourceBoundedAssetCount: 3,
         sourceBackedAssetCount: 3,
         tableCount: 2,
+        tableQualityStatusCounts: { partial: 0, 'source-backed': 2, synthetic: 0, unknown: 0 },
       },
     },
     {
@@ -144,10 +155,13 @@ test('reading sample validator builds an aggregate report across samples', () =>
       failures: ['Expected at least 2 table assets, received 0.'],
       summary: {
         assetCount: 1,
+        assetQualityStatusCounts: { partial: 0, 'source-backed': 0, synthetic: 1, unknown: 0 },
         figureCount: 0,
+        figureQualityStatusCounts: { partial: 0, 'source-backed': 0, synthetic: 0, unknown: 0 },
         sourceBoundedAssetCount: 0,
         sourceBackedAssetCount: 0,
         tableCount: 0,
+        tableQualityStatusCounts: { partial: 0, 'source-backed': 0, synthetic: 0, unknown: 0 },
       },
     },
   ]);
@@ -158,5 +172,11 @@ test('reading sample validator builds an aggregate report across samples', () =>
   assert.equal(report.failedCount, 1);
   assert.equal(report.totals.tableCount, 2);
   assert.equal(report.totals.sourceBackedAssetCount, 3);
+  assert.deepEqual(report.qualityReport.tables, {
+    counts: { partial: 0, 'source-backed': 2, synthetic: 0, unknown: 0 },
+    ratios: { partial: 0, 'source-backed': 1, synthetic: 0, unknown: 0 },
+    total: 2,
+  });
+  assert.equal(report.qualityReport.assets.ratios.synthetic, 0.2);
   assert.equal(report.samples[1].status, 'failed');
 });

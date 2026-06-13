@@ -121,9 +121,9 @@
 - [x] corpus를 category별로 분류한다.
   - 산출물: text layer, OCR, table, figure, citation, supplementary metadata
   - 검증: sample schema and category coverage test in `services/backend/tests/reading-sample-validator.test.mjs`
-- [ ] table/figure quality report를 추가한다.
+- [x] table/figure quality report를 추가한다.
   - 산출물: source-backed/partial/synthetic 비율 report
-  - 검증: report snapshot test
+  - 검증: report snapshot test in `services/backend/tests/reading-sample-validator.test.mjs`
 - [ ] multi-page table 처리 기준을 추가한다.
   - 산출물: extraction rule 또는 known limitation marker
   - 검증: multi-page table sample test
