@@ -281,6 +281,8 @@ test('Reader chat exposes retrieval confidence telemetry', async () => {
   assert.match(readingJs, /renderReadingRetrievalPill/);
   assert.match(readingJs, /Low confidence retrieval/);
   assert.match(readingJs, /Hybrid retrieval/);
+  assert.match(readingJs, /retrieval\.minEvidenceScore/);
+  assert.match(readingJs, /min \$\{escapeHtml\(String\(minEvidenceScore\)\)\}/);
   assert.match(styles, /\.reading-retrieval-pill/);
   assert.match(styles, /\.reading-retrieval-pill\.is-low/);
 });

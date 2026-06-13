@@ -130,9 +130,9 @@
 - [x] retrieval scorer health validation을 배포 smoke에 연결한다.
   - 산출물: scorer validation command in deploy/check script
   - 검증: validation success/failure and smoke script test in `services/backend/tests/retrieval-scorer.test.mjs`
-- [ ] unsupported answer policy를 강화한다.
+- [x] unsupported answer policy를 강화한다.
   - 산출물: confidence threshold contract, UI warning
-  - 검증: no-evidence chat test
+  - 검증: no-evidence chat threshold test in `services/backend/tests/reading-service.test.mjs`, UI warning contract in `services/backend/tests/search-reading-tab-contract.test.mjs`
 - [ ] OCR cost/latency metric을 추가한다.
   - 산출물: OCR timing and page count telemetry
   - 검증: OCR fixture test

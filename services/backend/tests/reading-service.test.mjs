@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 
-import { createReadingService } from '../lib/reading-service.mjs';
+import { CHAT_EVIDENCE_POLICY, createReadingService } from '../lib/reading-service.mjs';
 import { createStore } from '../lib/store.mjs';
 
 function createStubRuntime() {
@@ -603,6 +603,8 @@ test('reading chat rejects low-confidence lexical crumbs', async (t) => {
   assert.equal(payload.messages[1].citations.length, 0);
   assert.equal(payload.messages[1].retrieval.confidence, 'none');
   assert.equal(payload.messages[1].retrieval.lowConfidence, true);
+  assert.equal(payload.messages[1].retrieval.minEvidenceScore, CHAT_EVIDENCE_POLICY.minEvidenceScore);
+  assert.equal(payload.messages[1].retrieval.topScore < CHAT_EVIDENCE_POLICY.minEvidenceScore, true);
 });
 
 test('reading chat uses built-in semantic aliases when no scorer is configured', async (t) => {

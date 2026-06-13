@@ -187,12 +187,14 @@ export function createReadingFeature({
     }
 
     const confidence = readingText(retrieval.confidence, "none");
+    const minEvidenceScore = Number(retrieval.minEvidenceScore) || 0;
     const score = Number(retrieval.topScore) || 0;
     const label = retrieval.lowConfidence ? "Low confidence retrieval" : "Hybrid retrieval";
     return `
       <div class="reading-retrieval-pill ${retrieval.lowConfidence ? "is-low" : ""}">
         <span>${escapeHtml(label)}</span>
         <span class="mono">${escapeHtml(confidence)} · ${escapeHtml(String(score))}</span>
+        ${minEvidenceScore ? `<span class="mono">min ${escapeHtml(String(minEvidenceScore))}</span>` : ""}
         ${retrieval.scorer ? `<span class="mono">${escapeHtml(readingExcerpt(retrieval.scorer, "", 32))}</span>` : ""}
       </div>
     `;

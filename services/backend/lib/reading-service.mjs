@@ -16,7 +16,10 @@ import {
 const READING_RUNTIME_DIR = path.join('data', 'runtime', 'reading');
 const DEMO_PDF_HOST = 'example.org';
 const MAX_CHAT_CHUNKS = 4;
-const MIN_CHAT_EVIDENCE_SCORE = 4;
+export const CHAT_EVIDENCE_POLICY = Object.freeze({
+  minEvidenceScore: 4,
+});
+const MIN_CHAT_EVIDENCE_SCORE = CHAT_EVIDENCE_POLICY.minEvidenceScore;
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MAX_UPLOAD_MB = Math.round(MAX_UPLOAD_BYTES / 1024 / 1024);
 const PDF_CROP_SCALE = 1.35;
