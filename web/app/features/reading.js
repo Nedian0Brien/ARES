@@ -17,6 +17,7 @@ export function createReadingFeature({
   readingHomeCounts,
   filterReadingHomeItems,
   readingHomeActionMeta,
+  maxReadingPdfUploadLabel = "100MB",
 }) {
   const {
     clampValue,
@@ -706,6 +707,65 @@ export function createReadingFeature({
       </aside>
     `;
   }
+
+  function renderReadingUploadModal() {
+    const fileName = state.readingUploadModalFileName || "";
+    const fileSize = state.readingUploadModalFileSizeLabel || "";
+    const open = state.readingUploadModalOpen;
+    const busy = state.readingUploading;
+
+    return `
+      <div class="reading-upload-modal-overlay ${open ? "is-open" : ""}" aria-hidden="${open ? "false" : "true"}">
+        <button type="button" class="reading-upload-modal-backdrop" data-action="close-reading-upload-modal" aria-label="Close PDF upload"></button>
+        <div class="reading-upload-modal-panel">
+          <section
+            class="reading-upload-modal-surface"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reading-upload-modal-title"
+            aria-describedby="reading-upload-modal-copy"
+          >
+            <div class="reading-upload-modal-head">
+              <div>
+                <div class="reading-upload-modal-kicker">Local PDF</div>
+                <h2 id="reading-upload-modal-title" class="reading-upload-modal-title">Upload PDF</h2>
+              </div>
+              <button type="button" class="reading-upload-modal-close" data-action="close-reading-upload-modal" aria-label="Close PDF upload">
+                ${icon("x", { size: 14, color: "currentColor" })}
+              </button>
+            </div>
+
+            <label class="reading-upload-select ${fileName ? "has-file" : ""}">
+              <input
+                class="reading-upload-modal-input"
+                type="file"
+                name="readingPdfUploadModal"
+                accept="application/pdf,.pdf"
+                ${busy ? "disabled" : ""}
+              />
+              <span class="reading-upload-select-icon">${icon("pdf", { size: 18, color: "currentColor" })}</span>
+              <span class="reading-upload-select-copy">
+                <span class="reading-upload-select-title">${escapeHtml(fileName || "Choose PDF")}</span>
+                <span id="reading-upload-modal-copy" class="reading-upload-select-meta">
+                  ${escapeHtml(fileName ? [fileSize, "PDF"].filter(Boolean).join(" · ") : `PDF only · max ${maxReadingPdfUploadLabel}`)}
+                </span>
+              </span>
+            </label>
+
+            ${open && state.error ? `<div class="reading-upload-modal-error" role="alert">${escapeHtml(state.error)}</div>` : ""}
+
+            <div class="reading-upload-modal-actions">
+              <button type="button" class="btn-s" data-action="close-reading-upload-modal" ${busy ? "disabled" : ""}>Cancel</button>
+              <button type="button" class="btn-p" data-action="submit-reading-upload-modal" ${!fileName || busy ? "disabled" : ""}>
+                ${icon("pdf", { size: 13, color: "#ffffff" })}
+                <span>${busy ? "Uploading" : "Upload PDF"}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    `;
+  }
   
   function renderReadingHomeStage(project) {
     const items = readingHomeItems(project);
@@ -753,15 +813,27 @@ export function createReadingFeature({
                 <div class="reading-home-empty-icon">${icon("bookmark", { size: 28, color: TOKENS.read })}</div>
                 <div class="reading-home-empty-title">Nothing saved yet</div>
                   <div class="reading-home-empty-copy">No saved papers.</div>
-                <div style="margin-top:18px">
-                  <button type="button" class="btn-p" data-action="select-stage" data-stage-id="search">
-                    ${icon("search", { size: 13, color: "#ffffff" })}
+                <div class="reading-home-empty-actions">
+                  <button
+                    type="button"
+                    class="btn-p"
+                    data-action="open-reading-upload-modal"
+                    aria-haspopup="dialog"
+                    aria-expanded="${state.readingUploadModalOpen ? "true" : "false"}"
+                    ${state.readingUploading ? "disabled" : ""}
+                  >
+                    ${icon("pdf", { size: 13, color: "#ffffff" })}
+                    <span>${state.readingUploading ? "Uploading" : "Upload PDF"}</span>
+                  </button>
+                  <button type="button" class="btn-s" data-action="select-stage" data-stage-id="search">
+                    ${icon("search", { size: 13, color: "currentColor" })}
                     <span>Back to Discover</span>
                   </button>
                 </div>
               </section>
             </div>
           </section>
+          ${renderReadingUploadModal()}
         </div>
       `;
     }
@@ -830,20 +902,17 @@ export function createReadingFeature({
                   </div>
   
                   <div class="reading-home-tool-row">
-                    <label
+                    <button
+                      type="button"
                       class="reading-home-tool-btn reading-home-upload-btn ${state.readingUploading ? "is-busy" : ""}"
-                      ${state.readingUploading ? 'aria-disabled="true"' : ""}
+                      data-action="open-reading-upload-modal"
+                      aria-haspopup="dialog"
+                      aria-expanded="${state.readingUploadModalOpen ? "true" : "false"}"
+                      ${state.readingUploading ? "disabled" : ""}
                     >
-                      <input
-                        class="reading-home-upload-input"
-                        type="file"
-                        name="readingPdfUpload"
-                        accept="application/pdf,.pdf"
-                        ${state.readingUploading ? "disabled" : ""}
-                      />
                       ${icon("pdf", { size: 12, color: "currentColor" })}
                       <span>${state.readingUploading ? "Uploading" : "Upload PDF"}</span>
-                    </label>
+                    </button>
                     <button type="button" class="reading-home-tool-btn">
                       ${icon("filter", { size: 12, color: "currentColor" })}
                       <span>Filter</span>
@@ -957,6 +1026,7 @@ export function createReadingFeature({
               `
             : ""
         }
+        ${renderReadingUploadModal()}
       </div>
     `;
   }

@@ -2607,7 +2607,8 @@ body.is-run .stage-run .phase-card {
   }
 
   body:has(.search-preview-focal:not(.is-empty)) .bottom-nav,
-  body:has(.reading-home-preview-overlay.is-open) .bottom-nav {
+  body:has(.reading-home-preview-overlay.is-open) .bottom-nav,
+  body:has(.reading-upload-modal-overlay.is-open) .bottom-nav {
     opacity: 0;
     pointer-events: none;
   }

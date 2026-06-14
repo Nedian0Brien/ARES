@@ -94,15 +94,30 @@ test('Theme switcher persists light, dark, and system modes through shared CSS t
   assert.match(stylesCss, /\.theme-switcher-btn\.is-active/);
 });
 
-test('Read library upload uses a native file input inside the visible control', async () => {
-  const readingJs = await readProjectFile('web/app/features/reading.js');
+test('Read library upload opens a modal with native PDF selection and submit action', async () => {
+  const [appJs, readingJs, stylesCss] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/app/features/reading.js'),
+    readProjectStyles(),
+  ]);
 
-  assert.match(readingJs, /<label\s+class="reading-home-tool-btn reading-home-upload-btn/);
-  assert.match(readingJs, /type="file"/);
-  assert.match(readingJs, /name="readingPdfUpload"/);
+  assert.match(readingJs, /data-action="open-reading-upload-modal"/);
+  assert.match(readingJs, /aria-haspopup="dialog"/);
+  assert.match(readingJs, /state\.readingUploadModalOpen/);
+  assert.match(readingJs, /reading-upload-modal-overlay/);
+  assert.match(readingJs, /role="dialog"/);
+  assert.match(readingJs, /aria-modal="true"/);
+  assert.match(readingJs, /name="readingPdfUploadModal"/);
   assert.match(readingJs, /accept="application\/pdf,\.pdf"/);
-  assert.match(readingJs, /Upload PDF/);
-  assert.doesNotMatch(readingJs, /trigger-reading-pdf-upload/);
+  assert.match(readingJs, /data-action="submit-reading-upload-modal"/);
+  assert.match(readingJs, /data-action="close-reading-upload-modal"/);
+  assert.match(appJs, /readingUploadModalOpen: false/);
+  assert.match(appJs, /let readingUploadModalFile = null/);
+  assert.match(appJs, /if \(action === "open-reading-upload-modal"\)/);
+  assert.match(appJs, /if \(action === "submit-reading-upload-modal"\)/);
+  assert.match(appJs, /event\.target\.name === "readingPdfUploadModal"/);
+  assert.match(stylesCss, /\.reading-upload-modal-overlay/);
+  assert.match(stylesCss, /\.reading-upload-modal-surface/);
 });
 
 test('Read library accepts dragged PDF files on the worklist panel', async () => {

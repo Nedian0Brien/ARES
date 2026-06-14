@@ -244,6 +244,8 @@ a {
 .reading-rail-btn:focus-visible,
 .reading-home-filter-chip:focus-visible,
 .reading-home-tool-btn:focus-visible,
+.reading-upload-modal-close:focus-visible,
+.reading-upload-select:focus-within,
 .reading-chat-send:focus-visible,
 .reading-pdf-dock-layer .dock-btn:focus-visible,
 .theme-switcher-btn:focus-visible,

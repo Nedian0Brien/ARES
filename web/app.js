@@ -325,6 +325,9 @@ const state = {
   loading: false,
   readingLoading: false,
   readingUploading: false,
+  readingUploadModalOpen: false,
+  readingUploadModalFileName: "",
+  readingUploadModalFileSizeLabel: "",
   readingPdfDropActive: false,
   savingPaperId: "",
   readingStartingPaperId: "",
@@ -416,6 +419,7 @@ applyThemeMode(state.themeMode);
 
 const app = document.querySelector("#app");
 let modalClosing = false;
+let readingUploadModalFile = null;
 let activeRunPollTimer = 0;
 let activeRunEventSource = null;
 let readingResizeDrag = null;
@@ -2818,6 +2822,34 @@ function readingHomeSourceUrl(item = selectedReadingHomeItem()) {
   return item?.paper?.paperUrl || item?.paper?.url || item?.paper?.pdfUrl || item?.session?.paperUrl || item?.session?.pdfUrl || "";
 }
 
+function readingUploadFileSizeLabel(file) {
+  const size = Number(file?.size) || 0;
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)}MB`;
+  }
+  if (size >= 1024) {
+    return `${Math.max(1, Math.round(size / 1024))}KB`;
+  }
+  return size ? `${size}B` : "";
+}
+
+function setReadingUploadModalFile(file = null) {
+  readingUploadModalFile = file;
+  state.readingUploadModalFileName = file?.name || "";
+  state.readingUploadModalFileSizeLabel = file ? readingUploadFileSizeLabel(file) : "";
+}
+
+function closeReadingUploadModal() {
+  state.readingUploadModalOpen = false;
+  setReadingUploadModalFile(null);
+}
+
+function focusReadingUploadModalInput() {
+  window.setTimeout(() => {
+    document.querySelector('[name="readingPdfUploadModal"]')?.focus({ preventScroll: true });
+  }, 0);
+}
+
 function currentReadingPaper(project = activeProject()) {
   if (state.readingView === "home") {
     return selectedReadingHomeItem(project)?.paper || null;
@@ -3488,6 +3520,7 @@ async function uploadReadingPdf(file) {
     state.activeStage = "reading";
     state.readingView = "detail";
     state.readingDocumentTab = "pdf";
+    closeReadingUploadModal();
     state.readingHomePreviewOpen = false;
     state.readingRailOpen = defaultReadingRailOpen(state.searchLayout);
     saveStorage(STORAGE_KEYS.stage, state.activeStage);
@@ -3888,6 +3921,7 @@ const readingFeature = createReadingFeature({
   readingHomeCounts,
   filterReadingHomeItems,
   readingHomeActionMeta,
+  maxReadingPdfUploadLabel: MAX_READING_PDF_UPLOAD_LABEL,
 });
 
 const { renderReadingStage } = readingFeature;
@@ -5404,6 +5438,33 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "open-reading-upload-modal") {
+    state.readingUploadModalOpen = true;
+    state.error = "";
+    render();
+    focusReadingUploadModalInput();
+    return;
+  }
+
+  if (action === "close-reading-upload-modal") {
+    closeReadingUploadModal();
+    render();
+    return;
+  }
+
+  if (action === "submit-reading-upload-modal") {
+    if (!readingUploadModalFile) {
+      state.error = "업로드할 PDF 파일을 선택하세요.";
+      state.readingUploadModalOpen = true;
+      render();
+      focusReadingUploadModalInput();
+      return;
+    }
+
+    await uploadReadingPdf(readingUploadModalFile);
+    return;
+  }
+
   if (action === "set-reading-home-filter") {
     state.readingHomeFilter = trigger.dataset.readingHomeFilter || "all";
     syncReadingHomeSelection();
@@ -6795,12 +6856,11 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
-  if (event.target.name === "readingPdfUpload") {
+  if (event.target.name === "readingPdfUploadModal") {
     const [file] = Array.from(event.target.files || []);
-    event.target.value = "";
-    if (file) {
-      void uploadReadingPdf(file);
-    }
+    setReadingUploadModalFile(file || null);
+    state.error = "";
+    render();
     return;
   }
 
@@ -6940,6 +7000,11 @@ document.addEventListener("keydown", async (event) => {
       state.openWorkflowMenu = "";
       state.scopePicker = null;
       state.scopePickerQuery = "";
+      needsRender = true;
+    }
+
+    if (state.readingUploadModalOpen) {
+      closeReadingUploadModal();
       needsRender = true;
     }
 
