@@ -81,6 +81,10 @@ function truncateProgressText(value, maxLength = 640) {
   return `${text.slice(0, maxLength - 3).trim()}...`;
 }
 
+function stripNullBytes(value) {
+  return String(value || '').replace(/\0/g, '');
+}
+
 export function normaliseAgentRuntimeProgressEvent(event) {
   if (!event || typeof event !== 'object') {
     return null;
@@ -260,7 +264,7 @@ export function buildCodexExecArgs({
     args.push('--output-schema', outputSchemaPath);
   }
 
-  args.push('--color', 'never', prompt);
+  args.push('--color', 'never', stripNullBytes(prompt));
   return args;
 }
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 
-import { createAgentRuntime, normaliseAgentRuntimeStderr } from '../lib/agent-runtime.mjs';
+import { buildCodexExecArgs, createAgentRuntime, normaliseAgentRuntimeStderr } from '../lib/agent-runtime.mjs';
 
 test('normaliseAgentRuntimeStderr removes Codex stdin notice noise', () => {
   assert.equal(normaliseAgentRuntimeStderr('Reading additional input from stdin...\n'), '');
@@ -11,6 +11,16 @@ test('normaliseAgentRuntimeStderr removes Codex stdin notice noise', () => {
     normaliseAgentRuntimeStderr('Reading additional input from stdin...\nreal warning\n'),
     'real warning',
   );
+});
+
+test('buildCodexExecArgs removes null bytes from prompt arguments', () => {
+  const args = buildCodexExecArgs({
+    cwd: '/workspace',
+    prompt: 'Paper text before\0after',
+  });
+
+  assert.equal(args.at(-1), 'Paper text beforeafter');
+  assert.equal(args.some((arg) => String(arg).includes('\0')), false);
 });
 
 function createStreamingSpawn(events) {
