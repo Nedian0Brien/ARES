@@ -5,6 +5,7 @@ export const READING_SUMMARY_STATUSES = new Set(['idle', 'running', 'done', 'err
 export const READING_SESSION_STATUSES = new Set(['todo', 'queue', 'running', 'done']);
 
 const DEFAULT_SUMMARY_CARDS = {
+  fullSummary: '',
   keyPoints: [],
   limit: '',
   method: '',
@@ -163,6 +164,19 @@ function firstSentence(value, fallback = '') {
 
 function clipText(value, limit = 260) {
   const text = ensureTrimmedString(value, '').replace(/\s+/g, ' ').trim();
+  if (!text) {
+    return '';
+  }
+
+  if (text.length <= limit) {
+    return text;
+  }
+
+  return `${text.slice(0, Math.max(limit - 1, 1)).trimEnd()}…`;
+}
+
+function clipRichText(value, limit = 12000) {
+  const text = ensureTrimmedString(value, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
   if (!text) {
     return '';
   }
@@ -441,6 +455,7 @@ function normaliseSummaryCards(input = {}, existing = DEFAULT_SUMMARY_CARDS) {
     .filter(Boolean);
 
   return {
+    fullSummary: clipRichText(input.fullSummary ?? existing.fullSummary, 12000),
     keyPoints,
     limit: clipText(input.limit ?? existing.limit, 420),
     method: clipText(input.method ?? existing.method, 420),
@@ -556,6 +571,8 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
       input.matchedKeywords !== undefined ? input.matchedKeywords : previous.matchedKeywords,
       { limit: 8 },
     ),
+    metadataSource: ensureTrimmedString(input.metadataSource, previous.metadataSource || ''),
+    metadataStatus: ensureTrimmedString(input.metadataStatus, previous.metadataStatus || ''),
     notes,
     ocrProvenance: normaliseOcrProvenance(
       input.ocrProvenance !== undefined ? input.ocrProvenance : null,

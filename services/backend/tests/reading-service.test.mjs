@@ -21,6 +21,43 @@ function createStubRuntime() {
   };
 }
 
+function createPdfParserStub({ text, pages = null, total = 1 } = {}) {
+  const parsedPages = pages || [{ num: 1, text }];
+  const parsedText = text || parsedPages.map((page) => page.text).join('\n\n');
+  return {
+    async destroy() {},
+    async getImage() {
+      return { pages: [], total };
+    },
+    async getInfo() {
+      return { info: {}, pages: [], total };
+    },
+    async getTable() {
+      return { pages: [], total };
+    },
+    async getText() {
+      return {
+        pages: parsedPages,
+        text: parsedText,
+        total,
+      };
+    },
+  };
+}
+
+async function waitFor(assertion, { attempts = 50, delayMs = 20 } = {}) {
+  let lastError = null;
+  for (let index = 0; index < attempts; index += 1) {
+    try {
+      return await assertion();
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 function buildDemoPaper({ pdfUrl = 'https://example.org/papers/demo.pdf' } = {}) {
   return {
     abstract:
@@ -51,6 +88,7 @@ function buildDemoPaper({ pdfUrl = 'https://example.org/papers/demo.pdf' } = {})
 async function createHarness({
   agentRuntime = createStubRuntime(),
   enableDemoPdf = true,
+  fetchImpl = globalThis.fetch,
   ocrEngine = null,
   pdfParseFactory = null,
   readingSessions = [],
@@ -98,6 +136,7 @@ async function createHarness({
   const service = createReadingService({
     agentRuntime,
     enableDemoPdf,
+    fetchImpl,
     ocrEngine,
     ...(pdfParseFactory ? { pdfParseFactory } : {}),
     requireAgentRuntime,
@@ -169,6 +208,7 @@ test('reading service creates uploaded PDF sessions with cached source files', a
   });
 
   const payload = await service.createUploadedSession({
+    autoAnalyze: false,
     contentBase64: Buffer.from('%PDF-1.4\n%%EOF').toString('base64'),
     fileName: 'local-paper.pdf',
     projectId: 'demo',
@@ -184,6 +224,89 @@ test('reading service creates uploaded PDF sessions with cached source files', a
   assert.equal(pdf.buffer.subarray(0, 5).toString('utf8'), '%PDF-');
   await fs.access(path.join(rootDir, payload.session.pdfCachePath));
   assert.ok(store.getLibrary('demo').some((paper) => paper.paperId === payload.paper.paperId));
+});
+
+test('reading service returns provisional PDF metadata, then replaces it with AI summary metadata', async (t) => {
+  let summaryPrompt = '';
+  const pdfText = [
+    'Draft Header From PDF Text',
+    'Temporary Author, Second Temporary',
+    'Some Institute',
+    '',
+    'Abstract',
+    'Self-refine RAG improves evidence selection for AI paper reading by checking whether retrieved passages support the generated answer.',
+    '',
+    '1 Introduction',
+    'AI research assistants often preserve a weak answer when retrieval evidence is noisy.',
+    '',
+    '2 Method',
+    'The method asks a verifier to compare answer claims against paper passages before finalizing the summary.',
+    '',
+    '3 Results',
+    'The verifier improves answer faithfulness on scientific question answering benchmarks.',
+    '',
+    '4 Conclusion',
+    'Self-refine RAG reduces unsupported claims, but it still depends on the quality of extracted PDF text.',
+  ].join('\n');
+  const { service, store } = await createHarness({
+    agentRuntime: {
+      async checkAvailability() {
+        return true;
+      },
+      parseJsonFromMessages() {
+        return {
+          authors: ['Jiwon Kim', 'Alice Chen'],
+          fullSummary:
+            '📄 **Self-Refine RAG for Reliable Scientific Reading**\n\n1. 논문 내용 요약 및 핵심 정리\n- 이 논문은 검색 증거와 생성 답변을 다시 대조해 과학 논문 읽기의 신뢰도를 높이는 방법을 설명한다.',
+          keyPoints: ['증거 검증 단계가 답변 충실도를 높인다.', 'PDF 텍스트 품질이 전체 요약 품질을 좌우한다.'],
+          limit: 'PDF 텍스트 추출 품질이 낮으면 검증 단계도 흔들릴 수 있다.',
+          method: '검색된 passage와 생성 답변의 claim을 verifier가 비교한다.',
+          paperTitleEnglish: 'Self-Refine RAG for Reliable Scientific Reading',
+          result: '과학 QA 벤치마크에서 unsupported claim을 줄인다.',
+          sectionSummaries: [],
+          tldr: '검색 증거를 다시 검증해 AI 논문 리딩의 답변 충실도를 높이는 방법이다.',
+        };
+      },
+      async runJsonTask({ prompt }) {
+        summaryPrompt = prompt;
+        return { messages: [{ role: 'assistant', content: '{}' }] };
+      },
+    },
+    ocrEngine: null,
+    pdfParseFactory: () => createPdfParserStub({ text: pdfText }),
+  });
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const payload = await service.createUploadedSession({
+    contentBase64: Buffer.from('%PDF-1.4\n%%EOF').toString('base64'),
+    fileName: 'local-upload.pdf',
+    projectId: 'demo',
+  });
+
+  assert.equal(payload.session.title, 'Draft Header From PDF Text');
+  assert.deepEqual(payload.session.authors, ['Temporary Author', 'Second Temporary']);
+  assert.equal(payload.session.metadataStatus, 'provisional');
+  assert.equal(payload.session.parseStatus, 'running');
+  assert.equal(payload.session.summaryStatus, 'idle');
+
+  await waitFor(() => {
+    const session = store.getReadingSession(payload.session.id);
+    assert.equal(session.title, 'Self-Refine RAG for Reliable Scientific Reading');
+    assert.deepEqual(session.authors, ['Jiwon Kim', 'Alice Chen']);
+    assert.equal(session.metadataStatus, 'ai');
+    assert.equal(session.parseStatus, 'done');
+    assert.equal(session.summaryStatus, 'done');
+    assert.match(session.summaryCards.fullSummary, /논문 내용 요약 및 핵심 정리/);
+
+    const savedPaper = store.getLibrary('demo').find((paper) => paper.paperId === payload.paper.paperId);
+    assert.equal(savedPaper.title, 'Self-Refine RAG for Reliable Scientific Reading');
+    assert.deepEqual(savedPaper.authors, ['Jiwon Kim', 'Alice Chen']);
+  });
+  assert.match(summaryPrompt, /당신은 AI 분야 연구논문 요약 정리기입니다/);
+  assert.match(summaryPrompt, /paperTitleEnglish/);
+  assert.match(summaryPrompt, /authors/);
 });
 
 test('reading service mirrors sessions into reading packets for the asset graph', async (t) => {

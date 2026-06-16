@@ -336,6 +336,7 @@ export function createReadingFeature({
       sections.find((entry) => /limit|discussion|conclusion/i.test(entry.label || "")) || sections.at(-1) || methodSection;
 
     return {
+      fullSummary: readingText(cards.fullSummary || ""),
       keyPoints,
       limit: readingExcerpt(cards.limit || limitSection?.summary || session?.warning, "한계점과 주의사항은 추가 요약 후 표시됩니다.", 220),
       method: readingExcerpt(cards.method || methodSection?.summary || session?.abstract, "No method summary.", 220),
@@ -343,6 +344,39 @@ export function createReadingFeature({
       sectionSummaries: Array.isArray(cards.sectionSummaries) ? cards.sectionSummaries : [],
       tldr: readingExcerpt(cards.tldr || session?.summary || session?.abstract, "No summary.", 260),
     };
+  }
+
+  function renderReadingInlineMarkdown(value) {
+    return escapeHtml(value).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  }
+
+  function renderReadingFullSummary(value) {
+    const text = readingText(value);
+    if (!text) {
+      return "";
+    }
+
+    const blocks = text.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+    return `
+      <section class="reading-summary-block reading-full-summary">
+        <div class="reading-summary-label" style="color:${TOKENS.read}">${icon("sparkles", { size: 11, color: TOKENS.read })}<span>Paper summary</span></div>
+        <div class="reading-full-summary-body">
+          ${blocks
+            .map((block) => {
+              const lines = block.split(/\n/).map((line) => line.trim()).filter(Boolean);
+              if (lines.every((line) => /^[-*]\s+/.test(line))) {
+                return `<ul>${lines.map((line) => `<li>${renderReadingInlineMarkdown(line.replace(/^[-*]\s+/, ""))}</li>`).join("")}</ul>`;
+              }
+              const heading = block.match(/^#{1,3}\s+(.+)$/);
+              if (heading) {
+                return `<h3>${renderReadingInlineMarkdown(heading[1])}</h3>`;
+              }
+              return `<p>${lines.map((line) => renderReadingInlineMarkdown(line)).join("<br>")}</p>`;
+            })
+            .join("")}
+        </div>
+      </section>
+    `;
   }
   
   function deriveReadingNotes(session) {
@@ -777,7 +811,7 @@ export function createReadingFeature({
               <button type="button" class="btn-s" data-action="close-reading-upload-modal" ${busy ? "disabled" : ""}>Cancel</button>
               <button type="button" class="btn-p" data-action="submit-reading-upload-modal" ${!fileName || busy ? "disabled" : ""}>
                 ${icon("pdf", { size: 13, color: "#ffffff" })}
-                <span>${busy ? "Uploading" : "Upload PDF"}</span>
+                <span>${busy ? "Analyzing" : "Upload PDF"}</span>
               </button>
             </div>
           </section>
@@ -842,7 +876,7 @@ export function createReadingFeature({
                     ${state.readingUploading ? "disabled" : ""}
                   >
                     ${icon("pdf", { size: 13, color: "#ffffff" })}
-                    <span>${state.readingUploading ? "Uploading" : "Upload PDF"}</span>
+                    <span>${state.readingUploading ? "Analyzing" : "Upload PDF"}</span>
                   </button>
                   <button type="button" class="btn-s" data-action="select-stage" data-stage-id="search">
                     ${icon("search", { size: 13, color: "currentColor" })}
@@ -930,7 +964,7 @@ export function createReadingFeature({
                       ${state.readingUploading ? "disabled" : ""}
                     >
                       ${icon("pdf", { size: 12, color: "currentColor" })}
-                      <span>${state.readingUploading ? "Uploading" : "Upload PDF"}</span>
+                      <span>${state.readingUploading ? "Analyzing" : "Upload PDF"}</span>
                     </button>
                     <button type="button" class="reading-home-tool-btn">
                       ${icon("filter", { size: 12, color: "currentColor" })}
@@ -1356,6 +1390,8 @@ export function createReadingFeature({
               <div class="reading-summary-body">${escapeHtml(summary.tldr)}</div>
               ${renderReadingProvenancePill(session, "summary")}
             </section>
+
+            ${renderReadingFullSummary(summary.fullSummary)}
 
             ${renderReadingEvidenceCoverage(session)}
 

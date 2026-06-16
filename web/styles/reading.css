@@ -2566,6 +2566,46 @@ body.reading-home-resize-active {
   line-height: 1.72;
 }
 
+.reading-full-summary {
+  border-top: 1px solid var(--b1);
+  padding-top: 22px;
+}
+
+.reading-full-summary-body {
+  color: var(--tx);
+  display: grid;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.78;
+}
+
+.reading-full-summary-body h3 {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.reading-full-summary-body p {
+  margin: 0;
+}
+
+.reading-full-summary-body ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.reading-full-summary-body li {
+  padding-left: 2px;
+}
+
+.reading-full-summary-body strong {
+  font-weight: 650;
+}
+
 .reading-provenance-pill {
   align-items: center;
   background: var(--s2);

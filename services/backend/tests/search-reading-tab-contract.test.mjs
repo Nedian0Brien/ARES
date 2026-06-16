@@ -385,6 +385,18 @@ test('Reader summary exposes evidence coverage report', async () => {
   assert.match(styles, /\.reading-evidence-coverage/);
 });
 
+test('Reader summary renders the generated long-form paper summary', async () => {
+  const [readingJs, styles] = await Promise.all([
+    readProjectFile('web/app/features/reading.js'),
+    readProjectStyles(),
+  ]);
+
+  assert.match(readingJs, /fullSummary/);
+  assert.match(readingJs, /renderReadingFullSummary/);
+  assert.match(readingJs, /reading-full-summary/);
+  assert.match(styles, /\.reading-full-summary/);
+});
+
 test('Reader summary and note export preserve generation provenance', async () => {
   const [appJs, readingJs] = await Promise.all([
     readProjectFile('web/app.js'),

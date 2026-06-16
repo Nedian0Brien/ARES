@@ -306,6 +306,135 @@ function titleFromFileName(value) {
   return slugFileName(value).replace(/\.pdf$/i, '').trim() || 'Uploaded PDF';
 }
 
+function cleanMetadataText(value = '') {
+  return ensureTrimmedString(value, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseMetadataAuthorList(value = '') {
+  const line = ensureTrimmedString(value, '')
+    .replace(/\s+(?:and|&)\s+/gi, ', ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!line) {
+    return [];
+  }
+
+  return line
+    .split(/\s*,\s*|\s*;\s*/)
+    .map(cleanMetadataText)
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function cleanProvisionalPdfLine(value = '') {
+  return ensureTrimmedString(value, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[*\d\s,.;:†‡§|_-]+/, '')
+    .replace(/[\d\s,.;:†‡§|_-]+$/, '')
+    .trim();
+}
+
+function parseProvisionalAuthorLine(value = '') {
+  const line = ensureTrimmedString(value, '')
+    .replace(/\s+(?:and|&)\s+/gi, ', ')
+    .replace(/[†‡§*]/g, '')
+    .replace(/\b\d+\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!line || /abstract|keywords?|introduction/i.test(line)) {
+    return [];
+  }
+
+  return line
+    .split(/\s*,\s*|\s*;\s*/)
+    .map(cleanProvisionalPdfLine)
+    .filter((entry) => /^[\p{L}.'-]+(?:\s+[\p{L}.'-]+){1,4}$/u.test(entry))
+    .slice(0, 8);
+}
+
+function extractProvisionalPdfTextMetadata({ fallbackTitle = '', pages = [] } = {}) {
+  const lines = ensureTrimmedString(pages[0]?.text, '')
+    .split(/\r?\n/)
+    .map(cleanProvisionalPdfLine)
+    .filter(Boolean)
+    .filter((line) => !/^arxiv:|^doi:|^preprint|^submitted|^published/i.test(line));
+  const abstractIndex = lines.findIndex((line) => /^abstract$/i.test(line));
+  const leadingLines = lines.slice(0, abstractIndex >= 0 ? abstractIndex : Math.min(lines.length, 8));
+  const authorIndex = leadingLines.findIndex((line, index) => index > 0 && parseProvisionalAuthorLine(line).length > 0);
+  const title = cleanProvisionalPdfLine(
+    leadingLines.slice(0, authorIndex >= 0 ? authorIndex : Math.min(leadingLines.length, 1)).join(' '),
+  );
+  const authors = authorIndex >= 0 ? parseProvisionalAuthorLine(leadingLines[authorIndex]) : [];
+
+  return {
+    authors,
+    metadataSource: title || authors.length ? 'pdf-text-provisional' : '',
+    metadataStatus: title || authors.length ? 'provisional' : '',
+    title: title || titleFromFileName(fallbackTitle),
+  };
+}
+
+function extractEmbeddedPdfMetadata(infoResult = {}) {
+  const info = infoResult?.info || infoResult?.metadata || {};
+  return {
+    abstract: cleanMetadataText(info.Subject || info.subject || ''),
+    authors: parseMetadataAuthorList(info.Author || info.author || ''),
+    metadataSource: info.Title || info.Author || info.Subject ? 'pdf-metadata' : '',
+    metadataStatus: info.Title || info.Author || info.Subject ? 'source' : '',
+    title: cleanMetadataText(info.Title || info.title || ''),
+  };
+}
+
+function extractArxivId(value = '') {
+  const text = ensureTrimmedString(value, '');
+  const match = text.match(/(?:arxiv[:/_-]?)?(\d{4}\.\d{4,5})(?:v\d+)?/i);
+  return match?.[1] || '';
+}
+
+function decodeXmlEntities(value = '') {
+  return ensureString(value)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)));
+}
+
+function readXmlTag(xml, tagName) {
+  const match = ensureString(xml).match(new RegExp(`<${tagName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tagName}>`, 'i'));
+  return cleanMetadataText(decodeXmlEntities(match?.[1] || ''));
+}
+
+function readArxivAuthors(xml) {
+  return Array.from(ensureString(xml).matchAll(/<author(?:\s[^>]*)?>[\s\S]*?<name(?:\s[^>]*)?>([\s\S]*?)<\/name>[\s\S]*?<\/author>/gi))
+    .map((match) => cleanMetadataText(decodeXmlEntities(match[1] || '')))
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function parseArxivAtomMetadata(xml) {
+  const entry = ensureString(xml).match(/<entry(?:\s[^>]*)?>([\s\S]*?)<\/entry>/i)?.[1] || '';
+  if (!entry) {
+    return {};
+  }
+  const published = readXmlTag(entry, 'published');
+  const year = Number(published.slice(0, 4)) || null;
+  return {
+    abstract: readXmlTag(entry, 'summary'),
+    authors: readArxivAuthors(entry),
+    metadataSource: 'arxiv',
+    metadataStatus: 'source',
+    title: readXmlTag(entry, 'title'),
+    venue: readXmlTag(entry, 'journal_ref') || 'arXiv',
+    year,
+  };
+}
+
 function decodeUploadedPdf({ contentBase64 = '', contentBuffer = null } = {}) {
   const compact = ensureTrimmedString(contentBase64, '').replace(/^data:application\/pdf;base64,/i, '');
   if (!compact && !contentBuffer) {
@@ -1054,6 +1183,7 @@ function summariseFromSections(sections, session) {
     .slice(0, 4);
 
   return {
+    fullSummary: '',
     keyPoints,
     limit: clipText(limitSection?.summary || session.warning || session.summary, 320),
     method: clipText(methodSection?.summary || session.summary, 320),
@@ -1402,6 +1532,146 @@ export function createReadingService({
     return syncReadingPacket(await store.upsertReadingSession(next));
   }
 
+  async function fetchArxivMetadata(arxivId) {
+    const id = extractArxivId(arxivId);
+    if (!id || typeof fetchImpl !== 'function') {
+      return {};
+    }
+
+    try {
+      const response = await fetchImpl(`https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}`);
+      if (!response?.ok || typeof response.text !== 'function') {
+        return {};
+      }
+      return parseArxivAtomMetadata(await response.text());
+    } catch {
+      return {};
+    }
+  }
+
+  async function resolveUploadMetadata({ fileName = '', pdfUrl = '' } = {}) {
+    const arxivId = extractArxivId(`${fileName} ${pdfUrl}`);
+    return arxivId ? fetchArxivMetadata(arxivId) : {};
+  }
+
+  async function readInitialUploadedMetadata({ buffer, fileName = '', pdfUrl = '' } = {}) {
+    const sourceMetadata = await resolveUploadMetadata({ fileName, pdfUrl });
+    if (sourceMetadata.title || sourceMetadata.authors?.length) {
+      return sourceMetadata;
+    }
+
+    const parser = pdfParseFactory({ data: buffer });
+    try {
+      const [textResult, infoResult] = await Promise.all([
+        parser.getText({ parsePageInfo: true }).catch(() => ({ pages: [], text: '', total: 0 })),
+        parser.getInfo({ parsePageInfo: true }).catch(() => ({ info: {}, pages: [], total: 0 })),
+      ]);
+      const embedded = extractEmbeddedPdfMetadata(infoResult);
+      if (embedded.title || embedded.authors.length || embedded.abstract) {
+        return embedded;
+      }
+      const pages = (textResult.pages || [])
+        .map((page) => ({
+          num: Number(page.num) || 1,
+          text: ensureTrimmedString(page.text, ''),
+        }))
+        .filter((page) => page.text);
+      return extractProvisionalPdfTextMetadata({ fallbackTitle: fileName, pages });
+    } finally {
+      await parser.destroy?.();
+    }
+  }
+
+  async function applyExtractedPdfMetadata(session, { infoResult = {} } = {}) {
+    const extracted = extractEmbeddedPdfMetadata(infoResult);
+    const patch = {};
+    if (extracted.title && extracted.title !== session.title) {
+      patch.title = extracted.title;
+    }
+    if (extracted.authors.length) {
+      patch.authors = extracted.authors;
+    }
+    if (extracted.abstract && !ensureTrimmedString(session.abstract, '')) {
+      patch.abstract = extracted.abstract;
+    }
+
+    if (!Object.keys(patch).length) {
+      return session;
+    }
+
+    const nextSession = await updateSession(session.id, patch);
+    const currentPaper = store.getPaper(session.projectId, session.paperId) || {};
+    const savedPaper = await store.savePaper(session.projectId, {
+      ...currentPaper,
+      ...patch,
+      paperId: session.paperId,
+      pdfUrl: session.pdfUrl,
+      sourceName: session.sourceName,
+      sourceProvider: session.sourceProvider,
+    });
+    await store.queuePaper(session.projectId, savedPaper, {
+      sessionId: session.id,
+      status: nextSession.status,
+    });
+    return nextSession;
+  }
+
+  async function applyAiPaperMetadata(session, raw = {}) {
+    const patch = {
+      metadataSource: '',
+      metadataStatus: '',
+    };
+    const title = cleanMetadataText(raw.paperTitleEnglish || raw.title || raw.paperTitle || '');
+    const authors = Array.isArray(raw.authors)
+      ? raw.authors.map(cleanMetadataText).filter(Boolean).slice(0, 8)
+      : parseMetadataAuthorList(raw.authors || '');
+
+    if (title) {
+      patch.title = title;
+    }
+    if (authors.length) {
+      patch.authors = authors;
+    }
+
+    if (!patch.title && !patch.authors) {
+      return session;
+    }
+
+    patch.metadataSource = 'ai-summary';
+    patch.metadataStatus = 'ai';
+    const nextSession = await updateSession(session.id, patch);
+    const currentPaper = store.getPaper(session.projectId, session.paperId) || {};
+    const savedPaper = await store.savePaper(session.projectId, {
+      ...currentPaper,
+      ...patch,
+      paperId: session.paperId,
+      pdfUrl: session.pdfUrl,
+      sourceName: session.sourceName,
+      sourceProvider: session.sourceProvider,
+    });
+    await store.queuePaper(session.projectId, savedPaper, {
+      sessionId: session.id,
+      status: nextSession.status,
+    });
+    return nextSession;
+  }
+
+  function scheduleUploadedSessionAnalysis(sessionId) {
+    void (async () => {
+      const parsed = await serviceApi.parseSession(sessionId);
+      if (parsed.session?.parseStatus === 'done') {
+        await serviceApi.summarizeSession(sessionId);
+      }
+    })().catch(async (error) => {
+      await updateSession(sessionId, {
+        parseError: error instanceof Error ? error.message : String(error),
+        parseFinishedAt: nowIso(),
+        parseStatus: 'error',
+        status: 'todo',
+      }).catch(() => {});
+    });
+  }
+
   async function buildAssetsFromArtifact(sessionId, artifact, { pdfBuffer = null } = {}) {
     const assets = [];
     const figureCandidates = [];
@@ -1729,9 +1999,11 @@ export function createReadingService({
       .join('\n');
 
     return `
-Return JSON only with keys: tldr, keyPoints, method, result, limit, sectionSummaries.
+Return JSON only with keys: paperTitleEnglish, authors, fullSummary, tldr, keyPoints, method, result, limit, sectionSummaries.
 
 Paper title: ${session.title}
+Authors: ${(session.authors || []).join(', ') || 'Unknown authors'}
+Venue/year: ${[session.venue, session.year].filter(Boolean).join(', ') || 'Unknown'}
 Abstract: ${session.abstract}
 Existing summary: ${session.summary}
 
@@ -1741,10 +2013,68 @@ ${sectionContext}
 Evidence:
 ${chunkContext}
 
-Rules:
-- Keep tldr, method, result, limit under 240 characters each.
-- keyPoints must be an array of 3 or 4 concise strings.
-- sectionSummaries must be an array of objects with sectionId, label, page, summary.
+Prompt:
+당신은 AI 분야 연구논문 요약 정리기입니다. 아래 지시에 맞게 논문 내용을 요약 정리한 자료를 만드세요.
+
+가장 먼저 논문 제목을 영어 원문 및 번역문으로 작성하세요.
+
+[내용 구성]
+1. 논문 내용 요약 및 핵심 정리
+- 논문이 작성되거나 출판된 연도 및 저널을 작성하세요.
+- 논문 저자가 소속된 대학이나 기업을 작성하세요.
+- 논문 내용의 5개의 주요 키워드를 영어로 도출하세요.
+- 논문의 Abstract를 원문 그대로 인용하고 바로 아래에 한국어 번역을 제공하세요.
+- 연구의 주요 목적, 방법론, 핵심 발견점을 200-250단어로 간결하게 요약하세요.
+- 논문이 해결하고자 하는 문제와 기존 접근법의 한계점을 명확히 설명하세요.
+- 저자들이 제안한 새로운 방법, 모델, 기술의 핵심 차별점을 강조하세요.
+
+2. 목차 및 내용 정리
+- 1~5까지의 목차를 작성하세요. 각 목차 앞에는 어울리는 이모지를 포함하세요.
+- 각 목차별로 논문의 내용을 글머리 기호로 상세하게 정리하세요.
+- 각 목차별 하위 단락도 글머리 기호로 작성하세요. 예: 1.6. LLM 에이전트의 구성과 프로필 정의
+- 논문의 흐름을 이해하기 쉽도록 각 문장을 충분한 길이로 작성하세요.
+- 필요하다면 적절한 도표나 수식 등을 제시하세요.
+
+3. 논문에서 반드시 알아야 하는 내용
+- 제안된 방법론의 핵심을 이해하기 쉽게 설명하세요.
+- 도표를 사용해서 논문에 언급된 주요 수치를 제시하세요.
+- 논문에 나타난 그림이나 도표를 언급하고 의미를 해석하세요.
+- 실험 설계 및 평가 방법을 설명하세요.
+- 주요 성능 지표와 비교 대상 모델들과의 차이점을 강조하세요.
+
+4. 결론
+- 논문의 Conclusion 섹션을 원문 그대로 인용하고 한국어로 번역하세요.
+- 이 연구가 AI 분야에 미치는 영향과 의의를 분석하세요.
+- 연구의 한계점과 저자들이 제시한 향후 연구 방향을 정리하세요.
+- 이 연구와 관련한 향후 연구 방향에 대한 전문가로서의 고찰을 300단어 내외로 제시하세요.
+- 연구적 관점에서 이 논문이 갖는 의의와 기여를 설명하세요.
+- 이 기술이 앞으로 어떻게 발전할 수 있고 어떤 산업이나 분야에 응용될 수 있는지 설명하세요.
+- 현재 한계점을 극복하기 위한 가능한 접근법을 제시하세요.
+- 이 논문에서 도출할 수 있는 향후 연구과제를 정리하세요.
+
+5. 최종 요약
+- Background
+- Method
+- Result
+- Limitation & Discussion
+- Conclusion
+
+[형식 지침]
+- fullSummary는 총 1,000-1,500단어 정도의 자연스러운 한국어 Markdown으로 작성하세요.
+- 중요한 핵심 개념이나 발견점은 굵은 글씨로 강조하세요.
+- 전문 용어는 필요한 경우 간략한 설명을 함께 제공하세요.
+- 제목이나 단락 등에 이모지를 충분히 사용하세요.
+- 독자는 AI 분야의 학생입니다. 이해하기 쉽게 작성하세요.
+- 번역 시 원문의 의미를 정확히 전달하되, 자연스러운 한국어로 번역하세요.
+- 결과물은 자연스러운 한국어로 작성하세요.
+
+JSON field rules:
+- paperTitleEnglish is the paper title in its original English form when the evidence supports it.
+- authors is an array of author names when the evidence supports them.
+- fullSummary contains the complete Korean Markdown answer above.
+- tldr, method, result, limit are Korean strings under 360 characters each for compact cards.
+- keyPoints is an array of 3-5 Korean strings.
+- sectionSummaries is an array of objects with sectionId, label, page, summary.
 `.trim();
   }
 
@@ -1798,7 +2128,7 @@ Rules:
 `.trim();
   }
 
-  return {
+  const serviceApi = {
     async listProjectSessions(projectId) {
       return store.getReadingSessions(projectId).map((session) => normaliseReadingSession(session));
     },
@@ -1824,7 +2154,7 @@ Rules:
       return normaliseReadingSession(session);
     },
 
-    async createUploadedSession({ contentBase64, contentBuffer, fileName = 'upload.pdf', projectId, title = '' } = {}) {
+    async createUploadedSession({ autoAnalyze = true, contentBase64, contentBuffer, fileName = 'upload.pdf', projectId, title = '' } = {}) {
       if (!projectId) {
         throw new Error('projectId is required.');
       }
@@ -1832,11 +2162,13 @@ Rules:
       const buffer = decodeUploadedPdf({ contentBase64, contentBuffer });
       const safeFileName = slugFileName(fileName);
       const paperId = `upload-${Date.now()}-${randomUUID().slice(0, 8)}`;
-      const paperTitle = ensureTrimmedString(title, titleFromFileName(safeFileName));
+      const pdfUrl = `uploaded://${paperId}/${encodeURIComponent(safeFileName)}`;
+      const sourceMetadata = await readInitialUploadedMetadata({ buffer, fileName: safeFileName, pdfUrl });
+      const paperTitle = ensureTrimmedString(title || sourceMetadata.title, titleFromFileName(safeFileName));
       const timestamp = nowIso();
       const paper = {
-        abstract: '',
-        authors: [],
+        abstract: sourceMetadata.abstract || '',
+        authors: sourceMetadata.authors || [],
         citedByCount: 0,
         keyPoints: [],
         keywords: [],
@@ -1844,21 +2176,21 @@ Rules:
         openAccess: true,
         paperId,
         paperUrl: null,
-        pdfUrl: `uploaded://${paperId}/${encodeURIComponent(safeFileName)}`,
+        pdfUrl,
         relevance: 0,
         sourceName: safeFileName,
         sourceProvider: 'upload',
         summary: '',
         title: paperTitle,
-        venue: 'Uploaded PDF',
-        year: null,
+        venue: sourceMetadata.venue || 'Uploaded PDF',
+        year: sourceMetadata.year || null,
       };
 
       const savedPaper = await store.savePaper(projectId, paper);
       const seed = buildReadingSessionSeed(projectId, savedPaper, {
         createdAt: timestamp,
         sourceRefs: [{ id: paperId, type: 'upload', label: safeFileName }],
-        status: 'todo',
+        status: autoAnalyze ? 'running' : 'todo',
       });
       const session = normaliseReadingSession(seed);
       const pdfCachePath = await writeBinaryAsset(session.id, 'source.pdf', buffer);
@@ -1866,7 +2198,11 @@ Rules:
         normaliseReadingSession(
           {
             ...session,
+            metadataSource: sourceMetadata.metadataSource || '',
+            metadataStatus: sourceMetadata.metadataStatus || '',
             pdfCachePath,
+            parseStartedAt: autoAnalyze ? timestamp : null,
+            parseStatus: autoAnalyze ? 'running' : 'idle',
           },
           { existing: session },
         ),
@@ -1877,6 +2213,10 @@ Rules:
         sessionId: nextSession.id,
         status: nextSession.status,
       });
+
+      if (autoAnalyze) {
+        scheduleUploadedSessionAnalysis(nextSession.id);
+      }
 
       return {
         paper: savedPaper,
@@ -2014,7 +2354,9 @@ Rules:
           return { session: failed };
         }
 
-        return materializeParsedSession(initial, {
+        const metadataSession = await applyExtractedPdfMetadata(initial, { infoResult });
+
+        return materializeParsedSession(metadataSession, {
           imagePages: imageResult.pages || [],
           pageCount: Number(infoResult.total || textResult.total) || pages.length,
           pages,
@@ -2134,6 +2476,7 @@ Rules:
             }))
           : fallback().sectionSummaries,
       };
+      const metadataSession = await applyAiPaperMetadata(running, raw);
       const next = await updateSession(sessionId, {
         keyPoints: summaryCards.keyPoints,
         summary: clipText(summaryCards.tldr, 320),
@@ -2144,6 +2487,10 @@ Rules:
         summaryGeneratedBy: generated.provenance.generatedBy,
         summaryRuntimeUsed: generated.provenance.runtimeUsed,
         summaryStatus: 'done',
+        title: metadataSession.title,
+        authors: metadataSession.authors,
+        metadataSource: metadataSession.metadataSource,
+        metadataStatus: metadataSession.metadataStatus,
       });
 
       return { session: next };
@@ -2474,4 +2821,6 @@ Rules:
       return artifacts.readFile(relativePath);
     },
   };
+
+  return serviceApi;
 }
