@@ -325,7 +325,7 @@ const MAX_READING_PDF_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MAX_READING_PDF_UPLOAD_LABEL = "100MB";
 
 function defaultReadingRailOpen(layout = detectSearchLayout()) {
-  return layout === "desktop" ? "overview" : "";
+  return "";
 }
 
 const state = {

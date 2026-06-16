@@ -260,6 +260,13 @@ test('Reader PDF view renders page-level annotation markers from notes and highl
   assert.match(stylesCss, /\.reading-pdf-annotation-marker/);
 });
 
+test('Reader overview rail starts collapsed by default', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /function defaultReadingRailOpen\(layout = detectSearchLayout\(\)\) \{\s+return "";\s+\}/);
+  assert.match(appJs, /readingRailOpen: defaultReadingRailOpen\(INITIAL_SEARCH_LAYOUT\)/);
+});
+
 test('Reader Notes panel keeps generated highlight seeds out of editable notes', async () => {
   const [readingJs, controllerJs] = await Promise.all([
     readProjectFile('web/app/features/reading.js'),
