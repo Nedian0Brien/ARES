@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 
 import { Pool } from 'pg';
@@ -15,13 +14,25 @@ import {
 import { assertPostgresMigrationsApplied, runPostgresMigrations } from './postgres-migrations.mjs';
 import { normalizeNewProject } from './project-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
-
-const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
-const IDENTITY_COLLECTIONS = ['users', 'organizations', 'memberships', 'projectAccess', 'authSessions'];
-const AUDIT_COLLECTIONS = ['auditEvents'];
-const RUNNING_STATUSES = new Set(['queue', 'running']);
-const VALID_STATUSES = new Set(['todo', 'queue', 'running', 'done', 'error', 'canceled']);
-const MAX_AGENT_PROGRESS_EVENTS = 80;
+import {
+  IDENTITY_COLLECTIONS,
+  RUNNING_STATUSES,
+  claimExpiresAt,
+  clone,
+  cloneMaybe,
+  createId,
+  ensureObjectArray,
+  ensureProgressEvents,
+  ensureStringArray,
+  ensureText,
+  migrateStoreState,
+  normaliseStatus,
+  normaliseTimestamp,
+  nowIso,
+  removeAssetId,
+  sortByUpdatedDesc,
+  upsertBy,
+} from './store-utils.mjs';
 export const POSTGRES_MIGRATIONS = [
   {
     id: '001_initial_schema',
@@ -58,133 +69,8 @@ const EVIDENCE_LINK_REFERENCE_COLLECTIONS = [
   'draftSections',
 ];
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
 function jsonPayload(value) {
   return JSON.stringify(value ?? {});
-}
-
-function ensureArrayMap(state, key) {
-  if (!state[key] || typeof state[key] !== 'object' || Array.isArray(state[key])) {
-    state[key] = {};
-    return true;
-  }
-
-  return false;
-}
-
-function migrateStoreState(state) {
-  let changed = false;
-
-  if (!state || typeof state !== 'object' || Array.isArray(state)) {
-    state = {};
-    changed = true;
-  }
-
-  if (!Array.isArray(state.projects)) {
-    state.projects = [];
-    changed = true;
-  }
-
-  for (const key of IDENTITY_COLLECTIONS) {
-    if (!Array.isArray(state[key])) {
-      state[key] = [];
-      changed = true;
-    }
-  }
-  for (const key of AUDIT_COLLECTIONS) {
-    if (!Array.isArray(state[key])) {
-      state[key] = [];
-      changed = true;
-    }
-  }
-
-  for (const key of PROJECT_MAP_COLLECTIONS) {
-    changed = ensureArrayMap(state, key) || changed;
-  }
-
-  for (const key of ASSET_COLLECTIONS) {
-    if (!Array.isArray(state[key])) {
-      state[key] = [];
-      changed = true;
-    }
-  }
-
-  for (const project of state.projects) {
-    for (const key of PROJECT_MAP_COLLECTIONS) {
-      if (!Array.isArray(state[key][project.id])) {
-        state[key][project.id] = [];
-        changed = true;
-      }
-    }
-  }
-
-  return { changed, state };
-}
-
-function normaliseStatus(status, fallback = 'todo') {
-  const value = String(status || '').trim().toLowerCase();
-  return VALID_STATUSES.has(value) ? value : fallback;
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function createId(prefix) {
-  return `${prefix}-${randomUUID()}`;
-}
-
-function sortByUpdatedDesc(left, right) {
-  const leftStamp = Date.parse(left.updatedAt || left.createdAt || 0) || 0;
-  const rightStamp = Date.parse(right.updatedAt || right.createdAt || 0) || 0;
-  return rightStamp - leftStamp;
-}
-
-function normaliseTimestamp(value, fallback = nowIso()) {
-  const date = value instanceof Date ? value : new Date(value || fallback);
-  const stamp = date.getTime();
-  return Number.isFinite(stamp) ? date.toISOString() : fallback;
-}
-
-function claimExpiresAt(now, leaseMs) {
-  const duration = Number.isFinite(Number(leaseMs)) && Number(leaseMs) > 0 ? Number(leaseMs) : 60_000;
-  return new Date(Date.parse(now) + duration).toISOString();
-}
-
-function removeAssetId(values, id) {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-
-  return values.filter((value) => value !== id);
-}
-
-function ensureText(value, fallback = '') {
-  return value === null || value === undefined ? fallback : String(value);
-}
-
-function ensureStringArray(values, limit) {
-  const next = Array.isArray(values) ? values.map((value) => String(value)).filter(Boolean) : [];
-  return typeof limit === 'number' ? next.slice(0, limit) : next;
-}
-
-function ensureObjectArray(values) {
-  return Array.isArray(values) ? clone(values) : [];
-}
-
-function ensureProgressEvents(values) {
-  return ensureObjectArray(values).slice(-MAX_AGENT_PROGRESS_EVENTS);
-}
-
-function cloneMaybe(value, fallback) {
-  if (value === undefined) {
-    return fallback;
-  }
-
-  return clone(value);
 }
 
 function toIsoString(value) {
@@ -254,19 +140,6 @@ async function readBootstrapState(seedFile, runtimeFile) {
   }
 
   throw new Error('No bootstrap state file was found for the postgres store.');
-}
-
-function upsertBy(collection, nextValue, matcher) {
-  const index = collection.findIndex((entry) => matcher(entry));
-
-  if (index >= 0) {
-    collection[index] = { ...collection[index], ...clone(nextValue) };
-    return collection[index];
-  }
-
-  const inserted = clone(nextValue);
-  collection.unshift(inserted);
-  return inserted;
 }
 
 async function ensureSchema(pool) {

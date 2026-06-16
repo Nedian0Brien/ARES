@@ -367,14 +367,10 @@ function normaliseEvidenceCoverage(input, previous = null) {
     citedChatCount: ensureNumber(source.citedChatCount, 0),
     figureCount: ensureNumber(source.figureCount, 0),
     generatedAt: ensureIso(source.generatedAt, null),
-    lastRetrievalConfidence: ensureTrimmedString(source.lastRetrievalConfidence, ''),
-    lastRetrievalTopScore: ensureNumber(source.lastRetrievalTopScore, 0),
-    lowConfidenceChatCount: ensureNumber(source.lowConfidenceChatCount, 0),
     ocrDurationMs: source.ocrDurationMs === null ? null : Math.max(0, ensureNumber(source.ocrDurationMs, 0)),
     ocrPageCount: Math.max(0, ensureNumber(source.ocrPageCount, 0)),
     ocrProvenance: normaliseOcrProvenance(source.ocrProvenance, null),
     ocrTool: ensureTrimmedString(source.ocrTool, ''),
-    retrievalReady: ensureBoolean(source.retrievalReady, false),
     sectionCount: ensureNumber(source.sectionCount, 0),
     sourceBoundedAssetCount: ensureNumber(source.sourceBoundedAssetCount, 0),
     tableCount: ensureNumber(source.tableCount, 0),
@@ -394,7 +390,6 @@ function normaliseChatMessage(entry, index = 0) {
   return {
     citations: ensureObjectArray(entry.citations || entry.cites).map(normaliseCitation).filter(Boolean),
     createdAt: ensureIso(entry.createdAt, nowIso()),
-    fallbackReason: ensureTrimmedString(entry.fallbackReason, ''),
     generatedBy: ensureTrimmedString(entry.generatedBy, ''),
     id: ensureTrimmedString(entry.id, `chat-${index + 1}`),
     retrieval: normaliseRetrievalTrace(entry.retrieval),
@@ -537,7 +532,7 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
   const notes = ensureObjectArray(input.notes !== undefined ? input.notes : previous.notes).map(normaliseNote).filter(Boolean);
   const summaryCards =
     input.summaryCards === null
-      ? normaliseSummaryCards({}, DEFAULT_SUMMARY_CARDS)
+      ? null
       : normaliseSummaryCards(
           input.summaryCards || {},
           normaliseSummaryCards(previous.summaryCards || {}, DEFAULT_SUMMARY_CARDS),
@@ -612,16 +607,12 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
     status: normaliseSessionStatus(input.status, normaliseSessionStatus(previous.status, 'todo')),
     summary:
       input.summary === null
-        ? ''
+        ? null
         : ensureTrimmedString(
             input.summary,
-            previous.summary || summaryCards.tldr || firstSentence(input.abstract || previous.abstract || ''),
+            previous.summary || summaryCards?.tldr || firstSentence(input.abstract || previous.abstract || ''),
           ),
     summaryCards,
-    summaryFallbackReason:
-      input.summaryFallbackReason === '' || input.summaryFallbackReason === null
-        ? ''
-        : ensureTrimmedString(input.summaryFallbackReason, previous.summaryFallbackReason || ''),
     summaryError:
       input.summaryError === '' || input.summaryError === null
         ? ''
@@ -655,7 +646,7 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
 
   next.status = deriveReadingSessionStatus(next);
 
-  if (!next.summary && next.summaryCards.tldr) {
+  if (!next.summary && next.summaryCards?.tldr) {
     next.summary = next.summaryCards.tldr;
   }
 

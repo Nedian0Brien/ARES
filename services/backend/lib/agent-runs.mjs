@@ -679,12 +679,15 @@ export function createAgentRunService({
       context = buildRunContext(notifyingStore, run);
     } catch (error) {
       await notifyingStore.updateAgentRun(runId, {
+        createdAssetIds: [],
         error: error.message,
         finishedAt: nowIso(),
         heartbeatAt: null,
         leaseExpiresAt: null,
         leaseOwner: '',
-        status: 'done',
+        outputRef: [],
+        outputSummary: `${definition.agent} did not start. Try again.`,
+        status: 'error',
       });
       return;
     }

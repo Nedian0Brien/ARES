@@ -6,6 +6,7 @@ import { PDFParse } from 'pdf-parse';
 import { createLocalArtifactStore } from './artifact-store.mjs';
 import { normaliseReadingPacket } from './asset-model.mjs';
 import { createAgentRuntime, DEFAULT_AGENT_TIMEOUT_MS } from './agent-runtime.mjs';
+import { createDemoPdfBuffer } from './reading-demo-pdf.mjs';
 import {
   buildReadingSessionSeed,
   normaliseReadingSession,
@@ -15,27 +16,11 @@ import {
 
 const READING_RUNTIME_DIR = path.join('data', 'runtime', 'reading');
 const DEMO_PDF_HOST = 'example.org';
-const MAX_CHAT_CHUNKS = 4;
-export const CHAT_EVIDENCE_POLICY = Object.freeze({
-  minEvidenceScore: 4,
-});
-const MIN_CHAT_EVIDENCE_SCORE = CHAT_EVIDENCE_POLICY.minEvidenceScore;
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MAX_UPLOAD_MB = Math.round(MAX_UPLOAD_BYTES / 1024 / 1024);
 const PDF_CROP_SCALE = 1.35;
 const PDF_OCR_SCALE = 2;
 const DEFAULT_OCR_MAX_PAGES = 12;
-const SEMANTIC_QUERY_ALIASES = new Map([
-  ['accuracy', ['quality', 'performance', 'score', 'scores']],
-  ['cost', ['compute', 'efficient', 'efficiency', 'expensive', 'latency', 'runtime']],
-  ['decrease', ['avoid', 'avoiding', 'lower', 'lowers', 'reduce', 'reduces']],
-  ['expense', ['compute', 'cost', 'expensive', 'latency', 'runtime']],
-  ['improve', ['increase', 'increases', 'quality', 'performance']],
-  ['limit', ['failure', 'limitation', 'limitations', 'risk', 'weakness']],
-  ['quality', ['accuracy', 'performance', 'score', 'scores']],
-  ['reduce', ['avoid', 'avoiding', 'decrease', 'lower', 'lowers', 'efficient', 'efficiency']],
-  ['result', ['benchmark', 'evaluation', 'experiment', 'metric', 'metrics']],
-]);
 
 let pdfCropRuntimePromise = null;
 
@@ -81,211 +66,6 @@ function tokenize(value) {
     .replace(/[^a-z0-9가-힣\s]/g, ' ')
     .split(/\s+/)
     .filter((token) => token.length >= 2);
-}
-
-const CHAT_QUERY_STOPWORDS = new Set([
-  'and',
-  'about',
-  'are',
-  'concludes',
-  'conclude',
-  'does',
-  'for',
-  'from',
-  'how',
-  'is',
-  'main',
-  'of',
-  'that',
-  'the',
-  'this',
-  'with',
-  'paper',
-  'what',
-]);
-
-function chatQueryFocusTerms(message) {
-  return tokenize(message).filter((token) => !CHAT_QUERY_STOPWORDS.has(token));
-}
-
-function expandSemanticTerms(tokens) {
-  const expanded = new Set();
-  for (const token of tokens) {
-    if (CHAT_QUERY_STOPWORDS.has(token)) {
-      continue;
-    }
-
-    expanded.add(token);
-    for (const alias of SEMANTIC_QUERY_ALIASES.get(token) || []) {
-      expanded.add(alias);
-    }
-  }
-
-  return expanded;
-}
-
-function hasReadingEvidenceForPrompt(message, chunks, selection, retrievalTrace = null) {
-  if (selection?.quote) {
-    return true;
-  }
-
-  if (!chunks.length) {
-    return false;
-  }
-
-  if (Number(retrievalTrace?.topScore) >= MIN_CHAT_EVIDENCE_SCORE) {
-    return true;
-  }
-
-  const focusTerms = chatQueryFocusTerms(message);
-  if (!focusTerms.length) {
-    return true;
-  }
-
-  return false;
-}
-
-function wrapText(value, width = 78) {
-  const words = ensureTrimmedString(value, '').split(/\s+/).filter(Boolean);
-  if (!words.length) {
-    return [''];
-  }
-
-  const lines = [];
-  let current = words.shift() || '';
-
-  for (const word of words) {
-    const next = `${current} ${word}`;
-    if (next.length <= width) {
-      current = next;
-      continue;
-    }
-
-    lines.push(current);
-    current = word;
-  }
-
-  lines.push(current);
-  return lines;
-}
-
-function escapePdfText(value) {
-  return ensureString(value).replaceAll('\\', '\\\\').replaceAll('(', '\\(').replaceAll(')', '\\)');
-}
-
-function buildSimplePdfBuffer(pages) {
-  const objects = [null, null, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
-  const pageIds = [];
-
-  for (const pageLines of pages) {
-    const contentLines = [
-      'BT',
-      '/F1 11 Tf',
-      '14 TL',
-      '64 740 Td',
-    ];
-
-    pageLines.forEach((line, index) => {
-      const escaped = escapePdfText(line);
-      contentLines.push(`(${escaped}) Tj`);
-      if (index < pageLines.length - 1) {
-        contentLines.push('T*');
-      }
-    });
-
-    contentLines.push('ET');
-    const stream = contentLines.join('\n');
-    const streamObject = `<< /Length ${Buffer.byteLength(stream, 'utf8')} >>\nstream\n${stream}\nendstream`;
-    objects.push(streamObject);
-    const contentId = objects.length;
-    objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`,
-    );
-    pageIds.push(objects.length);
-  }
-
-  objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
-  objects[0] = '<< /Type /Catalog /Pages 2 0 R >>';
-
-  const chunks = ['%PDF-1.4\n'];
-  const offsets = [0];
-  let cursor = chunks[0].length;
-
-  objects.forEach((object, index) => {
-    offsets.push(cursor);
-    const chunk = `${index + 1} 0 obj\n${object}\nendobj\n`;
-    chunks.push(chunk);
-    cursor += chunk.length;
-  });
-
-  const xrefOffset = cursor;
-  chunks.push(`xref\n0 ${objects.length + 1}\n`);
-  chunks.push('0000000000 65535 f \n');
-  for (let index = 1; index < offsets.length; index += 1) {
-    chunks.push(`${String(offsets[index]).padStart(10, '0')} 00000 n \n`);
-  }
-  chunks.push(`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
-  return Buffer.from(chunks.join(''), 'utf8');
-}
-
-function buildDemoPdfPages(session) {
-  const title = ensureTrimmedString(session.title, 'ARES Reading Session');
-  const authors = Array.isArray(session.authors) && session.authors.length ? session.authors.join(', ') : 'ARES Reader';
-  const venue = [session.venue || 'Unknown venue', session.year || 'n/a'].filter(Boolean).join(' · ');
-  const abstract = ensureTrimmedString(
-    session.abstract || session.summary,
-    `${title} is prepared as a sample reading session for the demo workspace.`,
-  );
-  const keyPoints = Array.isArray(session.keyPoints) && session.keyPoints.length
-    ? session.keyPoints
-    : [
-        'Adaptive skipping reduces reranker cost while preserving answer quality.',
-        'The method uses a confidence gate before invoking an expensive cross-encoder.',
-        'The main trade-off is sensitivity to calibration on hard examples.',
-      ];
-  const keywordLine = `Keywords: ${(session.keywords || session.matchedKeywords || []).slice(0, 6).join(', ') || 'reading, retrieval, demo'}`;
-
-  return [
-    [
-      title,
-      authors,
-      venue || 'ARES Demo PDF',
-      '',
-      'Abstract',
-      ...wrapText(abstract, 76),
-      '',
-      '1 Introduction',
-      ...wrapText(firstSentence(keyPoints[0], abstract), 76),
-      ...wrapText('This demo PDF is generated locally so the Reading pipeline can exercise cache, parse, summary, and viewer flows without depending on external hosts.', 76),
-      keywordLine,
-    ],
-    [
-      '2 Method',
-      ...wrapText(firstSentence(keyPoints[1], abstract), 76),
-      ...wrapText('The workflow caches the PDF, extracts page-level text, detects section boundaries, and stores passages for evidence-based reader chat.', 76),
-      '',
-      '3 Results',
-      ...wrapText(firstSentence(keyPoints[2], abstract), 76),
-      'Figure 1. Adaptive skip policy overview.',
-      ...wrapText('The policy estimates confidence, decides whether to trigger reranking, and records the supporting evidence for later inspection.', 76),
-    ],
-    [
-      '4 Limitations',
-      ...wrapText('Scanned image-only PDFs need extracted text before Reading can analyze them. Import OCR text to continue.', 76),
-      '',
-      '5 Reproducibility',
-      ...wrapText('Key implementation parameters and follow-up highlights are extracted during parse so Research can inherit them without a separate handoff format.', 76),
-      '',
-      'Table 1. Efficiency comparison.',
-      'System      Latency(ms)      Quality',
-      'Baseline    120              84.1',
-      'Adaptive     78              83.8',
-    ],
-  ];
-}
-
-function createDemoPdfBuffer(session) {
-  return buildSimplePdfBuffer(buildDemoPdfPages(session));
 }
 
 function buildSessionRelativePath(sessionId, fileName) {
@@ -1199,136 +979,6 @@ function summariseFromSections(sections, session) {
   };
 }
 
-function scoreChunkFeatures(queryTerms, chunk, { message = '', note = null } = {}) {
-  if (!queryTerms.length) {
-    return {
-      lexicalScore: 0,
-      noteBoost: 0,
-      phraseBoost: 0,
-      score: 0,
-      titleBoost: 0,
-    };
-  }
-
-  const bag = new Map();
-  for (const token of chunk.terms || []) {
-    bag.set(token, (bag.get(token) || 0) + 1);
-  }
-
-  const focusTerms = queryTerms.filter((token) => !CHAT_QUERY_STOPWORDS.has(token));
-  const lexical = focusTerms.reduce((score, token) => score + (bag.get(token) || 0), 0);
-  const text = ensureTrimmedString(chunk.text, '').toLowerCase();
-  const phrase = ensureTrimmedString(message, '').toLowerCase();
-  const phraseBoost = phrase.length >= 12 && text.includes(phrase.slice(0, 80)) ? 8 : 0;
-  const noteSectionBoost = note?.sectionId && note.sectionId === chunk.sectionId ? 6 : 0;
-  const notePageBoost = note?.page && Number(note.page) === Number(chunk.page) ? 4 : 0;
-  const titleBoost =
-    lexical + phraseBoost + noteSectionBoost + notePageBoost > 0 &&
-    /method|result|limit|claim|contribution|experiment|evaluation/i.test(chunk.sectionLabel || '')
-      ? 3
-      : 0;
-  const noteBoost = noteSectionBoost + notePageBoost;
-  return {
-    lexicalScore: lexical,
-    noteBoost,
-    phraseBoost,
-    score: lexical + phraseBoost + noteBoost + titleBoost,
-    titleBoost,
-  };
-}
-
-function scoreChunk(queryTerms, chunk, { message = '', note = null } = {}) {
-  return scoreChunkFeatures(queryTerms, chunk, { message, note }).score;
-}
-
-function normaliseSemanticScores(result) {
-  const scores = new Map();
-  if (!Array.isArray(result)) {
-    return scores;
-  }
-
-  for (const entry of result) {
-    const chunkId = ensureTrimmedString(entry?.chunkId || entry?.id, '');
-    const score = Number(entry?.score) || 0;
-    if (!chunkId || score <= 0) {
-      continue;
-    }
-
-    scores.set(chunkId, score);
-  }
-
-  return scores;
-}
-
-function createHeuristicRetrievalScorer() {
-  return {
-    async scoreChunks({ chunks, queryTerms }) {
-      const expandedTerms = expandSemanticTerms(queryTerms || []);
-      if (!expandedTerms.size) {
-        return [];
-      }
-
-      return chunks
-        .map((chunk) => {
-          const terms = new Set(chunk.terms || tokenize(chunk.text));
-          let score = 0;
-          for (const term of expandedTerms) {
-            if (terms.has(term)) {
-              score += 2;
-            }
-          }
-
-          return {
-            chunkId: chunk.id,
-            score,
-          };
-        })
-        .filter((entry) => entry.score > 0);
-    },
-  };
-}
-
-function retrievalConfidence(topScore) {
-  if (topScore >= 12) {
-    return 'high';
-  }
-
-  if (topScore >= 6) {
-    return 'medium';
-  }
-
-  if (topScore >= MIN_CHAT_EVIDENCE_SCORE) {
-    return 'low';
-  }
-
-  return 'none';
-}
-
-function buildRetrievalTrace({ rankedChunks, queryTerms, scorer }) {
-  const topScore = Number(rankedChunks[0]?.score) || 0;
-  const confidence = retrievalConfidence(topScore);
-  return {
-    chunks: rankedChunks.map((chunk) => ({
-      chunkId: chunk.id,
-      lexicalScore: Number(chunk.lexicalScore) || 0,
-      page: chunk.page || null,
-      phraseBoost: Number(chunk.phraseBoost) || 0,
-      score: Number(chunk.score) || 0,
-      sectionId: chunk.sectionId || '',
-      semanticScore: Number(chunk.semanticScore) || 0,
-      titleBoost: Number(chunk.titleBoost) || 0,
-    })),
-    confidence,
-    lowConfidence: confidence === 'low' || confidence === 'none',
-    minEvidenceScore: MIN_CHAT_EVIDENCE_SCORE,
-    mode: 'hybrid',
-    queryTerms: Array.from(new Set(queryTerms.filter((term) => !CHAT_QUERY_STOPWORDS.has(term)))).slice(0, 10),
-    scorer,
-    topK: rankedChunks.length,
-    topScore,
-  };
-}
-
 export function createReadingService({
   agentTimeoutMs = DEFAULT_AGENT_TIMEOUT_MS,
   agentRuntime = null,
@@ -1338,8 +988,6 @@ export function createReadingService({
   ocrEngine = createTesseractOcrEngine(),
   ocrMaxPages = DEFAULT_OCR_MAX_PAGES,
   pdfParseFactory = (options) => new PDFParse(options),
-  requireAgentRuntime = false,
-  retrievalScorer = null,
   rootDir,
   runtimeName = 'codex',
   store,
@@ -1359,10 +1007,6 @@ export function createReadingService({
       runtimeName,
     });
   const artifacts = artifactStore || createLocalArtifactStore({ rootDir });
-  const activeRetrievalScorer = retrievalScorer || createHeuristicRetrievalScorer();
-  const retrievalScorerLabel = retrievalScorer
-    ? ensureTrimmedString(retrievalScorer.provider || retrievalScorer.name, 'custom')
-    : 'heuristic-semantic-alias';
 
   let runtimeAvailablePromise = null;
 
@@ -1447,10 +1091,6 @@ export function createReadingService({
     return artifacts.writeBinary(relativePath, payload);
   }
 
-  function buildDemoPdfForSession(session) {
-    return createDemoPdfBuffer(session);
-  }
-
   async function fetchPdfBuffer(session) {
     const pdfUrl = ensureTrimmedString(session.pdfUrl, '');
     if (!pdfUrl) {
@@ -1469,7 +1109,7 @@ export function createReadingService({
       if (!enableDemoPdf) {
         throw new Error('Demo PDF generation is disabled. Set ARES_ENABLE_DEMO_PDF=true to use example.org fixtures.');
       }
-      return buildDemoPdfForSession(session);
+      return createDemoPdfBuffer(session);
     }
 
     if (typeof fetchImpl !== 'function') {
@@ -1875,10 +1515,7 @@ export function createReadingService({
     const figures = assets.filter((asset) => asset.kind === 'figure');
     const tables = assets.filter((asset) => asset.kind === 'table');
     const assistantMessages = chatMessages.filter((message) => message.role === 'assistant');
-    const retrievalMessages = assistantMessages.filter((message) => message.retrieval);
-    const lowConfidenceChatCount = retrievalMessages.filter((message) => message.retrieval?.lowConfidence).length;
     const citedChatCount = assistantMessages.filter((message) => Array.isArray(message.citations) && message.citations.length).length;
-    const lastRetrieval = retrievalMessages.at(-1)?.retrieval || previous?.lastRetrieval || null;
     const ocrProvenance = artifact.importProvenance || previous?.ocrProvenance || null;
 
     return {
@@ -1887,61 +1524,23 @@ export function createReadingService({
       citedChatCount,
       figureCount: figures.length,
       generatedAt: nowIso(),
-      lastRetrievalConfidence: lastRetrieval?.confidence || previous?.lastRetrievalConfidence || '',
-      lastRetrievalTopScore: Number(lastRetrieval?.topScore || previous?.lastRetrievalTopScore || 0),
-      lowConfidenceChatCount,
       ocrDurationMs: Number.isFinite(Number(ocrProvenance?.durationMs)) ? Number(ocrProvenance.durationMs) : null,
       ocrPageCount: Number(ocrProvenance?.pageCount) || 0,
       ocrProvenance,
       ocrTool: ocrProvenance?.tool || '',
-      retrievalReady: chunks.length > 0,
       sectionCount: sections.length,
       sourceBoundedAssetCount: assets.filter((asset) => asset.sourceBounds?.unit === 'page-ratio').length,
       tableCount: tables.length,
     };
   }
 
-  function buildChatFallback({ chunks, message, summaryCards }) {
-    const supporting = chunks.map((chunk) => chunk.text).join(' ');
-    if (!supporting) {
-      return {
-        answer: '관련 본문 근거를 충분히 찾지 못했습니다. 질문을 더 구체화하거나 PDF의 해당 섹션을 먼저 확인해 주세요.',
-        citations: [],
-        question: message,
-      };
-    }
-
-    const answerBase = supporting || summaryCards?.tldr || '관련 본문이 충분하지 않아 세션 요약을 기준으로 답변합니다.';
-    return {
-      answer: clipText(answerBase, 420),
-      citations: chunks.map((chunk) => ({
-        label: chunk.sectionLabel || chunk.sectionId || `Page ${chunk.page}`,
-        page: chunk.page,
-        quote: clipText(chunk.text, 220),
-        sectionId: chunk.sectionId || '',
-      })),
-      question: message,
-    };
-  }
-
-  async function runRuntimeJsonTask(prompt, fallbackBuilder, { fallbackOnFailure = true } = {}) {
+  async function runRuntimeJsonTask(prompt) {
     if (!(await isRuntimeAvailable())) {
-      if (!fallbackOnFailure) {
-        return {
-          payload: null,
-          provenance: {
-            fallbackReason: 'agent runtime unavailable',
-            generatedBy: '',
-            runtimeUsed: false,
-          },
-        };
-      }
-
       return {
-        payload: fallbackBuilder(),
+        payload: null,
         provenance: {
-          fallbackReason: 'agent runtime unavailable',
-          generatedBy: 'fallback',
+          generatedBy: '',
+          runtimeError: 'agent runtime unavailable',
           runtimeUsed: false,
         },
       };
@@ -1956,33 +1555,54 @@ export function createReadingService({
       return {
         payload: runtime.parseJsonFromMessages(summary),
         provenance: {
-          fallbackReason: '',
           generatedBy: 'agent-runtime',
+          runtimeError: '',
           runtimeUsed: true,
         },
       };
     } catch (error) {
-      const fallbackReason = error instanceof Error ? error.message : String(error);
-      if (!fallbackOnFailure) {
-        return {
-          payload: null,
-          provenance: {
-            fallbackReason,
-            generatedBy: '',
-            runtimeUsed: false,
-          },
-        };
-      }
-
+      const runtimeError = error instanceof Error ? error.message : String(error);
       return {
-        payload: fallbackBuilder(),
+        payload: null,
         provenance: {
-          fallbackReason,
-          generatedBy: 'fallback',
-          runtimeUsed: false,
+          generatedBy: '',
+          runtimeError,
+          runtimeUsed: true,
         },
       };
     }
+  }
+
+  function normaliseAgentSummaryCards(raw) {
+    const sectionSummaries = Array.isArray(raw?.sectionSummaries)
+      ? raw.sectionSummaries
+          .map((entry, index) => ({
+            id: ensureTrimmedString(entry?.id, `section-summary-${index + 1}`),
+            label: ensureTrimmedString(entry?.label, `Section ${index + 1}`),
+            page: entry?.page ?? null,
+            sectionId: ensureTrimmedString(entry?.sectionId, ''),
+            summary: clipText(entry?.summary, 260),
+          }))
+          .filter((entry) => entry.summary)
+      : [];
+    const summaryCards = {
+      fullSummary: ensureTrimmedString(raw?.fullSummary, ''),
+      keyPoints: Array.isArray(raw?.keyPoints) ? raw.keyPoints.map((entry) => clipText(entry, 180)).filter(Boolean) : [],
+      limit: clipText(raw?.limit, 320),
+      method: clipText(raw?.method, 320),
+      result: clipText(raw?.result, 320),
+      sectionSummaries,
+      tldr: clipText(raw?.tldr, 320),
+    };
+    const hasSummary =
+      summaryCards.fullSummary ||
+      summaryCards.tldr ||
+      summaryCards.method ||
+      summaryCards.result ||
+      summaryCards.limit ||
+      summaryCards.keyPoints.length ||
+      summaryCards.sectionSummaries.length;
+    return hasSummary ? summaryCards : null;
   }
 
   function buildSummaryPrompt(session, artifact) {
@@ -2093,35 +1713,29 @@ JSON field rules:
     return { lineCount, page, quote, sourceBounds: normaliseSourceBounds(value.sourceBounds, page || 1) };
   }
 
-  function buildChatPrompt(session, summaryCards, message, chunks, note, selection) {
-    const context = chunks
-      .map((chunk) => `- [${chunk.sectionLabel || chunk.sectionId || `Page ${chunk.page}`}] p.${chunk.page}: ${chunk.text}`)
-      .join('\n');
-    const noteContext = note
-      ? `Focused note:\n- quote: ${note.quote || ''}\n- body: ${note.body || ''}\n- page: ${note.page || ''}\n`
-      : '';
+  function buildChatPrompt(session, message, selection) {
     const selectionContext = selection
       ? `Primary selected PDF text (treat this as the active user-selected passage):\n- quote: ${selection.quote}\n- page: ${selection.page || ''}\n- lines: ${selection.lineCount || ''}\n`
-      : '';
+      : 'Primary selected PDF text: none\n';
 
     return `
 Return JSON only with keys: answer, citations.
 
-Paper title: ${session.title}
-TLDR: ${summaryCards?.tldr || session.summary || session.abstract}
-User question: ${message}
-${noteContext}
+PDF location:
+- title: ${session.title || ''}
+- paperUrl: ${session.paperUrl || ''}
+- pdfUrl: ${session.pdfUrl || ''}
+- cachedPdfPath: ${session.pdfCachePath || ''}
+- parsedArtifactPath: ${session.parsedArtifactPath || ''}
 ${selectionContext}
-Relevant chunks:
-${context}
+User question:
+${message}
 
 Rules:
-- answer should directly answer the question using the provided evidence.
-- If selected PDF text is present, prioritize that passage over the retrieved chunks.
+- Use the PDF location and selected passage to answer the user.
 - For requests like "translate this", "이 내용 번역", "selected text", or "선택한 부분", answer about the selected passage itself.
 - When translating, translate the selected quote faithfully and do not substitute nearby chunks.
 - citations must be an array of objects with label, page, quote, sectionId.
-- Do not invent unsupported claims.
 `.trim();
   }
 
@@ -2462,17 +2076,13 @@ Rules:
         throw new Error('Parsed artifact is missing for this session.');
       }
 
-      const fallback = () => summariseFromSections(artifact.sections || [], running);
-      const generated = await runRuntimeJsonTask(buildSummaryPrompt(running, artifact), fallback, {
-        fallbackOnFailure: !requireAgentRuntime,
-      });
+      const generated = await runRuntimeJsonTask(buildSummaryPrompt(running, artifact));
       if (!generated.payload) {
         const failed = await updateSession(sessionId, {
           keyPoints: [],
           summary: null,
           summaryCards: null,
-          summaryError: generated.provenance.fallbackReason || 'AI summary generation failed.',
-          summaryFallbackReason: generated.provenance.fallbackReason,
+          summaryError: generated.provenance.runtimeError || 'AI summary generation failed.',
           summaryFinishedAt: nowIso(),
           summaryGeneratedBy: '',
           summaryRuntimeUsed: false,
@@ -2482,27 +2092,26 @@ Rules:
       }
 
       const raw = generated.payload || {};
-      const summaryCards = {
-        ...fallback(),
-        ...raw,
-        keyPoints: Array.isArray(raw?.keyPoints) ? raw.keyPoints.map((entry) => clipText(entry, 180)).filter(Boolean) : fallback().keyPoints,
-        sectionSummaries: Array.isArray(raw?.sectionSummaries)
-          ? raw.sectionSummaries.map((entry, index) => ({
-              id: ensureTrimmedString(entry.id, `section-summary-${index + 1}`),
-              label: ensureTrimmedString(entry.label, artifact.sections?.[index]?.label || `Section ${index + 1}`),
-              page: entry.page ?? artifact.sections?.[index]?.pageStart ?? null,
-              sectionId: ensureTrimmedString(entry.sectionId, artifact.sections?.[index]?.id || ''),
-              summary: clipText(entry.summary, 260),
-            }))
-          : fallback().sectionSummaries,
-      };
+      const summaryCards = normaliseAgentSummaryCards(raw);
+      if (!summaryCards) {
+        const failed = await updateSession(sessionId, {
+          keyPoints: [],
+          summary: null,
+          summaryCards: null,
+          summaryError: 'AI summary generation failed.',
+          summaryFinishedAt: nowIso(),
+          summaryGeneratedBy: '',
+          summaryRuntimeUsed: generated.provenance.runtimeUsed,
+          summaryStatus: 'error',
+        });
+        return { session: failed };
+      }
       const metadataSession = await applyAiPaperMetadata(running, raw);
       const next = await updateSession(sessionId, {
         keyPoints: summaryCards.keyPoints,
         summary: clipText(summaryCards.tldr, 320),
         summaryCards,
         summaryError: '',
-        summaryFallbackReason: generated.provenance.fallbackReason,
         summaryFinishedAt: nowIso(),
         summaryGeneratedBy: generated.provenance.generatedBy,
         summaryRuntimeUsed: generated.provenance.runtimeUsed,
@@ -2576,7 +2185,7 @@ Rules:
       };
     },
 
-    async chat(sessionId, { message, noteId = '', selection: selectionInput = null } = {}) {
+    async chat(sessionId, { message, selection: selectionInput = null } = {}) {
       const session = await getSessionOrThrow(sessionId);
       if (session.parseStatus !== 'done' || !session.parsedArtifactPath) {
         throw new Error('Analyze the paper before asking questions.');
@@ -2592,99 +2201,15 @@ Rules:
         throw new Error('Parsed artifact is missing for this session.');
       }
 
-      const note = session.notes.find((entry) => entry.id === noteId) || null;
       const selection = normaliseChatSelection(selectionInput);
-      const queryTerms = tokenize([prompt, note?.quote, note?.body, selection?.quote].filter(Boolean).join(' '));
-      let semanticScores = new Map();
-      if (activeRetrievalScorer) {
-        try {
-          semanticScores = normaliseSemanticScores(
-            await activeRetrievalScorer.scoreChunks({
-              chunks: artifact.chunks || [],
-              message: prompt,
-              note,
-              queryTerms,
-              selection,
-              session,
-            }),
-          );
-        } catch {
-          semanticScores = new Map();
-        }
+      const generated = await runRuntimeJsonTask(
+        buildChatPrompt(session, prompt, selection),
+      );
+      if (!generated?.payload) {
+        throw new Error(`AI chat generation failed: ${generated?.provenance?.runtimeError || 'agent runtime unavailable'}`);
       }
-      const rankedChunks = (artifact.chunks || [])
-        .map((chunk) => {
-          const lexicalFeatures = scoreChunkFeatures(queryTerms, chunk, { message: prompt, note });
-          const semanticScore = semanticScores.get(chunk.id) || 0;
-          return {
-            ...chunk,
-            lexicalScore: lexicalFeatures.lexicalScore,
-            noteBoost: lexicalFeatures.noteBoost,
-            phraseBoost: lexicalFeatures.phraseBoost,
-            score: lexicalFeatures.score + semanticScore,
-            semanticScore,
-            titleBoost: lexicalFeatures.titleBoost,
-          };
-        })
-        .sort((left, right) => right.score - left.score || left.page - right.page)
-        .filter((chunk) => chunk.score > 0)
-        .slice(0, MAX_CHAT_CHUNKS);
-      const retrievalTrace = buildRetrievalTrace({
-        queryTerms,
-        rankedChunks,
-        scorer: retrievalScorerLabel,
-      });
-      const fallback = () => {
-        const base = buildChatFallback({
-          chunks: rankedChunks,
-          message: prompt,
-          summaryCards: session.summaryCards,
-        });
-        if (!selection?.quote) {
-          return base;
-        }
-
-        const selectedCitation = {
-          label: 'Selected PDF text',
-          page: selection.page,
-          quote: clipText(selection.quote, 220),
-          sectionId: 'selection',
-        };
-        const asksForTranslation = /번역|translate|translation|한국어|korean/i.test(prompt);
-        const selectedAnswer = asksForTranslation
-          ? `선택한 PDF 텍스트가 컨텍스트로 전달되었습니다. 현재 런타임 응답을 생성하지 못해 원문을 기준으로 표시합니다: "${clipText(selection.quote, 360)}"`
-          : `선택한 PDF 텍스트를 우선 컨텍스트로 사용했습니다. ${base.answer}`;
-
-        return {
-          ...base,
-          answer: clipText(selectedAnswer, 480),
-          citations: [selectedCitation, ...(Array.isArray(base.citations) ? base.citations : [])],
-        };
-      };
-      const hasEvidence = hasReadingEvidenceForPrompt(prompt, rankedChunks, selection, retrievalTrace);
-      const fallbackPayload = fallback();
-      const shouldForceUnsupportedFallback = !hasEvidence;
-      const unsupportedFallbackPayload = shouldForceUnsupportedFallback
-        ? buildChatFallback({ chunks: [], message: prompt, summaryCards: session.summaryCards })
-        : fallbackPayload;
-      const generated = shouldForceUnsupportedFallback
-        ? null
-        : await runRuntimeJsonTask(
-            buildChatPrompt(session, session.summaryCards, prompt, rankedChunks, note, selection),
-            fallback,
-            { fallbackOnFailure: !requireAgentRuntime },
-          );
-      if (!shouldForceUnsupportedFallback && !generated?.payload) {
-        throw new Error(`AI chat generation failed: ${generated?.provenance?.fallbackReason || 'agent runtime unavailable'}`);
-      }
-      const raw = shouldForceUnsupportedFallback ? unsupportedFallbackPayload : generated.payload || {};
-      const provenance = shouldForceUnsupportedFallback
-        ? {
-            fallbackReason: 'no matching reading evidence',
-            generatedBy: 'fallback',
-            runtimeUsed: false,
-          }
-        : generated.provenance;
+      const raw = generated.payload || {};
+      const provenance = generated.provenance;
 
       const userMessage = {
         createdAt: nowIso(),
@@ -2696,14 +2221,12 @@ Rules:
       const assistantMessage = {
         citations: Array.isArray(raw?.citations)
           ? raw.citations
-          : fallbackPayload.citations,
+          : [],
         createdAt: nowIso(),
-        fallbackReason: provenance.fallbackReason,
         generatedBy: provenance.generatedBy,
         id: `chat-assistant-${Date.now()}`,
-        retrieval: retrievalTrace,
         role: 'assistant',
-        text: clipText(raw?.answer || fallbackPayload.answer, 480),
+        text: clipText(raw?.answer || '', 480),
       };
       const chatMessages = [...session.chatMessages, userMessage, assistantMessage];
       const evidenceCoverage = buildEvidenceCoverageReport({

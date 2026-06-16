@@ -193,13 +193,8 @@ ARES는 현재 목업이 아니다. `Read`, `Lab`, `Insight`, `Write` 4개 surfa
   - caption과 본문 reference 연결
   - figure/table source bounds 정확도 평가
   - crop 실패 사유와 synthetic fallback 비율 추적
-- retrieval scorer 운영화
-  - `ARES_RETRIEVAL_SCORER_URL` secret 주입
-  - scorer health check와 latency budget
-  - expected top chunk validation을 CI 또는 배포 smoke에 연결
-- evidence policy
-  - unsupported answer 차단 기준 강화
-  - confidence threshold와 low-confidence UX 정리
+- Reader chat agent 계약 검증
+  - 사용자 질문, 선택한 PDF 텍스트, PDF 위치만 prompt에 포함되는지 테스트
   - generated summary와 source quote 사이 traceability 테스트
 - OCR 운영 기준
   - `ARES_OCR_MAX_PAGES` 기본값 재검토
@@ -474,10 +469,9 @@ ARES는 현재 목업이 아니다. `Read`, `Lab`, `Insight`, `Write` 4개 surfa
 작업:
 
 - PDF validation corpus 확장
-- scorer endpoint 운영 설정과 validation 연결
 - table/figure quality report 추가
 - OCR 품질과 비용 metric 추가
-- unsupported answer policy 테스트
+- Reader chat prompt contract 테스트
 
 검증:
 
@@ -574,7 +568,6 @@ ARES는 현재 목업이 아니다. `Read`, `Lab`, `Insight`, `Write` 4개 surfa
 - 첫 auth provider를 직접 구현할지, managed provider를 쓸지 결정해야 한다.
 - experiment runner의 기본 격리 기술을 Docker로 시작할지, 더 강한 VM sandbox로 시작할지 결정해야 한다.
 - object storage provider와 signed URL 정책을 정해야 한다.
-- 운영 retrieval scorer를 어떤 모델과 배포 방식으로 제공할지 정해야 한다.
 - 첫 유료 SaaS 범위가 개인 연구자, 소규모 랩, 기업 R&D 중 어디인지 정해야 한다.
 
 ## 다음 문서화 작업

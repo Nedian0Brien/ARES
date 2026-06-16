@@ -35,8 +35,7 @@
 | Insight quality/cluster enrich | 저장 경로에서 제거됨 | cluster/quality 자동 계산은 렌더링 derived state로만 유지 |
 | Writing draft creation fallback | 제거됨 | draft section 추가는 기존 draft가 있을 때만 수행 |
 | Search service failure | 유지 | Scout/search 실패는 `error`; fallback result를 queue하지 않음 |
-| Reader summary/chat fallback prose | 조건부 유지 | `ARES_REQUIRE_AGENT_RUNTIME=true`에서 저장 차단 가능; unsupported answer는 insufficient evidence로 제한 |
-| Retrieval scorer fallback | 유지 | HTTP scorer 장애 시 semantic score를 비우고 lexical retrieval로 제한; low-confidence telemetry 표시 |
+| Reader summary/chat generated prose on runtime failure | 제거됨 | runtime 실패나 JSON 계약 위반은 `error`; summary/chat 생성물을 저장하지 않음 |
 | File store vs PostgreSQL seed fallback | 유지하되 운영 경계 필요 | dev/demo bootstrap 성격. 운영에서는 seed data 노출 경계를 별도 배포 설정으로 관리해야 함 |
 | PDF asset synthetic thumbnail fallback | 유지 | asset quality가 `synthetic`/`partial`로 표시되는 후보 상태이며 사용자 note/insight/draft로 승격하지 않음 |
 | UI placeholder/empty copy | 유지 | 저장되지 않는 화면 상태만 허용 |
@@ -45,7 +44,7 @@
 
 | Area | 판단 |
 | --- | --- |
-| Summary/Chat fallback provenance | 현재는 `ARES_REQUIRE_AGENT_RUNTIME=true`로 차단 가능한 계약이 있고, fallback provenance를 표시한다. 다만 운영 기본값을 더 엄격하게 둘지는 별도 제품 결정이 필요하다. |
+| Summary/Chat runtime provenance | runtime 성공 여부만 기록하고 fallback 생성물은 저장하지 않는다. |
 | Search fallback | search stage는 실패 시 fallback asset을 만들지 않고 `error`로 끝난다. 이 방향이 다른 stage에도 맞다. |
 | Seed store/demo data | `data/store.seed.json`과 README의 seed fallback은 dev/demo fixture 성격이다. 제품 화면에 실제 데이터처럼 노출되는 경로가 있으면 별도 차단이 필요하지만, 이번 Notes 문제와 같은 사용자 산출물 자동 생성은 아니다. |
 | PDF crop synthetic thumbnail fallback | asset 품질 상태가 `synthetic`/`partial`로 구분되는 후보 표시다. 실제 figure 원본이라고 확정 저장하지 않는 한 P0는 아니다. |

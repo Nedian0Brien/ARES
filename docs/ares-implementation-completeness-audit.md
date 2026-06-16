@@ -40,11 +40,11 @@ ARES는 화면 목업 단계가 아니다. 현재 앱은 단일 Node 백엔드, 
 | 4탭 네비게이션 | 완료 | 4개 상위 탭, 기존 stage route 호환, keyboard shortcut, 모바일 bottom nav 계약 테스트 통과 |
 | Asset graph | 완료 | `Paper -> ReadingPacket -> ReproductionPlan -> ExperimentRun -> ResultDossier -> InsightCard -> DraftSection` 모델과 file/PostgreSQL store 구현 |
 | Search/Queue | 부분 완료 | OpenAlex/seed 검색, Scout agent run, queue checkpoint는 동작한다. 고급 필터와 운영 검색 품질 검증은 부족하다 |
-| Read/Reader | 부분 완료 | PDF URL, 업로드 PDF, metadata-only 세션을 Reader artifact로 만들 수 있다. PDF 캐시, parse, summary, chat, notes, asset extraction, citation jump, PDF text selection note가 동작한다. Reader chat은 lexical score, semantic/reranker scorer adapter, HTTP scorer env adapter, confidence threshold, retrieval telemetry를 합산한다. Figure thumbnail은 PDF render crop PNG를 우선 사용하고, asset source jump는 PDF canvas 위 source highlight overlay를 표시한다. PDF selection note는 page-ratio source bounds를 저장해 PDF 위 annotation box로 표시하고, 좌표가 없는 note/highlight는 page-level marker로 표시한다. Summary/Chat fallback은 provenance로 표시되며 `ARES_REQUIRE_AGENT_RUNTIME=true`에서는 fallback prose 저장을 차단한다. Text layer가 없는 PDF는 `tesseract.js` 기반 내장 OCR을 시도하고, 부족한 경우 외부 OCR 텍스트 import로 복구할 수 있다 |
+| Read/Reader | 부분 완료 | PDF URL, 업로드 PDF, metadata-only 세션을 Reader artifact로 만들 수 있다. PDF 캐시, parse, summary, chat, notes, asset extraction, citation jump, PDF text selection note가 동작한다. Reader chat은 사용자 질문, 선택한 PDF 텍스트, PDF 위치만 agent prompt에 포함한다. Figure thumbnail은 PDF render crop PNG를 우선 사용하고, asset source jump는 PDF canvas 위 source highlight overlay를 표시한다. PDF selection note는 page-ratio source bounds를 저장해 PDF 위 annotation box로 표시하고, 좌표가 없는 note/highlight는 page-level marker로 표시한다. Summary/Chat은 runtime 실패 시 생성물을 저장하지 않는다. Text layer가 없는 PDF는 `tesseract.js` 기반 내장 OCR을 시도하고, 부족한 경우 외부 OCR 텍스트 import로 복구할 수 있다 |
 | Lab | 부분 완료 | Reading handoff, reproduction plan, manual run result edit, result dossier 연결이 동작한다. 실제 실험 실행 runner는 없다 |
 | Insight | 부분 완료 | Insight card 생성, 선택, 수정, 삭제, evidence/draft 참조 정리가 동작한다. claim clustering과 기본 품질 평가는 자동으로 계산/저장한다. 운영 품질 루프와 사람이 검토할 평가 리포트는 더 확장해야 한다 |
 | Write | 부분 완료 | Draft section CRUD와 evidence-backed writing surface가 있다. 완성 문서 export 품질과 citation formatting은 더 검증해야 한다 |
-| Backend runtime | 부분 완료 | Agent run 상태 저장, SSE, Codex runtime adapter, 부팅 시 interrupted run 복구가 있다. 취소 요청은 file/PostgreSQL store에 `canceled`, `cancelReason`, `cancelRequestedAt`으로 지속화되며, 늦게 도착한 search 결과가 취소 run을 완료 상태로 덮어쓰지 않는다. Codex runtime은 별도 process group으로 실행되고 취소 시 process group에 SIGTERM을 보낸다. 실패한 stage run은 사용자 asset을 만들지 않고 `error`로 끝난다. Reader summary/chat은 `ARES_REQUIRE_AGENT_RUNTIME=true`에서 runtime unavailable fallback 저장을 차단한다 |
+| Backend runtime | 부분 완료 | Agent run 상태 저장, SSE, Codex runtime adapter, 부팅 시 interrupted run 복구가 있다. 취소 요청은 file/PostgreSQL store에 `canceled`, `cancelReason`, `cancelRequestedAt`으로 지속화되며, 늦게 도착한 search 결과가 취소 run을 완료 상태로 덮어쓰지 않는다. Codex runtime은 별도 process group으로 실행되고 취소 시 process group에 SIGTERM을 보낸다. 실패한 stage run은 사용자 asset을 만들지 않고 `error`로 끝난다. Reader summary/chat은 runtime unavailable 생성물을 저장하지 않는다 |
 | Storage | 부분 완료 | file store와 PostgreSQL store가 같은 public contract를 제공하고 실제 PostgreSQL E2E를 통과했다. 동시성, migration, 운영 백업 검증은 부족하다 |
 | Frontend QA | 부분 완료 | lint, tests, Playwright interaction smoke 통과. Core tab navigation, Read Library 진입, Reader PDF page jump, PDF selection note, Reading -> Lab handoff, mobile bottom nav, mobile PDF dock, console error, failed request 수집을 검증한다. 더 깊은 브라우저/기기 매트릭스 검증은 남아 있다 |
 
@@ -67,9 +67,7 @@ ARES는 화면 목업 단계가 아니다. 현재 앱은 단일 Node 백엔드, 
 - [x] citation, note, outline, asset source page가 PDF page jump로 연결된다.
 - [x] PDF 위에 note/highlight annotation marker와 selection source box가 표시된다.
 - [x] Reader summary, chat, notes, assets가 durable session state에 저장된다.
-- [x] Reader chat은 citation을 저장하고, 근거가 없으면 `Insufficient evidence` 상태를 반환한다.
-- [x] Reader chat retrieval은 lexical score, semantic/reranker scorer adapter, confidence threshold, telemetry를 합산한다.
-- [x] 운영 HTTP retrieval scorer를 환경변수로 주입할 수 있다.
+- [x] Reader chat은 citation을 저장하고, agent에는 사용자 질문, 선택한 PDF 텍스트, PDF 위치만 전달한다.
 - [x] asset thumbnail/data file을 source-backed route로 열 수 있다.
 - [x] Reading Home preview의 inert bookmark류 버튼을 실제 메뉴 액션으로 교체했다.
 - [x] Reading context menu에서 open source, copy citation, export notes, re-parse를 제공한다.
@@ -101,19 +99,14 @@ ARES는 화면 목업 단계가 아니다. 현재 앱은 단일 Node 백엔드, 
 
 ### P1. Reader 품질
 
-- [x] Reader chat retrieval을 production-grade semantic/hybrid retrieval 계약으로 올린다.
-  - lexical score, semantic/reranker scorer adapter, section/title/page boost, low-confidence threshold를 합산한다.
-  - assistant message는 retrieval mode, scorer, top score, confidence, lowConfidence, top chunk score breakdown을 저장한다.
-  - UI는 hybrid retrieval confidence와 low confidence 상태를 chat bubble에 표시한다.
-  - 기본 scorer는 deterministic semantic alias fallback이며, 운영 기본 계약은 `ARES_RETRIEVAL_SCORER_PROVIDER=local-cross-encoder`와 HTTP scorer env adapter다.
-  - `ARES_RETRIEVAL_SCORER_URL`, `ARES_RETRIEVAL_SCORER_API_KEY`, `ARES_RETRIEVAL_SCORER_PROVIDER`, `ARES_RETRIEVAL_SCORER_TIMEOUT_MS`로 HTTP scorer를 설정한다.
-  - HTTP scorer 장애 또는 timeout 시 semantic score만 비우고 lexical retrieval/chat fallback은 유지한다.
-  - `evidenceCoverage` report는 retrieval readiness, chunk/section/asset/source-bounded asset count, latest retrieval confidence/top score, cited/low-confidence chat count를 저장하고 Summary에 표시한다.
-  - `node scripts/validate-retrieval-scorer.mjs`는 설정된 HTTP scorer endpoint에 고정 fixture를 보내 expected top chunk와 min score를 검증하는 JSON report를 출력한다.
+- [x] Reader chat을 agent 기반 단순 계약으로 정리한다.
+  - backend는 사용자 질문, 선택한 PDF 텍스트, PDF 위치만 agent prompt에 포함한다.
+  - assistant message에는 answer/citations와 runtime provenance만 저장한다.
+  - `evidenceCoverage` report는 chunk/section/asset/source-bounded asset count와 cited chat count만 저장한다.
 
-- [x] runtime/fallback provenance를 summary와 chat 전체에 일관되게 노출한다.
+- [x] runtime provenance를 summary와 chat 전체에 일관되게 노출한다.
   - Summary TL;DR, section summary, assistant chat bubble, exported notes markdown에 생성 출처를 남긴다.
-  - fallback reason이 있으면 화면과 export에서 같이 확인할 수 있다.
+  - runtime 실패나 JSON 계약 위반은 생성물을 저장하지 않고 오류 사유로 남긴다.
 
 - [x] OCR이 필요한 PDF의 recovery path를 확정한다.
   - 현재 v1은 text layer 없는 PDF에서 PDF page를 PNG로 렌더링하고 `tesseract.js` 기반 내장 OCR을 시도한다.
@@ -218,6 +211,6 @@ ARES는 화면 목업 단계가 아니다. 현재 앱은 단일 Node 백엔드, 
 ## 다음 작업 순서
 
 1. 다양한 출판사 PDF와 multi-page table 샘플 세트의 실제 통과 기준을 `scripts/reading-validation-samples.json`에 추가한다.
-2. 배포 환경의 secret store에 `ARES_RETRIEVAL_SCORER_URL`과 credential을 주입하고 `scripts/validate-retrieval-scorer.mjs`를 정기 검증으로 연결한다.
+2. Reader agent prompt가 선택 텍스트와 PDF 위치만으로 충분히 답변하는지 실제 PDF 샘플로 주기 검증한다.
 3. OCR 품질 샘플을 확장하고 `ARES_OCR_MAX_PAGES` 운영 기준을 조정한다.
 4. 실제 논문별 figure/table 위치 정확도를 샘플 세트로 검증한다.

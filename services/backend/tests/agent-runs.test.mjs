@@ -415,6 +415,29 @@ test('agent run runtime failure does not persist stage fallback assets', async (
   assert.deepEqual(store.listProjectAssets('demo', 'reproChecklistItems'), []);
 });
 
+test('agent run context failures are errors rather than completed runs', async () => {
+  const store = await createDemoStore();
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createFailingSpawn(),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {},
+    projectId: 'demo',
+    stage: 'research',
+  });
+  const finalRun = await waitForRun(store, run.id);
+
+  assert.equal(finalRun.status, 'error');
+  assert.match(finalRun.error, /missing a paper reference/);
+  assert.deepEqual(finalRun.outputRef, []);
+  assert.deepEqual(finalRun.createdAssetIds, []);
+  assert.deepEqual(store.listProjectAssets('demo', 'experimentRuns'), []);
+  assert.deepEqual(store.listProjectAssets('demo', 'reproChecklistItems'), []);
+});
+
 test('agent run service keeps canceled search runs from queueing late results', async () => {
   const store = await createDemoStore();
   let resolveSearch;

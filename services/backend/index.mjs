@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 
 import { createAgentRunService } from './lib/agent-runs.mjs';
 import { createAuthService } from './lib/auth.mjs';
+import { contentTypeForPath } from './lib/content-types.mjs';
 import { createLogger } from './lib/logger.mjs';
 import { normalizeRequestPath } from './lib/path-utils.mjs';
 import { createReadingService } from './lib/reading-service.mjs';
-import { createConfiguredRetrievalScorer } from './lib/retrieval-scorer.mjs';
 import { createScoutSearchService } from './lib/scout-search.mjs';
 import { parseSearchPayload, parseSearchQuery, sanitisePaperRecord } from './lib/search-contract.mjs';
 import { createStore } from './lib/store.mjs';
@@ -23,17 +23,6 @@ const DATA_ROOT_DIR = path.resolve(process.env.ARES_DATA_ROOT_DIR || ROOT_DIR);
 const WEB_DIR = path.join(ROOT_DIR, 'web');
 const SEED_FILE = path.join(DATA_ROOT_DIR, 'data', 'store.seed.json');
 const RUNTIME_FILE = path.join(DATA_ROOT_DIR, 'data', 'runtime', 'store.json');
-
-const CONTENT_TYPES = {
-  '.css': 'text/css; charset=utf-8',
-    '.html': 'text/html; charset=utf-8',
-    '.js': 'application/javascript; charset=utf-8',
-    '.mjs': 'application/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.mjs': 'application/javascript; charset=utf-8',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-};
 
 function parseEnv(content) {
   return String(content || '')
@@ -83,7 +72,6 @@ const ARES_AGENT_RUNTIME = process.env.ARES_AGENT_RUNTIME || SCOUT_AGENT_RUNTIME
 const SCOUT_AGENT_TIMEOUT_MS = Math.max(1000, Number(process.env.SCOUT_AGENT_TIMEOUT_MS) || 45000);
 const LIVE_RELOAD_ENABLED = process.env.WATCH_REPORT_DEPENDENCIES === '1' || process.env.ARES_LIVE_RELOAD === '1';
 const DEMO_PDF_ENABLED = process.env.ARES_ENABLE_DEMO_PDF === '1' || process.env.ARES_ENABLE_DEMO_PDF === 'true';
-const REQUIRE_AGENT_RUNTIME = process.env.ARES_REQUIRE_AGENT_RUNTIME === '1' || process.env.ARES_REQUIRE_AGENT_RUNTIME === 'true';
 const OCR_MAX_PAGES = Math.max(1, Number(process.env.ARES_OCR_MAX_PAGES) || 12);
 const AUTO_MIGRATE =
   process.env.ARES_AUTO_MIGRATE === undefined
@@ -109,12 +97,9 @@ const store = await createStore({
   runtimeFile: RUNTIME_FILE,
 });
 const authService = createAuthService(process.env, { store });
-const retrievalScorer = createConfiguredRetrievalScorer(process.env);
 const readingService = createReadingService({
   enableDemoPdf: DEMO_PDF_ENABLED,
   ocrMaxPages: OCR_MAX_PAGES,
-  requireAgentRuntime: REQUIRE_AGENT_RUNTIME,
-  retrievalScorer,
   rootDir: DATA_ROOT_DIR,
   runtimeName: ARES_AGENT_RUNTIME,
   store,
@@ -140,7 +125,7 @@ const handleAssetRoute = createAssetRoutes({
   sendError,
   store,
 });
-const agenticSearchService = createScoutSearchService({
+const scoutSearchService = createScoutSearchService({
   agentRuntime: SCOUT_AGENT_RUNTIME,
   agentTimeoutMs: SCOUT_AGENT_TIMEOUT_MS,
   apiKey: OPENALEX_API_KEY,
@@ -150,7 +135,7 @@ const agenticSearchService = createScoutSearchService({
 const agentRunService = createAgentRunService({
   rootDir: ROOT_DIR,
   runtimeName: ARES_AGENT_RUNTIME,
-  searchService: agenticSearchService,
+  searchService: scoutSearchService,
   store,
 });
 const recoveredAgentRuns = await agentRunService.recoverInterruptedRuns();
@@ -159,15 +144,6 @@ if (recoveredAgentRuns.length) {
     recoveredAgentRunCount: recoveredAgentRuns.length,
   });
 }
-const searchService = createScoutSearchService({
-  agentRuntime: SCOUT_AGENT_RUNTIME,
-  agentTimeoutMs: SCOUT_AGENT_TIMEOUT_MS,
-  apiKey: OPENALEX_API_KEY,
-  mailto: OPENALEX_MAILTO,
-  rootDir: ROOT_DIR,
-  runStore: store,
-});
-
 function json(response, statusCode, payload) {
   response.writeHead(statusCode, {
     'content-type': 'application/json; charset=utf-8',
@@ -570,7 +546,7 @@ async function serveStatic(requestPath, response) {
       const content = await fs.readFile(vendorPath);
       response.writeHead(200, {
         'cache-control': 'public, max-age=300',
-        'content-type': CONTENT_TYPES[path.extname(vendorPath)] || 'application/octet-stream',
+        'content-type': contentTypeForPath(vendorPath),
       });
       response.end(content);
       return;
@@ -602,7 +578,7 @@ async function serveStatic(requestPath, response) {
         ? injectLiveReloadScript(await fs.readFile(resolved, 'utf8'))
         : await fs.readFile(resolved);
     response.writeHead(200, {
-      'content-type': CONTENT_TYPES[extension] || 'application/octet-stream',
+      'content-type': contentTypeForPath(filePath),
       'cache-control':
         extension === '.html' || extension === '.css' || extension === '.js'
           ? 'no-store'
@@ -629,7 +605,7 @@ async function handleSearchRequest(request, response, searchInput) {
 
   const project = access.project;
   const query = searchInput.q || project.defaultQuery;
-  const providerPayload = await searchService.search({
+  const providerPayload = await scoutSearchService.search({
     project,
     query,
     mode: searchInput.mode,
@@ -666,7 +642,7 @@ const server = http.createServer(async (request, response) => {
         const content = request.method === 'HEAD' ? null : await fs.readFile(vendorPath);
         response.writeHead(200, {
           'cache-control': 'public, max-age=300',
-          'content-type': CONTENT_TYPES[path.extname(vendorPath)] || 'application/octet-stream',
+          'content-type': contentTypeForPath(vendorPath),
         });
         response.end(content);
       } catch {

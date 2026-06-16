@@ -189,7 +189,7 @@ export function createReadingFeature({
   }
 
   function readingSummaryFailed(session) {
-    return Boolean(session && (session.summaryStatus === "error" || session.summaryGeneratedBy === "fallback"));
+    return Boolean(session && session.summaryStatus === "error");
   }
 
   function renderReadingProvenancePill(source, kind = "summary") {
@@ -200,9 +200,7 @@ export function createReadingFeature({
 
     const kindClass = kind === "section" ? "is-section" : kind === "chat" ? "is-chat" : "is-summary";
     const label =
-      generatedBy === "fallback"
-        ? "Needs review"
-        : generatedBy === "external-ocr"
+      generatedBy === "external-ocr"
           ? "Imported text"
           : generatedBy === "built-in-ocr"
             ? "PDF text"
@@ -216,35 +214,6 @@ export function createReadingFeature({
     `;
   }
 
-  function readingConfidenceLabel(value) {
-    const confidence = readingText(value, "none").toLowerCase();
-    if (confidence === "high") {
-      return "Strong evidence";
-    }
-    if (confidence === "medium") {
-      return "Some evidence";
-    }
-    if (confidence === "low") {
-      return "Weak evidence";
-    }
-    return "No evidence";
-  }
-
-  function renderReadingRetrievalPill(message) {
-    const retrieval = message?.retrieval;
-    if (!retrieval?.mode) {
-      return "";
-    }
-
-    const label = retrieval.lowConfidence ? "Weak evidence" : "Evidence checked";
-    return `
-      <div class="reading-retrieval-pill ${retrieval.lowConfidence ? "is-low" : ""}">
-        <span>${escapeHtml(label)}</span>
-        <span>${escapeHtml(readingConfidenceLabel(retrieval.confidence))}</span>
-      </div>
-    `;
-  }
-
   function renderReadingEvidenceCoverage(session) {
     const coverage = session?.evidenceCoverage;
     if (!coverage) {
@@ -252,12 +221,10 @@ export function createReadingFeature({
     }
 
     const rows = [
-      ["Evidence search", coverage.retrievalReady ? "Ready" : "Not ready"],
       ["Text passages", coverage.chunkCount || 0],
       ["Sections", coverage.sectionCount || 0],
       ["Figures and tables", coverage.assetCount || 0],
       ["Located in source", coverage.sourceBoundedAssetCount || 0],
-      ["Latest answer", readingConfidenceLabel(coverage.lastRetrievalConfidence)],
       ["Cited answers", coverage.citedChatCount || 0],
       ["OCR pages", coverage.ocrPageCount || 0],
       ["OCR time", Number.isFinite(Number(coverage.ocrDurationMs)) ? `${coverage.ocrDurationMs}ms` : "Not recorded"],
@@ -1519,13 +1486,7 @@ export function createReadingFeature({
           <div class="reading-empty-view">
             <div class="reading-empty-icon">${icon("sparkles", { size: 24, color: TOKENS.result })}</div>
             <div class="reading-empty-title">Summary unavailable</div>
-            <div class="reading-empty-copy">
-              ${
-                session?.summaryGeneratedBy === "fallback"
-                  ? "The saved summary was not reliable enough to show. Generate a new summary to continue."
-                  : "The paper text was parsed, but the summary did not finish. Try again."
-              }
-            </div>
+            <div class="reading-empty-copy">The paper text was parsed, but the summary did not finish. Try again.</div>
             ${renderReadingAnalyzeButton({ busy: analyzeBusy, label: "Run analysis", progress: analysisProgress })}
           </div>
         `
@@ -2064,17 +2025,6 @@ export function createReadingFeature({
                           ${
                             message.role === "assistant" && message.generatedBy
                               ? renderReadingProvenancePill(message, "chat")
-                              : ""
-                          }
-                          ${message.role === "assistant" ? renderReadingRetrievalPill(message) : ""}
-                          ${
-                            message.role === "assistant" && !message.typing && !message.cites?.length
-                              ? `
-                                  <div class="reading-no-evidence-pill">
-                                    ${icon("alert", { size: 12, color: "currentColor" })}
-                                    <span>Insufficient evidence</span>
-                                  </div>
-                                `
                               : ""
                           }
                           ${

@@ -12,11 +12,8 @@ The release gate runs these checks in order:
 4. `npm run test:postgres`
 5. `npm run smoke:worker-recovery`
 6. `npm run validate:reading-corpus`
-7. `npm run smoke:deploy`
 
 `test:postgres` requires `ARES_POSTGRES_E2E_ADMIN_URL`. If that variable is absent, the PostgreSQL e2e test is skipped by the test runner and the release owner must run it in staging before promotion.
-
-`smoke:deploy` requires the retrieval scorer endpoint variables from `.env.example`, especially `ARES_RETRIEVAL_SCORER_URL`.
 
 ## Staging Rehearsal
 

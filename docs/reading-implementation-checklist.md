@@ -83,21 +83,15 @@ Reading 탭은 더 이상 전체가 목업인 상태가 아니다. 현재 구현
 
 - [x] Reader chat이 backend와 연결되어 있다.
   - chat form submit과 note 기반 Ask AI가 `POST /api/reading-sessions/:id/chat`를 호출한다.
-  - backend는 parsed artifact chunks에서 hybrid retrieval을 수행하고 user/assistant turn을 `chatMessages`에 저장한다.
+  - backend는 사용자 질문, 선택한 PDF 텍스트, PDF 위치만 agent에 넘기고 user/assistant turn을 `chatMessages`에 저장한다.
 
 - [x] Chat citation 구조가 저장된다.
   - assistant message에 `citations`가 붙고 UI에서는 section/page chip으로 표시된다.
 
-- [x] Chat retrieval telemetry와 low-confidence threshold가 저장된다.
-  - assistant message는 retrieval mode, scorer, top score, confidence, lowConfidence, query terms, top chunk score breakdown을 저장한다.
-  - lexical score, semantic/reranker scorer adapter, section/title/page boost를 합산한다.
-  - 낮은 점수의 억지 매칭은 `no matching reading evidence` fallback으로 내려간다.
-  - UI는 hybrid retrieval confidence와 low confidence 상태를 chat bubble에 표시한다.
-
 - [x] Evidence coverage report가 저장되고 Summary에 표시된다.
   - parse/import/extract 시점에 chunk, section, asset, source-bounded asset, figure/table count를 `evidenceCoverage`에 저장한다.
-  - Reader chat 이후 last retrieval confidence/top score, cited chat count, low-confidence chat count를 같은 report에 갱신한다.
-  - Summary 화면은 retrieval readiness와 source-bounded asset 수를 compact grid로 표시한다.
+  - Reader chat 이후 cited chat count를 같은 report에 갱신한다.
+  - Summary 화면은 source-bounded asset 수를 compact grid로 표시한다.
 
 - [x] Notes CRUD가 backend와 연결되어 있다.
   - `POST /notes`, `PATCH /notes/:noteId`, `DELETE /notes/:noteId` 라우트가 있다.
@@ -161,7 +155,7 @@ Reading 탭은 더 이상 전체가 목업인 상태가 아니다. 현재 구현
   - service test는 figure thumbnail route가 PNG binary를 반환하는지 검증한다.
 
 - [x] Summary와 Chat은 generation provenance를 화면과 export에 남긴다.
-  - Summary TL;DR, section summaries, assistant chat bubble, exported notes markdown이 agent/fallback 출처를 표시한다.
+  - Summary TL;DR, section summaries, assistant chat bubble, exported notes markdown이 agent 생성 출처와 실패 사유를 표시한다.
 
 - [x] 반응형 레이아웃이 들어와 있다.
   - desktop preview resize, tablet drawer, mobile modal/list 변환, detail rail 세로 배치, resize handle 숨김 등이 CSS와 상태 동기화로 처리된다.
@@ -173,23 +167,9 @@ Reading 탭은 더 이상 전체가 목업인 상태가 아니다. 현재 구현
 
 ## 부분 구현 체크리스트
 
-- [x] Summary/Chat의 runtime fallback은 운영에서 명시적으로 차단할 수 있다.
-  - 기본 개발 경로는 runtime 실패 시 deterministic fallback을 저장하되 provenance와 fallback reason을 화면/export에 표시한다.
-  - `ARES_REQUIRE_AGENT_RUNTIME=true`이면 summary는 fallback prose를 저장하지 않고 error 상태가 되며, chat은 fallback 답변을 저장하지 않고 명시적 오류를 반환한다.
-  - 근거가 없는 chat 질문은 runtime 호출 여부와 별개로 `Insufficient evidence` fallback으로 처리해 unsupported answer를 만들지 않는다.
-
-- [x] 운영 retrieval scorer adapter가 구현되어 있다.
-  - retrieval pipeline은 `retrievalScorer.scoreChunks` adapter, HTTP scorer env adapter, score telemetry, low-confidence threshold를 갖췄다.
-  - 기본 scorer는 deterministic semantic alias fallback이다.
-  - `ARES_RETRIEVAL_SCORER_URL`, `ARES_RETRIEVAL_SCORER_API_KEY`, `ARES_RETRIEVAL_SCORER_PROVIDER`, `ARES_RETRIEVAL_SCORER_TIMEOUT_MS`로 HTTP scorer를 주입할 수 있다.
-  - scorer 장애나 timeout은 chat 전체 실패로 전파하지 않고 semantic score 0으로 제한한다.
-  - `node scripts/validate-retrieval-scorer.mjs`로 운영 scorer endpoint가 expected top chunk와 min score를 만족하는지 JSON report로 확인할 수 있다.
-
-- [x] 운영 embedding/reranker provider 계약과 품질 기준이 정리되어 있다.
-  - 운영 기본 계약은 `ARES_RETRIEVAL_SCORER_PROVIDER=local-cross-encoder`와 HTTP scorer endpoint다.
-  - `.env.example`은 `ARES_RETRIEVAL_SCORER_URL`, `ARES_RETRIEVAL_SCORER_API_KEY`, `ARES_RETRIEVAL_SCORER_TIMEOUT_MS=2500`을 포함한다.
-  - `node scripts/validate-retrieval-scorer.mjs --min-top-score 0.8`로 expected top chunk와 score threshold를 검증한다.
-  - credential 값 자체와 endpoint URL은 배포 환경의 `.env`/secret store에서 주입한다.
+- [x] Summary/Chat은 runtime 실패 시 생성물을 저장하지 않는다.
+  - summary runtime이 없거나 JSON 계약이 맞지 않으면 `error`로 저장하고 summaryCards/summary를 비운다.
+  - chat runtime이 실패하면 fallback 답변을 저장하지 않고 명시적 오류를 반환한다.
 
 - [x] Assets는 source-backed 후보와 품질 상태를 함께 제공한다.
   - table은 `pdf-parse.getTable()`, whitespace, pipe/tabular row inference로 만들 수 있다.
@@ -262,7 +242,7 @@ Reading 탭은 더 이상 전체가 목업인 상태가 아니다. 현재 구현
 | OCR provenance | source label, tool, generated/import time, text length 저장 및 export | 실구현 |
 | 내장 OCR | tesseract.js 기반 PDF page OCR, provenance 저장, citation 경로 생성 | 실구현 |
 | Summary | parse 후 summaryCards 저장 | 실구현 |
-| AI summary 품질 | runtime/fallback provenance 표시, runtime 실패 시 fallback | 부분 구현 |
+| AI summary 품질 | runtime provenance 표시, runtime 실패 시 생성물 저장 차단 | 실구현 |
 | Chat | parsed chunks 기반 Q&A 저장 | 실구현 |
 | Retrieval | lexical + semantic/reranker adapter + HTTP scorer env adapter + telemetry + confidence threshold | 실구현 |
 | Notes | create/update/delete 저장, selection source bounds 보존, PDF annotation 표시 | 실구현 |
@@ -290,4 +270,4 @@ Reading 탭은 더 이상 전체가 목업인 상태가 아니다. 현재 구현
    - multi-column layout에서 source bounds와 crop이 실제 영역을 가리키는지 확인한다.
 
 5. `AI summary/chat provider 운영 설정`을 정리한다.
-   - `ARES_REQUIRE_AGENT_RUNTIME=true` 운영 모드에서 provider health check와 알림 기준을 정한다.
+   - provider health check와 알림 기준을 정한다.

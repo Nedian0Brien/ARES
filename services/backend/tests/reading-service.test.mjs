@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 
-import { CHAT_EVIDENCE_POLICY, createReadingService } from '../lib/reading-service.mjs';
+import { createReadingService } from '../lib/reading-service.mjs';
 import { createStore } from '../lib/store.mjs';
 
 function createStubRuntime() {
@@ -17,6 +17,51 @@ function createStubRuntime() {
     },
     parseJsonFromMessages() {
       return {};
+    },
+  };
+}
+
+function createChatRuntime({
+  answer = 'Adaptive skipping reduces reranker latency while preserving answer quality.',
+  citations = [{ label: 'Abstract', page: 1, quote: 'Adaptive skipping reduces reranker latency.', sectionId: 'abstract' }],
+} = {}) {
+  const calls = [];
+  return {
+    calls,
+    async checkAvailability() {
+      return true;
+    },
+    async runJsonTask(input) {
+      calls.push(input);
+      return [{ role: 'assistant', content: JSON.stringify({ answer, citations }) }];
+    },
+    parseJsonFromMessages() {
+      return { answer, citations };
+    },
+  };
+}
+
+function createSummaryRuntime({
+  fullSummary = '## Summary\n\nAdaptive skipping reduces reranker latency while preserving answer quality.',
+  keyPoints = ['Confidence-aware gating reduces reranker cost.', 'Quality remains nearly unchanged.'],
+  limit = 'Scanned PDFs need extracted text before analysis.',
+  method = 'The method gates expensive reranker calls with uncertainty.',
+  result = 'The evaluation reports lower latency with similar quality.',
+  sectionSummaries = [
+    { label: 'Abstract', page: 1, sectionId: 'abstract', summary: 'Adaptive skipping reduces reranker latency.' },
+  ],
+  tldr = 'Adaptive skipping reduces reranker latency while preserving answer quality.',
+} = {}) {
+  const payload = { fullSummary, keyPoints, limit, method, result, sectionSummaries, tldr };
+  return {
+    async checkAvailability() {
+      return true;
+    },
+    async runJsonTask() {
+      return [{ role: 'assistant', content: JSON.stringify(payload) }];
+    },
+    parseJsonFromMessages() {
+      return payload;
     },
   };
 }
@@ -92,8 +137,6 @@ async function createHarness({
   ocrEngine = null,
   pdfParseFactory = null,
   readingSessions = [],
-  requireAgentRuntime = false,
-  retrievalScorer = null,
 } = {}) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ares-reading-service-'));
   const seedFile = path.join(tempDir, 'data', 'store.seed.json');
@@ -139,8 +182,6 @@ async function createHarness({
     fetchImpl,
     ocrEngine,
     ...(pdfParseFactory ? { pdfParseFactory } : {}),
-    requireAgentRuntime,
-    retrievalScorer,
     rootDir: tempDir,
     store,
   });
@@ -174,7 +215,6 @@ test('reading service parses cached PDF without creating user notes', async (t) 
   assert.ok(payload.session.highlights.every((highlight) => highlight.selectionMethod));
   assert.ok(payload.session.highlights.every((highlight) => highlight.confidence > 0));
   assert.ok(payload.session.assets.length >= 1);
-  assert.equal(payload.session.evidenceCoverage.retrievalReady, true);
   assert.equal(payload.session.evidenceCoverage.chunkCount, payload.artifact.chunks.length);
   assert.equal(payload.session.evidenceCoverage.assetCount, payload.session.assets.length);
   assert.ok(payload.session.evidenceCoverage.sourceBoundedAssetCount >= 1);
@@ -334,7 +374,7 @@ test('reading service mirrors sessions into reading packets for the asset graph'
 });
 
 test('reading service parses metadata-only papers from abstract and key points', async (t) => {
-  const { service, store } = await createHarness();
+  const { service, store } = await createHarness({ agentRuntime: createChatRuntime() });
   t.after(async () => {
     await store.close?.();
   });
@@ -350,7 +390,7 @@ test('reading service parses metadata-only papers from abstract and key points',
   assert.equal(payload.session.pageCount, 1);
   assert.ok(payload.session.sections.length >= 1);
   assert.deepEqual(payload.session.notes, []);
-  assert.ok(payload.session.evidenceCoverage.retrievalReady);
+  assert.ok(payload.session.evidenceCoverage.chunkCount >= 1);
 
   const answer = await service.chat(session.id, {
     message: 'What does the metadata say about reranker cost?',
@@ -360,7 +400,7 @@ test('reading service parses metadata-only papers from abstract and key points',
 });
 
 test('reading service imports external OCR text as a parse recovery path', async (t) => {
-  const { rootDir, service, store } = await createHarness();
+  const { rootDir, service, store } = await createHarness({ agentRuntime: createChatRuntime() });
   t.after(async () => {
     await store.close?.();
   });
@@ -478,7 +518,7 @@ test('reading service runs built-in OCR when a PDF has no text layer', async (t)
       return { pages: [], text: '', total: 2 };
     },
   });
-  const { service, store } = await createHarness({ ocrEngine, pdfParseFactory });
+  const { service, store } = await createHarness({ agentRuntime: createChatRuntime(), ocrEngine, pdfParseFactory });
   t.after(async () => {
     await store.close?.();
   });
@@ -511,8 +551,8 @@ test('reading service runs built-in OCR when a PDF has no text layer', async (t)
   assert.ok(chat.messages.at(-1).citations.length >= 1);
 });
 
-test('reading summarize enforces parse prerequisite and persists summary cards after parse', async (t) => {
-  const { service, store } = await createHarness();
+test('reading summarize enforces parse prerequisite and persists agent summary cards after parse', async (t) => {
+  const { service, store } = await createHarness({ agentRuntime: createSummaryRuntime() });
   t.after(async () => {
     await store.close?.();
   });
@@ -536,7 +576,7 @@ test('reading summarize enforces parse prerequisite and persists summary cards a
 });
 
 test('reading analysis runs parse, summary, and asset extraction as one action', async (t) => {
-  const { service, store } = await createHarness();
+  const { service, store } = await createHarness({ agentRuntime: createSummaryRuntime() });
   t.after(async () => {
     await store.close?.();
   });
@@ -555,14 +595,13 @@ test('reading analysis runs parse, summary, and asset extraction as one action',
   assert.ok(payload.session.assets.length >= 1);
 });
 
-test('reading summary and chat can require agent runtime instead of saving fallback prose', async (t) => {
+test('reading summary and chat do not save generated prose when agent runtime is unavailable', async (t) => {
   const { service, store } = await createHarness({
     agentRuntime: {
       async checkAvailability() {
         return false;
       },
     },
-    requireAgentRuntime: true,
   });
   t.after(async () => {
     await store.close?.();
@@ -579,6 +618,8 @@ test('reading summary and chat can require agent runtime instead of saving fallb
   assert.equal(summary.session.summaryGeneratedBy, '');
   assert.equal(summary.session.summaryRuntimeUsed, false);
   assert.match(summary.session.summaryError, /agent runtime unavailable/i);
+  assert.equal(summary.session.summaryCards, null);
+  assert.equal(summary.session.summary, null);
 
   await assert.rejects(
     () => service.chat(session.id, { message: 'What is the main method?' }),
@@ -588,8 +629,33 @@ test('reading summary and chat can require agent runtime instead of saving fallb
   assert.equal(unchanged.chatMessages.length, 0);
 });
 
+test('reading summary rejects malformed agent output instead of filling fallback fields', async (t) => {
+  const { service, store } = await createHarness({
+    agentRuntime: createChatRuntime({ answer: 'This is not a summary schema.', citations: [] }),
+  });
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper(),
+    projectId: 'demo',
+  });
+  await service.parseSession(session.id);
+
+  const summary = await service.summarizeSession(session.id);
+
+  assert.equal(summary.session.summaryStatus, 'error');
+  assert.equal(summary.session.summaryGeneratedBy, '');
+  assert.equal(summary.session.summaryRuntimeUsed, true);
+  assert.match(summary.session.summaryError, /AI summary generation failed/i);
+  assert.equal(summary.session.summaryCards, null);
+  assert.equal(summary.session.summary, null);
+});
+
 test('reading chat stores turns with citations after parse', async (t) => {
-  const { service, store } = await createHarness();
+  const runtime = createChatRuntime();
+  const { service, store } = await createHarness({ agentRuntime: runtime });
   t.after(async () => {
     await store.close?.();
   });
@@ -606,28 +672,16 @@ test('reading chat stores turns with citations after parse', async (t) => {
   assert.equal(payload.messages.length, 2);
   assert.equal(payload.messages[0].role, 'user');
   assert.equal(payload.messages[1].role, 'assistant');
+  assert.equal(payload.messages[1].generatedBy, 'agent-runtime');
   assert.ok(payload.messages[1].citations.length >= 1);
   assert.equal(payload.session.chatMessages.length, 2);
-  assert.equal(payload.session.evidenceCoverage.lastRetrievalConfidence, payload.messages[1].retrieval.confidence);
-  assert.equal(payload.session.evidenceCoverage.lastRetrievalTopScore, payload.messages[1].retrieval.topScore);
   assert.equal(payload.session.evidenceCoverage.citedChatCount, 1);
 });
 
-test('reading chat refuses unsupported answers when retrieval has no evidence', async (t) => {
-  const runtime = {
-    async checkAvailability() {
-      return true;
-    },
-    async runJsonTask() {
-      return [{ role: 'assistant', content: '{"answer":"The paper evaluates Martian ocean chemistry.","citations":[]}' }];
-    },
-    parseJsonFromMessages() {
-      return {
-        answer: 'The paper evaluates Martian ocean chemistry.',
-        citations: [],
-      };
-    },
-  };
+test('reading chat sends only PDF location and the user question to the agent by default', async (t) => {
+  const runtime = createChatRuntime({
+    answer: '이 논문은 reranker 호출을 줄이기 위해 불확실성 기반 게이트를 사용합니다.',
+  });
   const { service, store } = await createHarness({ agentRuntime: runtime });
   t.after(async () => {
     await store.close?.();
@@ -639,28 +693,56 @@ test('reading chat refuses unsupported answers when retrieval has no evidence', 
   });
   await service.parseSession(session.id);
   const payload = await service.chat(session.id, {
+    message: '이 논문에 대해 알려줘',
+  });
+
+  assert.equal(payload.messages[1].role, 'assistant');
+  assert.equal(payload.messages[1].generatedBy, 'agent-runtime');
+  assert.match(payload.messages[1].text, /reranker 호출을 줄이기/);
+  assert.equal(runtime.calls.length, 1);
+  assert.match(runtime.calls[0].prompt, /PDF location:/);
+  assert.match(runtime.calls[0].prompt, /- pdfUrl: https:\/\/example\.org\/papers\/demo\.pdf/);
+  assert.match(runtime.calls[0].prompt, /- cachedPdfPath: data\/runtime\/reading\//);
+  assert.match(runtime.calls[0].prompt, /User question:\n이 논문에 대해 알려줘/);
+  assert.doesNotMatch(runtime.calls[0].prompt, /TLDR:/);
+  assert.doesNotMatch(runtime.calls[0].prompt, /Section summaries:/);
+  assert.doesNotMatch(runtime.calls[0].prompt, /Paper context:/);
+  assert.doesNotMatch(payload.messages[1].text, /근거를 충분히 찾지 못했습니다/);
+});
+
+test('reading chat does not block runtime answers with retrieval gates', async (t) => {
+  const runtime = createChatRuntime({
+    answer: 'The paper evaluates Martian ocean chemistry.',
+    citations: [],
+  });
+  const { service, store } = await createHarness({ agentRuntime: runtime });
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper(),
+    projectId: 'demo',
+  });
+  await service.parseSession(session.id);
+
+  const payload = await service.chat(session.id, {
     message: 'What does the paper conclude about Martian ocean chemistry?',
   });
 
   assert.equal(payload.messages[1].role, 'assistant');
-  assert.equal(payload.messages[1].generatedBy, 'fallback');
-  assert.equal(payload.messages[1].fallbackReason, 'no matching reading evidence');
+  assert.equal(payload.messages[1].generatedBy, 'agent-runtime');
   assert.equal(payload.messages[1].citations.length, 0);
-  assert.match(payload.messages[1].text, /근거를 충분히 찾지 못했습니다/);
-  assert.doesNotMatch(payload.messages[1].text, /Martian ocean chemistry/);
+  assert.equal('retrieval' in payload.messages[1], false);
+  assert.match(payload.messages[1].text, /Martian ocean chemistry/);
 });
 
-test('reading chat uses semantic scorer results when query terms do not overlap chunk text', async (t) => {
-  const retrievalScorer = {
-    provider: 'test-reranker',
-    async scoreChunks({ chunks }) {
-      return chunks.map((chunk) => ({
-        chunkId: chunk.id,
-        score: chunk.id === 'semantic-method' ? 14 : 0,
-      }));
-    },
-  };
-  const { rootDir, service, store } = await createHarness({ retrievalScorer });
+test('reading chat includes selected text in the agent prompt', async (t) => {
+  const runtime = createChatRuntime({
+    answer: '선택한 문장은 불확실성이 높을 때만 비싼 scoring을 호출한다는 뜻입니다.',
+    citations: [{ label: 'Selected PDF text', page: 2, quote: 'calibrated uncertainty gate', sectionId: 'selection' }],
+  });
+  const { service, store } = await createHarness({ agentRuntime: runtime });
   t.after(async () => {
     await store.close?.();
   });
@@ -669,164 +751,21 @@ test('reading chat uses semantic scorer results when query terms do not overlap 
     paper: buildDemoPaper(),
     projectId: 'demo',
   });
-  const parsed = await service.parseSession(session.id);
-  const artifactPath = path.join(rootDir, parsed.session.parsedArtifactPath);
-  const artifact = JSON.parse(await fs.readFile(artifactPath, 'utf8'));
-  artifact.chunks = [
-    {
-      id: 'metadata-note',
-      page: 1,
-      sectionId: 'abstract',
-      sectionLabel: 'Abstract',
-      terms: ['dataset', 'license', 'benchmark'],
-      text: 'The appendix lists dataset license notes and benchmark provenance.',
-    },
-    {
-      id: 'semantic-method',
-      page: 2,
-      sectionId: 'method',
-      sectionLabel: 'Protocol',
-      terms: ['adaptive', 'skipping', 'lowers', 'reranker', 'latency'],
-      text: 'Adaptive skipping lowers reranker latency by avoiding expensive scoring on easy examples.',
-    },
-  ];
-  await fs.writeFile(artifactPath, JSON.stringify(artifact, null, 2), 'utf8');
+  await service.parseSession(session.id);
 
   const payload = await service.chat(session.id, {
-    message: 'How does the system reduce expense?',
+    message: '이 선택한 문장 설명해줘',
+    selection: {
+      page: 2,
+      quote: 'The method keeps expensive scoring behind a calibrated uncertainty gate.',
+    },
   });
 
   assert.equal(payload.messages[1].role, 'assistant');
-  assert.notEqual(payload.messages[1].fallbackReason, 'no matching reading evidence');
-  assert.equal(payload.messages[1].citations[0].sectionId, 'method');
-  assert.equal(payload.messages[1].retrieval.mode, 'hybrid');
-  assert.equal(payload.messages[1].retrieval.scorer, 'test-reranker');
-  assert.equal(payload.messages[1].retrieval.confidence, 'high');
-  assert.equal(payload.messages[1].retrieval.lowConfidence, false);
-  assert.ok(payload.messages[1].retrieval.chunks.some((chunk) => chunk.chunkId === 'semantic-method' && chunk.semanticScore === 14));
-  assert.match(payload.messages[1].text, /Adaptive skipping lowers reranker latency/);
-});
-
-test('reading chat continues with lexical retrieval when configured scorer fails', async (t) => {
-  const retrievalScorer = {
-    provider: 'failing-reranker',
-    async scoreChunks() {
-      throw new Error('reranker unavailable');
-    },
-  };
-  const { rootDir, service, store } = await createHarness({ retrievalScorer });
-  t.after(async () => {
-    await store.close?.();
-  });
-
-  const session = await service.createSession({
-    paper: buildDemoPaper(),
-    projectId: 'demo',
-  });
-  const parsed = await service.parseSession(session.id);
-  const artifactPath = path.join(rootDir, parsed.session.parsedArtifactPath);
-  const artifact = JSON.parse(await fs.readFile(artifactPath, 'utf8'));
-  artifact.chunks = [
-    {
-      id: 'method-lexical',
-      page: 2,
-      sectionId: 'method',
-      sectionLabel: 'Method',
-      terms: ['adaptive', 'skipping', 'reranker', 'latency'],
-      text: 'Adaptive skipping lowers reranker latency by skipping expensive scoring on easy examples.',
-    },
-  ];
-  await fs.writeFile(artifactPath, JSON.stringify(artifact, null, 2), 'utf8');
-
-  const payload = await service.chat(session.id, {
-    message: 'How does adaptive skipping lower reranker latency?',
-  });
-
-  assert.equal(payload.messages[1].role, 'assistant');
-  assert.equal(payload.messages[1].retrieval.scorer, 'failing-reranker');
-  assert.equal(payload.messages[1].retrieval.chunks[0].semanticScore, 0);
-  assert.equal(payload.messages[1].citations[0].sectionId, 'method');
-  assert.match(payload.messages[1].text, /Adaptive skipping lowers reranker latency/);
-});
-
-test('reading chat rejects low-confidence lexical crumbs', async (t) => {
-  const { rootDir, service, store } = await createHarness();
-  t.after(async () => {
-    await store.close?.();
-  });
-
-  const session = await service.createSession({
-    paper: buildDemoPaper(),
-    projectId: 'demo',
-  });
-  const parsed = await service.parseSession(session.id);
-  const artifactPath = path.join(rootDir, parsed.session.parsedArtifactPath);
-  const artifact = JSON.parse(await fs.readFile(artifactPath, 'utf8'));
-  artifact.chunks = [
-    {
-      id: 'thin-match',
-      page: 1,
-      sectionId: 'background',
-      sectionLabel: 'Background',
-      terms: ['system'],
-      text: 'The system stores an appendix note.',
-    },
-  ];
-  await fs.writeFile(artifactPath, JSON.stringify(artifact, null, 2), 'utf8');
-
-  const payload = await service.chat(session.id, {
-    message: 'What does the system prove about calibration?',
-  });
-
-  assert.equal(payload.messages[1].generatedBy, 'fallback');
-  assert.equal(payload.messages[1].fallbackReason, 'no matching reading evidence');
-  assert.equal(payload.messages[1].citations.length, 0);
-  assert.equal(payload.messages[1].retrieval.confidence, 'none');
-  assert.equal(payload.messages[1].retrieval.lowConfidence, true);
-  assert.equal(payload.messages[1].retrieval.minEvidenceScore, CHAT_EVIDENCE_POLICY.minEvidenceScore);
-  assert.equal(payload.messages[1].retrieval.topScore < CHAT_EVIDENCE_POLICY.minEvidenceScore, true);
-});
-
-test('reading chat uses built-in semantic aliases when no scorer is configured', async (t) => {
-  const { rootDir, service, store } = await createHarness();
-  t.after(async () => {
-    await store.close?.();
-  });
-
-  const session = await service.createSession({
-    paper: buildDemoPaper(),
-    projectId: 'demo',
-  });
-  const parsed = await service.parseSession(session.id);
-  const artifactPath = path.join(rootDir, parsed.session.parsedArtifactPath);
-  const artifact = JSON.parse(await fs.readFile(artifactPath, 'utf8'));
-  artifact.chunks = [
-    {
-      id: 'metadata-note',
-      page: 1,
-      sectionId: 'abstract',
-      sectionLabel: 'Abstract',
-      terms: ['dataset', 'license', 'benchmark'],
-      text: 'The appendix lists dataset license notes and benchmark provenance.',
-    },
-    {
-      id: 'cost-method',
-      page: 2,
-      sectionId: 'method',
-      sectionLabel: 'Protocol',
-      terms: ['adaptive', 'skipping', 'lowers', 'reranker', 'latency'],
-      text: 'Adaptive skipping lowers reranker latency by avoiding expensive scoring on easy examples.',
-    },
-  ];
-  await fs.writeFile(artifactPath, JSON.stringify(artifact, null, 2), 'utf8');
-
-  const payload = await service.chat(session.id, {
-    message: 'How does the system reduce expense?',
-  });
-
-  assert.notEqual(payload.messages[1].fallbackReason, 'no matching reading evidence');
-  assert.equal(payload.messages[1].citations[0].sectionId, 'method');
-  assert.match(payload.messages[1].text, /Adaptive skipping lowers reranker latency/);
+  assert.equal(payload.messages[1].generatedBy, 'agent-runtime');
+  assert.equal(payload.messages[1].citations[0].sectionId, 'selection');
+  assert.match(runtime.calls[0].prompt, /Primary selected PDF text/);
+  assert.match(runtime.calls[0].prompt, /calibrated uncertainty gate/);
 });
 
 test('reading note CRUD persists inline note edits', async (t) => {

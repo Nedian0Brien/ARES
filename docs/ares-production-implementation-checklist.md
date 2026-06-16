@@ -127,12 +127,9 @@
 - [x] multi-page table 처리 기준을 추가한다.
   - 산출물: extraction rule 또는 known limitation marker
   - 검증: multi-page table sample test in `services/backend/tests/reading-sample-validator.test.mjs`
-- [x] retrieval scorer health validation을 배포 smoke에 연결한다.
-  - 산출물: scorer validation command in deploy/check script
-  - 검증: validation success/failure and smoke script test in `services/backend/tests/retrieval-scorer.test.mjs`
-- [x] unsupported answer policy를 강화한다.
-  - 산출물: confidence threshold contract, UI warning
-  - 검증: no-evidence chat threshold test in `services/backend/tests/reading-service.test.mjs`, UI warning contract in `services/backend/tests/search-reading-tab-contract.test.mjs`
+- [x] Reader chat prompt를 agent 기반 단순 계약으로 정리한다.
+  - 산출물: selected text, PDF location, user question prompt contract
+  - 검증: chat prompt contract in `services/backend/tests/reading-service.test.mjs`
 - [x] OCR cost/latency metric을 추가한다.
   - 산출물: OCR timing and page count telemetry
   - 검증: OCR fixture test in `services/backend/tests/reading-service.test.mjs`, UI telemetry contract in `services/backend/tests/search-reading-tab-contract.test.mjs`
@@ -238,4 +235,3 @@
 - `npm run smoke:worker-recovery`
 - `npm run validate:reading-corpus`
 - `node --test services/backend/tests/writing-tab-contract.test.mjs`
-- `ARES_RETRIEVAL_SCORER_URL=http://127.0.0.1:3137 npm run smoke:deploy` with a local HTTP scorer fixture.

@@ -63,7 +63,7 @@ async function createParsedReadingSession(request) {
   expect(parsed.ok()).toBeTruthy();
   const parsedPayload = await parsed.json();
   expect(parsedPayload.session.parseStatus).toBe('done');
-  expect(parsedPayload.session.notes.length).toBeGreaterThan(0);
+  expect(parsedPayload.session.notes).toHaveLength(0);
 
   return parsedPayload.session;
 }
@@ -166,8 +166,6 @@ test('Reader PDF navigation, selection note, and Lab handoff work together', asy
   await page.goto(route);
   await expect(page.locator('[data-reading-pdf-host="true"]')).toBeVisible();
   await expect(page.locator('[data-reading-pdf-page="1"]')).toBeVisible();
-  await expect(page.locator('.reading-note-card').first()).toBeVisible();
-  await expect(page.locator('.reading-pdf-annotation-marker').first()).toBeVisible();
 
   await page.locator('[data-action="set-reading-rail"][data-reading-rail="outline"]').click();
   const outlineJump = page.locator('.reading-outline-item[data-action="jump-reading-page"]').first();
@@ -202,11 +200,6 @@ test('Reader PDF navigation, selection note, and Lab handoff work together', asy
   await page.locator('.page-grid-item').first().click();
   await expect(page.locator('[data-reading-pdf-page="1"]')).toHaveClass(/is-targeted/);
 
-  const jumpButton = page.locator('.reading-note-card [data-action="jump-reading-page"]:not([disabled])').first();
-  const jumpPage = await jumpButton.getAttribute('data-reading-page');
-  await jumpButton.click();
-  await expect(page.locator(`[data-reading-pdf-page="${jumpPage}"]`)).toHaveClass(/is-targeted/);
-
   const textLayer = page.locator('.reading-pdf-text-layer span').first();
   await expect(textLayer).toBeVisible();
   await page.evaluate(() => {
@@ -234,6 +227,13 @@ test('Reader PDF navigation, selection note, and Lab handoff work together', asy
     const nextSession = (await response.json()).results.find((entry) => entry.id === session.id);
     return nextSession.notes.length;
   }).toBeGreaterThan(beforeNoteCount);
+  await expect(page.locator('.reading-note-card').first()).toBeVisible();
+  await expect(page.locator('.reading-pdf-annotation-marker').first()).toBeVisible();
+
+  const jumpButton = page.locator('.reading-note-card [data-action="jump-reading-page"]:not([disabled])').first();
+  const jumpPage = await jumpButton.getAttribute('data-reading-page');
+  await jumpButton.click();
+  await expect(page.locator(`[data-reading-pdf-page="${jumpPage}"]`)).toHaveClass(/is-targeted/);
 
   await page.locator('[data-action="set-reading-document-tab"][data-reading-document-tab="assets"]').click();
   await expect(page.locator('.reading-asset-card').first()).toBeVisible();

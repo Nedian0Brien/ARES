@@ -315,12 +315,13 @@ test('Reading asset detail can copy citations and create linked evidence', async
   assert.match(appJs, /type:\s*"readingAsset"/);
 });
 
-test('Reader chat marks assistant answers with no citations as insufficient evidence', async () => {
+test('Reader chat does not show redundant evidence failure badges', async () => {
   const readingJs = await readProjectFile('web/app/features/reading.js');
 
-  assert.match(readingJs, /message\.role === "assistant" && !message\.typing && !message\.cites\?\.length/);
-  assert.match(readingJs, /reading-no-evidence-pill/);
-  assert.match(readingJs, /Insufficient evidence/);
+  assert.doesNotMatch(readingJs, /reading-no-evidence-pill/);
+  assert.doesNotMatch(readingJs, /Insufficient evidence/);
+  assert.doesNotMatch(readingJs, /Weak evidence/);
+  assert.doesNotMatch(readingJs, /No evidence/);
 });
 
 test('Reader chat context label is user-facing instead of retrieval jargon', async () => {
@@ -331,45 +332,63 @@ test('Reader chat context label is user-facing instead of retrieval jargon', asy
   assert.doesNotMatch(readingJs, /Context: hybrid retrieval chunks/);
 });
 
-test('Reader chat exposes retrieval confidence telemetry', async () => {
+test('Reader chat protects Korean IME spacing while composing', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /readingChatImeState/);
+  assert.match(appJs, /compositionstart/);
+  assert.match(appJs, /compositionend/);
+  assert.match(appJs, /event\.code === "Space"/);
+  assert.match(appJs, /setRangeText\(" ", cursor, cursor, "end"\)/);
+  assert.match(appJs, /!readingChatImeActive\(\)/);
+});
+
+test('Reader note Ask AI sends the note quote as selected PDF text', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /if \(action === "ask-ai-from-note"\)/);
+  assert.match(appJs, /const noteSelection = note\.quote/);
+  assert.match(appJs, /lineCount: countReadingSelectionLines\(note\.quote\)/);
+  assert.match(appJs, /page: note\.page \|\| null/);
+  assert.match(appJs, /quote: note\.quote/);
+  assert.match(appJs, /sourceBounds: note\.sourceBounds \|\| null/);
+  assert.match(appJs, /selection: noteSelection/);
+});
+
+test('Reader chat keeps retrieval telemetry out of the conversation UI', async () => {
   const [readingJs, styles] = await Promise.all([
     readProjectFile('web/app/features/reading.js'),
     readProjectStyles(),
   ]);
 
-  assert.match(readingJs, /renderReadingRetrievalPill/);
-  assert.match(readingJs, /Weak evidence/);
-  assert.match(readingJs, /Evidence checked/);
+  assert.doesNotMatch(readingJs, /renderReadingRetrievalPill/);
+  assert.doesNotMatch(readingJs, /Evidence checked/);
   assert.doesNotMatch(readingJs, /Low confidence retrieval/);
   assert.doesNotMatch(readingJs, /Hybrid retrieval/);
-  assert.match(styles, /\.reading-retrieval-pill/);
-  assert.match(styles, /\.reading-retrieval-pill\.is-low/);
+  assert.doesNotMatch(styles, /\.reading-retrieval-pill/);
 });
 
-test('Reader retrieval scorer can be configured through server environment', async () => {
-  const [envExample, indexJs, readme, runtimeDoc, scorerJs] = await Promise.all([
+test('Reader chat is not wired to retrieval scorer configuration', async () => {
+  const [envExample, indexJs, packageJson, readme, runtimeDoc, readingModel, readingService] = await Promise.all([
     readProjectFile('.env.example'),
     readProjectFile('services/backend/index.mjs'),
+    readProjectFile('package.json'),
     readProjectFile('README.md'),
     readProjectFile('docs/backend-runtime-overview.md'),
-    readProjectFile('services/backend/lib/retrieval-scorer.mjs'),
+    readProjectFile('services/backend/lib/reading-model.mjs'),
+    readProjectFile('services/backend/lib/reading-service.mjs'),
   ]);
 
-  assert.match(indexJs, /createConfiguredRetrievalScorer/);
-  assert.match(indexJs, /retrievalScorer,\s*\n\s*rootDir:/);
-  assert.match(envExample, /ARES_RETRIEVAL_SCORER_PROVIDER=local-cross-encoder/);
-  assert.match(envExample, /ARES_RETRIEVAL_SCORER_URL=/);
-  assert.match(envExample, /ARES_RETRIEVAL_SCORER_API_KEY=/);
-  assert.match(envExample, /ARES_RETRIEVAL_SCORER_TIMEOUT_MS=2500/);
-  assert.match(readme, /local-cross-encoder/);
-  assert.match(readme, /validate-retrieval-scorer\.mjs/);
-  assert.match(readme, /npm run smoke:retrieval-scorer/);
-  assert.match(runtimeDoc, /ARES_RETRIEVAL_SCORER_PROVIDER/);
-  assert.match(runtimeDoc, /npm run smoke:deploy/);
-  assert.match(scorerJs, /ARES_RETRIEVAL_SCORER_URL/);
-  assert.match(scorerJs, /ARES_RETRIEVAL_SCORER_API_KEY/);
-  assert.match(scorerJs, /ARES_RETRIEVAL_SCORER_TIMEOUT_MS/);
-  assert.match(scorerJs, /scoreChunks/);
+  assert.doesNotMatch(indexJs, /createConfiguredRetrievalScorer/);
+  assert.doesNotMatch(indexJs, /retrievalScorer,\s*\n\s*rootDir:/);
+  assert.doesNotMatch(envExample, /ARES_RETRIEVAL_SCORER/);
+  assert.doesNotMatch(packageJson, /retrieval-scorer|smoke:retrieval-scorer|validate-retrieval-scorer/);
+  assert.doesNotMatch(readme, /retrieval scorer|local-cross-encoder|validate-retrieval-scorer|smoke:retrieval-scorer/i);
+  assert.doesNotMatch(runtimeDoc, /ARES_RETRIEVAL_SCORER|retrieval scorer|smoke:retrieval-scorer/i);
+  assert.doesNotMatch(readingModel, /lastRetrieval|retrievalReady|lowConfidenceChatCount/);
+  assert.doesNotMatch(readingService, /buildChatContextChunks|Paper context:|lastRetrieval|retrievalReady|lowConfidenceChatCount/);
+  await assert.rejects(readProjectFile('services/backend/lib/retrieval-scorer.mjs'), /ENOENT/);
+  await assert.rejects(readProjectFile('scripts/validate-retrieval-scorer.mjs'), /ENOENT/);
 });
 
 test('Reader summary exposes evidence coverage report', async () => {
@@ -380,7 +399,8 @@ test('Reader summary exposes evidence coverage report', async () => {
 
   assert.match(readingJs, /evidenceCoverage/);
   assert.match(readingJs, /reading-evidence-coverage/);
-  assert.match(readingJs, /Evidence search/);
+  assert.doesNotMatch(readingJs, /Evidence search/);
+  assert.doesNotMatch(readingJs, /Latest answer/);
   assert.match(readingJs, /Located in source/);
   assert.match(styles, /\.reading-evidence-coverage/);
 });

@@ -1837,9 +1837,7 @@ function readingGenerationProvenanceLine(source, kind = "summary") {
   }
 
   const label =
-    generatedBy === "fallback"
-      ? "needs review"
-      : generatedBy === "external-ocr"
+    generatedBy === "external-ocr"
         ? "imported text"
         : generatedBy === "built-in-ocr"
           ? "PDF text"
@@ -3907,6 +3905,22 @@ const {
   refreshReadingStageUI,
 } = readingStagePatchController;
 
+function refreshReadingStageIfPatchFails(...patchers) {
+  const patched = patchers.map((patcher) => patcher()).every(Boolean);
+  if (!patched) {
+    refreshReadingStageUI();
+  }
+  return patched;
+}
+
+function scrollReadingPdfPageOrHydrate(page) {
+  window.requestAnimationFrame(() => {
+    if (!readingPdfController.scrollToPage(page)) {
+      scheduleReadingHydration();
+    }
+  });
+}
+
 function renderLabStage(project) {
   const stage = stageById(state.activeStage);
   const session = selectedReadingSession();
@@ -4157,7 +4171,7 @@ function renderInsightStage(project) {
       ? entry.evidenceLinkIds
       : [entry.evidenceLinkId].filter(Boolean),
     page: entry.page || "",
-    text: entry.quote || entry.text || entry.body || entry.memo || "No evidence text to show",
+    text: entry.quote || entry.text || entry.body || entry.memo || "No source text to show",
   }));
   const primaryCard = evaluatedInsightCards[0] || null;
   const primaryClaim = primaryCard?.claim || (hasEvidence ? evidence[0]?.text : project?.focus || "Select evidence to draft a claim");
@@ -5582,9 +5596,7 @@ document.addEventListener("click", async (event) => {
       state.readingPdfTargetPage = null;
       state.readingPdfSourceHighlight = null;
     }
-    if (!patchReadingDocumentPaneOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingDocumentPaneOnly);
     return;
   }
 
@@ -5654,11 +5666,7 @@ document.addEventListener("click", async (event) => {
           : null;
       state.readingPdfDockPanel = "";
       refreshReadingStageUI();
-      window.requestAnimationFrame(() => {
-        if (!readingPdfController.scrollToPage(page)) {
-          scheduleReadingHydration();
-        }
-      });
+      scrollReadingPdfPageOrHydrate(page);
     }
     return;
   }
@@ -5666,9 +5674,7 @@ document.addEventListener("click", async (event) => {
   if (action === "toggle-reading-pdf-dock-panel") {
     const panel = String(trigger.dataset.readingPdfDockPanel || "");
     state.readingPdfDockPanel = state.readingPdfDockPanel === panel ? "" : panel;
-    if (!patchReadingPdfSelectionBarOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly);
     return;
   }
 
@@ -5678,14 +5684,8 @@ document.addEventListener("click", async (event) => {
       state.readingPdfTargetPage = page;
       state.readingPdfSourceHighlight = null;
       state.readingPdfDockPanel = "";
-      if (!patchReadingPdfSelectionBarOnly()) {
-        refreshReadingStageUI();
-      }
-      window.requestAnimationFrame(() => {
-        if (!readingPdfController.scrollToPage(page)) {
-          scheduleReadingHydration();
-        }
-      });
+      refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly);
+      scrollReadingPdfPageOrHydrate(page);
     }
     return;
   }
@@ -5696,9 +5696,7 @@ document.addEventListener("click", async (event) => {
       const currentZoom = Number(state.readingPdfZoom) || 100;
       state.readingPdfZoom = Math.min(200, Math.max(50, currentZoom + delta));
       state.readingPdfDockPanel = "";
-      if (!patchReadingPdfSelectionBarOnly()) {
-        refreshReadingStageUI();
-      }
+      refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly);
       scheduleReadingHydration();
     }
     return;
@@ -5707,9 +5705,7 @@ document.addEventListener("click", async (event) => {
   if (action === "fit-reading-pdf-zoom") {
     state.readingPdfZoom = 100;
     state.readingPdfDockPanel = "";
-    if (!patchReadingPdfSelectionBarOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly);
     scheduleReadingHydration();
     return;
   }
@@ -5744,9 +5740,7 @@ document.addEventListener("click", async (event) => {
       } catch (error) {
         state.error = error.message;
       }
-      if (!patchReadingPdfSelectionBarOnly()) {
-        refreshReadingStageUI();
-      }
+      refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly);
     }
     return;
   }
@@ -5776,11 +5770,7 @@ document.addEventListener("click", async (event) => {
       } catch (error) {
         state.error = error.message;
       }
-      const patchedSelection = patchReadingPdfSelectionBarOnly();
-      const patchedWorkbench = patchReadingWorkbenchPaneOnly();
-      if (!patchedSelection || !patchedWorkbench) {
-        refreshReadingStageUI();
-      }
+      refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly, patchReadingWorkbenchPaneOnly);
       scheduleReadingHydration();
     }
     return;
@@ -5789,11 +5779,7 @@ document.addEventListener("click", async (event) => {
   if (action === "open-reading-note-linker") {
     state.readingWorkbenchTab = "notes";
     state.readingWorkbenchCollapsed = false;
-    const patchedDock = patchReadingPdfSelectionBarOnly();
-    const patchedWorkbench = patchReadingWorkbenchPaneOnly();
-    if (!patchedDock || !patchedWorkbench) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly, patchReadingWorkbenchPaneOnly);
     scheduleReadingHydration();
     return;
   }
@@ -5806,9 +5792,7 @@ document.addEventListener("click", async (event) => {
 
     state.readingWorkbenchTab = nextWorkbenchTab;
     state.readingWorkbenchCollapsed = false;
-    if (!patchReadingWorkbenchPaneOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingWorkbenchPaneOnly);
     scheduleReadingHydration();
     return;
   }
@@ -5831,25 +5815,19 @@ document.addEventListener("click", async (event) => {
   if (action === "set-reading-assets-filter") {
     state.readingAssetsFilter = trigger.dataset.readingAssetsFilter || "all";
     state.readingAssetDetailId = "";
-    if (!patchReadingDocumentPaneOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingDocumentPaneOnly);
     return;
   }
 
   if (action === "open-reading-asset-detail") {
     state.readingAssetDetailId = trigger.dataset.readingAssetId || "";
-    if (!patchReadingDocumentPaneOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingDocumentPaneOnly);
     return;
   }
 
   if (action === "close-reading-asset-detail") {
     state.readingAssetDetailId = "";
-    if (!patchReadingDocumentPaneOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingDocumentPaneOnly);
     return;
   }
 
@@ -6212,6 +6190,14 @@ document.addEventListener("click", async (event) => {
     const noteId = trigger.dataset.noteId || "";
     const note = Array.isArray(currentSession?.notes) ? currentSession.notes.find((entry) => entry.id === noteId) : null;
     if (currentSession?.id && noteId && note) {
+      const noteSelection = note.quote
+        ? {
+            lineCount: countReadingSelectionLines(note.quote),
+            page: note.page || null,
+            quote: note.quote,
+            sourceBounds: note.sourceBounds || null,
+          }
+        : null;
       state.readingWorkbenchTab = "chat";
       try {
         await runReadingRequest("chat", currentSession.id, () =>
@@ -6222,6 +6208,7 @@ document.addEventListener("click", async (event) => {
                 ? `이 인용이 의미하는 핵심 포인트와 후속 검증 포인트를 설명해줘.\n\n"${note.quote}"`
                 : "이 노트를 바탕으로 핵심 포인트를 설명해줘.",
               noteId,
+              selection: noteSelection,
             }),
           }),
         );
@@ -6590,6 +6577,40 @@ document.addEventListener("mouseup", () => {
 
 let readingPdfSelectionClearTimer = null;
 let readingPdfSelectionPreserveUntil = 0;
+const readingChatImeState = {
+  composing: false,
+  pendingSpaceTarget: null,
+  recentlyEndedUntil: 0,
+};
+
+function isReadingChatTextarea(target) {
+  return Boolean(target?.matches?.('textarea[name="readingChatMessage"]'));
+}
+
+function readingChatImeActive() {
+  return readingChatImeState.composing || Date.now() < readingChatImeState.recentlyEndedUntil;
+}
+
+function insertReadingChatSpaceIfMissing(textarea) {
+  if (!textarea || textarea !== readingChatImeState.pendingSpaceTarget) {
+    return;
+  }
+
+  readingChatImeState.pendingSpaceTarget = null;
+  const cursor = typeof textarea.selectionStart === "number" ? textarea.selectionStart : textarea.value.length;
+  if (/\s$/.test(textarea.value.slice(0, cursor))) {
+    return;
+  }
+
+  textarea.setRangeText(" ", cursor, cursor, "end");
+  textarea.dispatchEvent(
+    new InputEvent("input", {
+      bubbles: true,
+      data: " ",
+      inputType: "insertText",
+    }),
+  );
+}
 
 function clearReadingPdfSelectionFromInteraction({ clearNativeSelection = false } = {}) {
   if (!state.readingPdfSelection) {
@@ -6612,9 +6633,7 @@ function collapseReadingPdfDockSelectionFromNativeClear() {
   }
 
   state.readingPdfDockSelectionActive = false;
-  if (!patchReadingPdfSelectionBarOnly()) {
-    refreshReadingStageUI();
-  }
+  refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly);
   return true;
 }
 
@@ -6665,16 +6684,45 @@ document.addEventListener("mousedown", (event) => {
   clearReadingPdfSelectionFromInteraction({ clearNativeSelection: true });
 });
 
+document.addEventListener("compositionstart", (event) => {
+  if (!isReadingChatTextarea(event.target)) {
+    return;
+  }
+
+  readingChatImeState.composing = true;
+  readingChatImeState.recentlyEndedUntil = 0;
+});
+
+document.addEventListener("compositionend", (event) => {
+  if (!isReadingChatTextarea(event.target)) {
+    return;
+  }
+
+  readingChatImeState.composing = false;
+  readingChatImeState.recentlyEndedUntil = Date.now() + 120;
+  window.setTimeout(() => insertReadingChatSpaceIfMissing(event.target), 0);
+});
+
 document.addEventListener("keydown", async (event) => {
   if (event.key === "Escape") {
     clearReadingPdfSelectionFromInteraction({ clearNativeSelection: true });
   }
 
   if (
+    isReadingChatTextarea(event.target) &&
+    (event.key === " " || event.key === "Spacebar" || event.code === "Space") &&
+    (event.isComposing || readingChatImeState.composing)
+  ) {
+    readingChatImeState.pendingSpaceTarget = event.target;
+    return;
+  }
+
+  if (
     event.key === "Enter" &&
     !event.shiftKey &&
     !event.isComposing &&
-    event.target?.matches?.('textarea[name="readingChatMessage"]')
+    !readingChatImeActive() &&
+    isReadingChatTextarea(event.target)
   ) {
     const form = event.target.closest('[data-action="submit-reading-chat-form"]');
     if (form) {
@@ -6819,9 +6867,7 @@ document.addEventListener("submit", async (event) => {
     if (textarea) {
       textarea.value = "";
     }
-    if (!patchReadingWorkbenchPaneOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingWorkbenchPaneOnly);
     window.requestAnimationFrame(scrollReadingChatToBottom);
 
     try {
@@ -6840,9 +6886,7 @@ document.addEventListener("submit", async (event) => {
       state.readingOptimisticChatMessages = state.readingOptimisticChatMessages.filter(
         (entry) => entry.sessionId !== currentSession.id,
       );
-      if (!patchReadingWorkbenchPaneOnly()) {
-        refreshReadingStageUI();
-      }
+      refreshReadingStageIfPatchFails(patchReadingWorkbenchPaneOnly);
       window.requestAnimationFrame(scrollReadingChatToBottom);
     }
     return;
@@ -6901,9 +6945,7 @@ document.addEventListener("input", (event) => {
     if (state.readingPdfDockPanel !== "search") {
       state.readingPdfDockPanel = "search";
     }
-    if (!patchReadingPdfSelectionBarOnly()) {
-      refreshReadingStageUI();
-    }
+    refreshReadingStageIfPatchFails(patchReadingPdfSelectionBarOnly);
     const searchInput = document.querySelector('[name="readingPdfSearchQuery"]');
     searchInput?.focus();
     return;

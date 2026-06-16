@@ -179,16 +179,6 @@ OpenAlex 연동:
 - `.env`에 `OPENALEX_API_KEY`를 넣으면 live 검색을 시도한다.
 - 키가 없거나 네트워크가 막힌 환경에서는 seed fallback 결과가 표시된다.
 
-Reader retrieval scorer:
-
-- 운영 기본 계약은 `ARES_RETRIEVAL_SCORER_PROVIDER=local-cross-encoder`와 HTTP scorer endpoint다.
-- `.env`에 `ARES_RETRIEVAL_SCORER_URL`, 필요 시 `ARES_RETRIEVAL_SCORER_API_KEY`, `ARES_RETRIEVAL_SCORER_TIMEOUT_MS=2500`을 설정한다.
-- endpoint는 `{ chunks, query, queryTerms, selection, session }` JSON을 받아 `scores` 또는 `results` 배열을 반환해야 한다.
-- 배포 전 `npm run smoke:retrieval-scorer`로 expected top chunk와 score threshold를 확인한다.
-- 해당 smoke script는 `scripts/validate-retrieval-scorer.mjs --min-top-score 0.8`을 실행한다.
-- 배포 smoke는 `npm run smoke:deploy`에서 retrieval scorer health validation을 포함한다.
-- scorer가 없거나 실패하면 Reader chat은 lexical/semantic fallback과 low-confidence telemetry를 사용한다.
-
 Reader OCR:
 
 - text layer가 없는 PDF는 `tesseract.js` 기반 내장 OCR을 시도한다.
