@@ -1084,13 +1084,13 @@ body.reading-home-resize-active {
 }
 
 .reading-analysis-button.is-progress::before {
-  animation: reading-analysis-progress 1.25s ease-in-out infinite;
-  background: color-mix(in srgb, var(--read) 34%, transparent);
+  background: color-mix(in srgb, var(--read) 42%, transparent);
   border-radius: inherit;
   content: "";
-  inset: 0 auto 0 -42%;
+  inset: 0 auto 0 0;
   position: absolute;
-  width: 46%;
+  transition: width 180ms ease;
+  width: var(--reading-analysis-progress, 0%);
 }
 
 .reading-analysis-button.is-progress .reading-analysis-button-label {
@@ -1098,16 +1098,13 @@ body.reading-home-resize-active {
   font-weight: 550;
 }
 
-@keyframes reading-analysis-progress {
-  0% {
-    transform: translateX(0);
-  }
-  55% {
-    transform: translateX(205%);
-  }
-  100% {
-    transform: translateX(310%);
-  }
+.reading-analysis-button-percent {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin-left: 6px;
+  position: relative;
+  z-index: 1;
 }
 
 .reading-context-trigger[aria-expanded="true"] {

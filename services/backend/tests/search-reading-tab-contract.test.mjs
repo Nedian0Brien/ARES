@@ -408,10 +408,16 @@ test('Reader exposes one paper analysis action instead of separate parse summary
   assert.match(readingJs, /data-action="reading-analyze-session"/);
   assert.match(readingJs, /renderReadingAnalyzeButton/);
   assert.match(readingJs, /reading-analysis-button/);
-  assert.match(appJs, /readingSessionApiPath\(currentSession\.id, "analyze"\)/);
+  assert.match(readingJs, /readingRequestProgress/);
+  assert.match(readingJs, /reading-analysis-button-percent/);
+  assert.match(appJs, /setReadingRequestProgress/);
+  assert.match(appJs, /path: "analyze"/);
+  assert.match(appJs, /readingSessionApiPath\(currentSession\.id, step\.path\)/);
+  assert.match(appJs, /nextSession\?\.parseStatus !== "done"/);
   assert.match(readingRoutesJs, /\/analyze/);
   assert.match(styles, /\.reading-analysis-button\.is-progress/);
-  assert.match(styles, /@keyframes reading-analysis-progress/);
+  assert.match(styles, /--reading-analysis-progress/);
+  assert.doesNotMatch(styles, /@keyframes reading-analysis-progress/);
   assert.doesNotMatch(readingJs, /data-action="reading-summarize-session"/);
   assert.doesNotMatch(readingJs, /data-action="reading-extract-assets"/);
 });

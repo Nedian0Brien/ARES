@@ -921,6 +921,18 @@ function clearReadingRequest() {
   state.readingRequest = null;
 }
 
+function setReadingRequestProgress(kind, sessionId, progress = {}) {
+  state.readingRequest = {
+    kind,
+    progress: {
+      completed: Math.max(0, Number(progress.completed) || 0),
+      total: Math.max(1, Number(progress.total) || 1),
+    },
+    sessionId,
+  };
+  refreshReadingStageUI();
+}
+
 function readingSessionApiPath(sessionId, suffix = "") {
   const tail = suffix ? `/${suffix.replace(/^\/+/, "")}` : "";
   return `api/reading-sessions/${encodeURIComponent(sessionId)}${tail}`;
@@ -5935,16 +5947,48 @@ document.addEventListener("click", async (event) => {
         currentSession.summaryStatus === "done" &&
         Array.isArray(currentSession.assets) &&
         currentSession.assets.length > 0;
+      const analysisSteps = [
+        {
+          path: "parse",
+          shouldRun: refresh || currentSession.parseStatus !== "done" || !currentSession.parsedArtifactPath,
+        },
+        {
+          path: "summarize",
+          shouldRun: refresh || currentSession.summaryStatus !== "done",
+        },
+        {
+          path: "extract-assets",
+          shouldRun: refresh || !Array.isArray(currentSession.assets) || currentSession.assets.length === 0,
+        },
+      ].filter((step) => step.shouldRun);
+      const steps = analysisSteps.length ? analysisSteps : [{ path: "analyze", shouldRun: true }];
+      let completed = 0;
       try {
-        await runReadingRequest("analyze", currentSession.id, () =>
-          api(readingSessionApiPath(currentSession.id, "analyze"), {
+        setReadingRequestProgress("analyze", currentSession.id, { completed, total: steps.length });
+        for (const step of steps) {
+          const payload = await api(readingSessionApiPath(currentSession.id, step.path), {
             method: "POST",
-            body: JSON.stringify({ refresh }),
-          }),
-        );
+            body: JSON.stringify(step.path === "analyze" ? { refresh } : {}),
+          });
+          const nextSession = payload?.readingSession || payload?.session || null;
+          if (nextSession?.id) {
+            syncReadingSession(nextSession);
+          }
+          if (step.path === "parse" && nextSession?.parseStatus !== "done") {
+            throw new Error(nextSession?.parseError || "Analysis could not read this paper.");
+          }
+          if (step.path === "summarize" && nextSession?.summaryStatus === "error") {
+            throw new Error(nextSession?.summaryError || "Summary generation failed.");
+          }
+          completed += 1;
+          setReadingRequestProgress("analyze", currentSession.id, { completed, total: steps.length });
+        }
         await loadProjects();
       } catch (error) {
         state.error = error.message;
+      } finally {
+        clearReadingRequest();
+        refreshReadingStageUI();
       }
     }
     return;
