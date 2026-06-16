@@ -397,6 +397,20 @@ test('Reader summary renders the generated long-form paper summary', async () =>
   assert.match(styles, /\.reading-full-summary/);
 });
 
+test('Reader exposes one paper analysis action instead of separate parse summary asset buttons', async () => {
+  const [appJs, readingJs, readingRoutesJs] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/app/features/reading.js'),
+    readProjectFile('services/backend/routes/reading-routes.mjs'),
+  ]);
+
+  assert.match(readingJs, /data-action="reading-analyze-session"/);
+  assert.match(appJs, /readingSessionApiPath\(currentSession\.id, "analyze"\)/);
+  assert.match(readingRoutesJs, /\/analyze/);
+  assert.doesNotMatch(readingJs, /data-action="reading-summarize-session"/);
+  assert.doesNotMatch(readingJs, /data-action="reading-extract-assets"/);
+});
+
 test('Reader summary and note export preserve generation provenance', async () => {
   const [appJs, readingJs] = await Promise.all([
     readProjectFile('web/app.js'),

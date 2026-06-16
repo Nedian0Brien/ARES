@@ -535,6 +535,26 @@ test('reading summarize enforces parse prerequisite and persists summary cards a
   assert.ok(payload.session.summaryCards.keyPoints.length >= 2);
 });
 
+test('reading analysis runs parse, summary, and asset extraction as one action', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper(),
+    projectId: 'demo',
+  });
+
+  const payload = await service.analyzeSession(session.id);
+
+  assert.equal(payload.session.parseStatus, 'done');
+  assert.equal(payload.session.summaryStatus, 'done');
+  assert.ok(payload.session.parsedArtifactPath);
+  assert.ok(payload.session.summaryCards.tldr);
+  assert.ok(payload.session.assets.length >= 1);
+});
+
 test('reading summary and chat can require agent runtime instead of saving fallback prose', async (t) => {
   const { service, store } = await createHarness({
     agentRuntime: {

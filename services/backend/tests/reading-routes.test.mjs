@@ -216,6 +216,51 @@ test('reading routes deliver binary PDF, enforce summarize prerequisite, and par
   assert.ok(parsed.session.assets.length >= 1);
 });
 
+test('reading routes expose the combined analyze action', async (t) => {
+  const dataRootDir = await createDataRoot();
+  const server = await startServer(dataRootDir);
+  t.after(async () => {
+    await server.close();
+  });
+
+  const createResponse = await fetch(new URL('/api/projects/demo/reading-sessions', server.url), {
+    body: JSON.stringify({ paper: buildDemoPaper() }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const created = await createResponse.json();
+  const sessionId = created.readingSession.id;
+
+  const importResponse = await fetch(new URL(`/api/reading-sessions/${sessionId}/import-text`, server.url), {
+    body: JSON.stringify({
+      sourceLabel: 'Manual OCR text',
+      text: [
+        'Abstract',
+        'Manual OCR text prepares a parsed reading session.',
+        'Method',
+        'The system checks one combined analyze action after import.',
+        'Figure 1: Combined analysis pipeline.',
+      ].join('\n'),
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  assert.equal(importResponse.status, 200);
+
+  const analyzeResponse = await fetch(new URL(`/api/reading-sessions/${sessionId}/analyze`, server.url), {
+    body: JSON.stringify({}),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const analyzed = await analyzeResponse.json();
+
+  assert.equal(analyzeResponse.status, 200);
+  assert.equal(analyzed.session.parseStatus, 'done');
+  assert.equal(analyzed.session.summaryStatus, 'done');
+  assert.ok(analyzed.session.parsedArtifactPath);
+  assert.ok(analyzed.session.assets.length >= 1);
+});
+
 test('reading routes import external OCR text for parse recovery', async (t) => {
   const dataRootDir = await createDataRoot();
   const server = await startServer(dataRootDir);

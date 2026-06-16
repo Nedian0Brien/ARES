@@ -5926,6 +5926,30 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "reading-analyze-session") {
+    const currentSession = selectedReadingSession();
+    if (currentSession?.id) {
+      state.readingContextMenuOpen = false;
+      const refresh =
+        currentSession.parseStatus === "done" &&
+        currentSession.summaryStatus === "done" &&
+        Array.isArray(currentSession.assets) &&
+        currentSession.assets.length > 0;
+      try {
+        await runReadingRequest("analyze", currentSession.id, () =>
+          api(readingSessionApiPath(currentSession.id, "analyze"), {
+            method: "POST",
+            body: JSON.stringify({ refresh }),
+          }),
+        );
+        await loadProjects();
+      } catch (error) {
+        state.error = error.message;
+      }
+    }
+    return;
+  }
+
   if (action === "reading-parse-session") {
     const currentSession = selectedReadingSession();
     if (currentSession?.id) {

@@ -1658,10 +1658,7 @@ export function createReadingService({
 
   function scheduleUploadedSessionAnalysis(sessionId) {
     void (async () => {
-      const parsed = await serviceApi.parseSession(sessionId);
-      if (parsed.session?.parseStatus === 'done') {
-        await serviceApi.summarizeSession(sessionId);
-      }
+      await serviceApi.analyzeSession(sessionId);
     })().catch(async (error) => {
       await updateSession(sessionId, {
         parseError: error instanceof Error ? error.message : String(error),
@@ -2423,6 +2420,29 @@ Rules:
         },
         tablePages: [],
       });
+    },
+
+    async analyzeSession(sessionId, { refresh = false } = {}) {
+      let payload = { session: await getSessionOrThrow(sessionId) };
+
+      if (refresh || payload.session.parseStatus !== 'done' || !payload.session.parsedArtifactPath) {
+        payload = await serviceApi.parseSession(sessionId);
+      }
+
+      if (payload.session.parseStatus !== 'done' || !payload.session.parsedArtifactPath) {
+        return payload;
+      }
+
+      if (refresh || payload.session.summaryStatus !== 'done') {
+        payload = await serviceApi.summarizeSession(sessionId);
+      }
+
+      const current = await getSessionOrThrow(sessionId);
+      if (refresh || !current.assets.length) {
+        return serviceApi.extractAssets(sessionId);
+      }
+
+      return { session: current };
     },
 
     async summarizeSession(sessionId) {

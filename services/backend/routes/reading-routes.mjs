@@ -109,6 +109,25 @@ export function createReadingRoutes({
       return true;
     }
 
+    if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/analyze$/.test(requestPath)) {
+      const sessionId = parseReadingSessionId(requestPath);
+      try {
+        const session = store.getReadingSession(sessionId);
+        if (!session) {
+          notFound(response);
+          return true;
+        }
+        if (!requireProjectAccess(request, response, session.projectId, 'write')) {
+          return true;
+        }
+        const body = await readJsonBody(request);
+        json(response, 200, await readingService.analyzeSession(sessionId, body));
+      } catch (error) {
+        sendError(response, error, 409);
+      }
+      return true;
+    }
+
     if (request.method === 'POST' && /^\/api\/reading-sessions\/[^/]+\/import-text$/.test(requestPath)) {
       const sessionId = parseReadingSessionId(requestPath);
       const body = await readJsonBody(request);
