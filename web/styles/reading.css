@@ -1054,6 +1054,62 @@ body.reading-home-resize-active {
   position: relative;
 }
 
+.reading-analysis-button {
+  min-height: 32px;
+  min-width: 132px;
+  overflow: hidden;
+  position: relative;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    border-radius 180ms ease,
+    color 160ms ease;
+}
+
+.reading-analysis-button > svg,
+.reading-analysis-button-label {
+  position: relative;
+  z-index: 1;
+}
+
+.reading-analysis-button.is-progress {
+  background: var(--s3) !important;
+  border: 1px solid var(--b1) !important;
+  border-radius: 999px !important;
+  box-shadow: inset 0 0 0 1px rgba(10, 10, 11, 0.02);
+  color: var(--tx) !important;
+  cursor: progress;
+  justify-content: center;
+  opacity: 1 !important;
+}
+
+.reading-analysis-button.is-progress::before {
+  animation: reading-analysis-progress 1.25s ease-in-out infinite;
+  background: color-mix(in srgb, var(--read) 34%, transparent);
+  border-radius: inherit;
+  content: "";
+  inset: 0 auto 0 -42%;
+  position: absolute;
+  width: 46%;
+}
+
+.reading-analysis-button.is-progress .reading-analysis-button-label {
+  color: var(--tx);
+  font-weight: 550;
+}
+
+@keyframes reading-analysis-progress {
+  0% {
+    transform: translateX(0);
+  }
+  55% {
+    transform: translateX(205%);
+  }
+  100% {
+    transform: translateX(310%);
+  }
+}
+
 .reading-context-trigger[aria-expanded="true"] {
   background: var(--s2);
   color: var(--tx);

@@ -378,6 +378,37 @@ export function createReadingFeature({
       </section>
     `;
   }
+
+  function renderReadingAnalyzeButton({
+    busy = false,
+    complete = false,
+    label = "Analyze paper",
+    variant = "primary",
+  } = {}) {
+    const baseClass = variant === "secondary" ? "btn-s" : "btn-p";
+    const classes = [
+      baseClass,
+      "reading-analysis-button",
+      busy ? "is-progress" : "",
+      complete && !busy ? "is-complete" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const iconName = complete && !busy ? "check" : "sparkles";
+    const iconColor = variant === "primary" && !complete ? "#fff" : "currentColor";
+
+    return `
+      <button
+        type="button"
+        class="${classes}"
+        data-action="reading-analyze-session"
+        ${busy ? 'disabled aria-busy="true"' : ""}
+      >
+        ${busy ? "" : icon(iconName, { size: 13, color: iconColor })}
+        <span class="reading-analysis-button-label">${busy ? "Analyzing..." : escapeHtml(label)}</span>
+      </button>
+    `;
+  }
   
   function deriveReadingNotes(session) {
     const notes = Array.isArray(session?.notes) ? session.notes : [];
@@ -1475,10 +1506,7 @@ export function createReadingFeature({
                   : "The paper text was parsed, but the summary did not finish. Try again."
               }
             </div>
-            <button type="button" class="btn-p" data-action="reading-analyze-session" ${analyzeBusy ? "disabled" : ""}>
-              ${icon("sparkles", { size: 13, color: "#fff" })}
-              <span>${analyzeBusy ? "Analyzing..." : "Run analysis"}</span>
-            </button>
+            ${renderReadingAnalyzeButton({ busy: analyzeBusy, label: "Run analysis" })}
           </div>
         `
       : `
@@ -1486,10 +1514,7 @@ export function createReadingFeature({
               <div class="reading-empty-icon">${icon("sparkles", { size: 24, color: TOKENS.read })}</div>
               <div class="reading-empty-title">No summary</div>
             <div class="reading-empty-copy">Run analysis to prepare the paper summary.</div>
-              <button type="button" class="btn-p" data-action="reading-analyze-session" ${analyzeBusy ? "disabled" : ""}>
-                ${icon("sparkles", { size: 13, color: "#fff" })}
-                <span>${analyzeBusy ? "Analyzing..." : "Analyze paper"}</span>
-            </button>
+              ${renderReadingAnalyzeButton({ busy: analyzeBusy })}
           </div>
         `;
 
@@ -1773,10 +1798,7 @@ export function createReadingFeature({
                         ${renderTextImportForm()}
                       </div>
                       <div class="reading-pdf-unsupported-actions">
-                        <button type="button" class="btn-p" data-action="reading-analyze-session" ${analyzeBusy ? "disabled" : ""}>
-                          ${icon("sparkles", { size: 13, color: "#fff" })}
-                          <span>${analyzeBusy ? "Analyzing..." : "Analyze paper"}</span>
-                        </button>
+                        ${renderReadingAnalyzeButton({ busy: analyzeBusy })}
                         <button type="button" class="btn-s" data-action="open-reading-source" ${session?.paperUrl ? "" : "disabled"}>
                           ${icon("ext", { size: 13, color: "currentColor" })}
                           <span>Open source</span>
@@ -1806,10 +1828,7 @@ export function createReadingFeature({
                 <button type="button" class="${state.readingAssetsFilter === "figure" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="figure">${icon("image", { size: 11, color: "currentColor" })}<span>Figures ${figureCount}</span></button>
                 <button type="button" class="${state.readingAssetsFilter === "table" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="table">${icon("table", { size: 11, color: "currentColor" })}<span>Tables ${tableCount}</span></button>
                 <div class="reading-assets-actions">
-                  <button type="button" class="btn-s" data-action="reading-analyze-session" ${analyzeBusy ? "disabled" : ""}>
-                    ${icon("sparkles", { size: 12, color: "currentColor" })}
-                    <span>${analyzeBusy ? "Analyzing..." : "Refresh analysis"}</span>
-                  </button>
+                  ${renderReadingAnalyzeButton({ busy: analyzeBusy, label: "Refresh analysis", variant: "secondary" })}
                 </div>
               </div>
               <div class="reading-asset-grid">
@@ -1961,10 +1980,7 @@ export function createReadingFeature({
               <div class="reading-empty-icon">${icon("grid", { size: 24, color: TOKENS.read })}</div>
               <div class="reading-empty-title">${parsed ? "No figures or tables found" : "Analysis needed"}</div>
               <div class="reading-empty-copy">${parsed ? "Run analysis again if the paper contains visual evidence." : "Run analysis to prepare summary, chat, and assets."}</div>
-              <button type="button" class="btn-p" data-action="reading-analyze-session" ${analyzeBusy ? "disabled" : ""}>
-                ${icon("sparkles", { size: 13, color: "#fff" })}
-                <span>${analyzeBusy ? "Analyzing..." : "Analyze paper"}</span>
-              </button>
+              ${renderReadingAnalyzeButton({ busy: analyzeBusy })}
             </div>
           `;
 
@@ -2153,10 +2169,12 @@ export function createReadingFeature({
           </div>
 
           <div class="reading-metabar-actions">
-            <button type="button" class="${parsed && summarized && assets.length ? "btn-s" : "btn-p"}" data-action="reading-analyze-session" ${analyzeBusy ? "disabled" : ""}>
-              ${icon(parsed && summarized && assets.length ? "check" : "sparkles", { size: 13, color: parsed && summarized && assets.length ? "currentColor" : "#fff" })}
-              <span>${analyzeBusy ? "Analyzing..." : parsed && summarized && assets.length ? "Refresh analysis" : "Analyze paper"}</span>
-            </button>
+            ${renderReadingAnalyzeButton({
+              busy: analyzeBusy,
+              complete: parsed && summarized && assets.length,
+              label: parsed && summarized && assets.length ? "Refresh analysis" : "Analyze paper",
+              variant: parsed && summarized && assets.length ? "secondary" : "primary",
+            })}
             <button
               type="button"
               class="btn-ghost reading-context-trigger"
