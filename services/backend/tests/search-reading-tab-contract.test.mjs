@@ -480,6 +480,15 @@ test('PDF viewer zoom rescales hydrated pages without reloading the document', a
   assert.match(viewerJs, /pdfjsLib\.getDocument\(\{ url: pdfUrl \}\)/);
 });
 
+test('Reader split resizing schedules PDF width refit', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /let readingHydrationFrame = 0/);
+  assert.match(appJs, /function scheduleReadingHydration\(\) \{\s+if \(readingHydrationFrame\)/);
+  assert.match(appJs, /state\.readingSplitVertical = Number\(next\.toFixed\(2\)\);\s+applyReadingSplitUI\(\);\s+if \(state\.readingDocumentTab === "pdf"\) \{\s+scheduleReadingHydration\(\);/);
+  assert.match(appJs, /state\.readingSplitHorizontal = Number\(next\.toFixed\(2\)\);\s+applyReadingSplitUI\(\);\s+if \(state\.readingDocumentTab === "pdf"\) \{\s+scheduleReadingHydration\(\);/);
+});
+
 test('Reading PDF hydration is isolated behind a controller module', async () => {
   const [appJs, controllerJs] = await Promise.all([
     readProjectFile('web/app.js'),

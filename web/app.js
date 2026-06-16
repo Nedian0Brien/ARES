@@ -436,6 +436,7 @@ let activeRunPollTimer = 0;
 let activeRunEventSource = null;
 let readingResizeDrag = null;
 let readingResizeFrame = 0;
+let readingHydrationFrame = 0;
 let readingHomeResizeDrag = null;
 let applyingBrowserRoute = false;
 let browserRouteSyncReady = false;
@@ -934,7 +935,14 @@ const readingPdfController = createReadingPdfController({
 });
 
 function scheduleReadingHydration() {
-  readingPdfController.scheduleHydration();
+  if (readingHydrationFrame) {
+    return;
+  }
+
+  readingHydrationFrame = window.requestAnimationFrame(() => {
+    readingHydrationFrame = 0;
+    void readingPdfController.hydrateIfNeeded();
+  });
 }
 
 async function handoffReadingToResearch({ noteId = "" } = {}) {
@@ -5182,6 +5190,9 @@ function updateReadingSplitFromPointer(clientX, clientY) {
     if (Math.abs(next - state.readingSplitVertical) >= 0.1) {
       state.readingSplitVertical = Number(next.toFixed(2));
       applyReadingSplitUI();
+      if (state.readingDocumentTab === "pdf") {
+        scheduleReadingHydration();
+      }
     }
     return;
   }
@@ -5192,6 +5203,9 @@ function updateReadingSplitFromPointer(clientX, clientY) {
   if (Math.abs(next - state.readingSplitHorizontal) >= 0.1) {
     state.readingSplitHorizontal = Number(next.toFixed(2));
     applyReadingSplitUI();
+    if (state.readingDocumentTab === "pdf") {
+      scheduleReadingHydration();
+    }
   }
 }
 
@@ -5908,6 +5922,7 @@ document.addEventListener("click", async (event) => {
     const nextOrientation = trigger.dataset.readingOrientation === "vertical" ? "vertical" : "horizontal";
     state.readingOrientation = nextOrientation;
     refreshReadingStageUI();
+    scheduleReadingHydration();
     return;
   }
 
