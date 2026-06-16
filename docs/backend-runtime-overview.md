@@ -56,7 +56,7 @@
   - `item.completed.command_execution`
 - 결과 해석:
   - 최종 agent message에서 JSON 추출
-  - 실패 또는 timeout 시 stage별 fallback 사용
+  - 실패 또는 timeout 시 `AgentRun.status = "error"`로 종료하고 stage asset은 만들지 않음
 
 이 레이어는 "CLI 실행/JSONL 파싱"만 담당하고, stage 의미는 상위 `agent-runs` 서비스가 가진다.
 
@@ -85,7 +85,8 @@
 - run 생성 시 store에 `queue` 상태 저장
 - 백그라운드 실행 시작
 - 실행 중 `running`
-- 성공 또는 fallback 완료 후 `done`
+- 성공한 runtime output persist 후 `done`
+- runtime 실패, timeout, JSON 계약 위반은 `error`
 - 실행 중 subprocess abort 핸들은 프로세스 메모리 `Map`에만 존재
 
 즉, `AgentRun` 메타는 영속화되지만 실제 실행 핸들은 아직 단일 프로세스 메모리에 묶여 있다.

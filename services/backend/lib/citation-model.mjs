@@ -116,7 +116,7 @@ function compactSentence(parts = []) {
 }
 
 function formatIeeeAuthors(authors = []) {
-  return authors.length ? authors.join(', ') : 'Unknown author';
+  return authors.length ? authors.join(', ') : '저자 정보 없음';
 }
 
 function apaAuthorName(name) {
@@ -136,7 +136,7 @@ function apaAuthorName(name) {
 function formatApaAuthors(authors = []) {
   const names = authors.map(apaAuthorName).filter(Boolean);
   if (!names.length) {
-    return 'Unknown author';
+    return '저자 정보 없음';
   }
   if (names.length === 1) {
     return names[0];

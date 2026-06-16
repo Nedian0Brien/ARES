@@ -197,7 +197,7 @@ function normaliseWork(work, { project, query }) {
     work?.primary_topic?.subfield?.display_name,
   ]).slice(0, 6);
   const venue = normaliseVenueLabel(
-    work?.primary_location?.source?.display_name || work?.primary_topic?.display_name || 'Unknown venue',
+    work?.primary_location?.source?.display_name || work?.primary_topic?.display_name || '출처 정보 없음',
   );
   const citedByCount = Number(work?.cited_by_count) || 0;
   const year = Number(work?.publication_year) || null;
@@ -207,7 +207,7 @@ function normaliseWork(work, { project, query }) {
 
   return {
     paperId: String(work?.id || work?.doi || work?.display_name || Math.random()),
-    title: work?.display_name || 'Untitled paper',
+    title: work?.display_name || '제목 없는 논문',
     authors: (work?.authorships || [])
       .map((authorship) => authorship?.author?.display_name)
       .filter(Boolean)

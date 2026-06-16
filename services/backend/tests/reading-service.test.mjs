@@ -113,7 +113,7 @@ async function createHarness({
   };
 }
 
-test('reading service parses cached PDF and seeds sections, notes, and assets', async (t) => {
+test('reading service parses cached PDF without creating user notes', async (t) => {
   const { rootDir, service, store } = await createHarness();
   t.after(async () => {
     await store.close?.();
@@ -131,11 +131,9 @@ test('reading service parses cached PDF and seeds sections, notes, and assets', 
   assert.ok(payload.session.parsedArtifactPath);
   assert.ok(payload.session.sections.length >= 3);
   assert.ok(payload.session.highlights.length >= 2);
-  assert.ok(payload.session.notes.length >= 1);
+  assert.deepEqual(payload.session.notes, []);
   assert.ok(payload.session.highlights.every((highlight) => highlight.selectionMethod));
   assert.ok(payload.session.highlights.every((highlight) => highlight.confidence > 0));
-  assert.ok(payload.session.notes.every((note) => note.seedMethod));
-  assert.ok(payload.session.notes.every((note) => note.confidence > 0));
   assert.ok(payload.session.assets.length >= 1);
   assert.equal(payload.session.evidenceCoverage.retrievalReady, true);
   assert.equal(payload.session.evidenceCoverage.chunkCount, payload.artifact.chunks.length);
@@ -208,7 +206,7 @@ test('reading service mirrors sessions into reading packets for the asset graph'
   const packet = graph.readingPackets[0];
   assert.equal(packet.status, 'done');
   assert.ok(packet.sections.length >= 3);
-  assert.ok(packet.notes.length >= 1);
+  assert.deepEqual(packet.notes, []);
   assert.ok(packet.methodParameters.length >= 1);
 });
 
@@ -228,7 +226,7 @@ test('reading service parses metadata-only papers from abstract and key points',
   assert.equal(payload.session.sourceProvider, 'metadata');
   assert.equal(payload.session.pageCount, 1);
   assert.ok(payload.session.sections.length >= 1);
-  assert.ok(payload.session.notes.length >= 1);
+  assert.deepEqual(payload.session.notes, []);
   assert.ok(payload.session.evidenceCoverage.retrievalReady);
 
   const answer = await service.chat(session.id, {
@@ -255,7 +253,7 @@ test('reading service imports external OCR text as a parse recovery path', async
     'Method',
     'The system accepts extracted text without claiming built-in OCR.',
     'Results',
-    'Recovered text produces sections, chunks, seed notes, and summary cards.',
+    'Recovered text produces sections, chunks, evidence, and summary cards.',
   ].join('\n');
   const recovered = await service.importTextSession(session.id, {
     generatedAt: '2026-06-12T08:30:00.000Z',
@@ -277,7 +275,7 @@ test('reading service imports external OCR text as a parse recovery path', async
   assert.equal(recovered.session.ocrProvenance.tool, 'Tesseract 5');
   assert.ok(recovered.session.parsedArtifactPath);
   assert.ok(recovered.session.sections.some((section) => section.label === 'Method'));
-  assert.ok(recovered.session.notes.length >= 1);
+  assert.deepEqual(recovered.session.notes, []);
   assert.match(recovered.session.summaryCards.tldr, /External OCR text/i);
   assert.equal(recovered.artifact.importSource, 'external-ocr');
   assert.equal(recovered.artifact.importProvenance.tool, 'Tesseract 5');
@@ -290,6 +288,39 @@ test('reading service imports external OCR text as a parse recovery path', async
   });
   assert.equal(answer.session.chatMessages.at(-1).role, 'assistant');
   assert.ok(answer.session.chatMessages.at(-1).citations.length >= 1);
+});
+
+test('reading section detection ignores title-case body lines between real headings', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper({ pdfUrl: null }),
+    projectId: 'demo',
+  });
+  const parsed = await service.importTextSession(session.id, {
+    sourceLabel: 'Wrapped paper text import',
+    text: [
+      'Abstract',
+      'Adaptive Routing Avoids Extra Reranking',
+      'This line is title-cased by PDF extraction but belongs to the abstract body.',
+      '1 Introduction',
+      'Short Title Case Body Line',
+      'The introduction discusses the motivation for confidence-aware routing.',
+      'Method',
+      'The method keeps expensive scoring behind a calibrated uncertainty gate.',
+      'Results',
+      'The evaluation reports stable quality and lower latency.',
+    ].join('\n'),
+  });
+
+  const labels = parsed.session.sections.map((section) => section.label);
+
+  assert.deepEqual(labels, ['Abstract', '1 Introduction', 'Method', 'Results']);
+  assert.match(parsed.session.sections[0].summary, /Adaptive Routing Avoids Extra Reranking/);
+  assert.match(parsed.session.sections[1].summary, /Short Title Case Body Line/);
 });
 
 test('reading service runs built-in OCR when a PDF has no text layer', async (t) => {
@@ -348,7 +379,7 @@ test('reading service runs built-in OCR when a PDF has no text layer', async (t)
   assert.equal(parsed.artifact.importSource, 'built-in-ocr');
   assert.equal(parsed.artifact.importProvenance.pageCount, 2);
   assert.equal(parsed.artifact.pages.length, 2);
-  assert.ok(parsed.session.notes.length >= 1);
+  assert.deepEqual(parsed.session.notes, []);
 
   const chat = await service.chat(session.id, {
     message: 'What did the scanned OCR paper say about reranker latency?',
@@ -368,7 +399,7 @@ test('reading summarize enforces parse prerequisite and persists summary cards a
     projectId: 'demo',
   });
 
-  await assert.rejects(() => service.summarizeSession(session.id), /Parse paper/i);
+  await assert.rejects(() => service.summarizeSession(session.id), /Analyze the paper/i);
 
   await service.parseSession(session.id);
   const payload = await service.summarizeSession(session.id);
@@ -840,4 +871,188 @@ test('reading table extraction handles captionless pipe tables', async (t) => {
   assert.deepEqual(table.rows[0], ['Metric', 'Baseline', 'Adaptive', 'Delta']);
   assert.equal(table.rows.length, 4);
   assert.match(table.sourceText, /Metric Baseline Adaptive Delta/);
+});
+
+test('reading assets detect colon figure captions without turning math prose into tables', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper({ pdfUrl: null }),
+    projectId: 'demo',
+  });
+  const parsed = await service.importTextSession(session.id, {
+    sourceLabel: 'Diffusion tutorial import',
+    text: [
+      '1 Fundamentals of Diffusion',
+      'xt+1 := xt + eta_t, eta_t ~ N(0, sigma2). (1)',
+      'Reverse samplers will be formally defined in Section 1.2 below.\tus how to sample from pt-1 assuming we can already sample from pt.',
+      'p(xt-1 | xt = z) approx N(xt-1; mu, sigma2). (3)',
+      'Figure 1: Probability distributions defined by diffusion forward process on one-dimensional target distribution p0.',
+    ].join('\n'),
+  });
+
+  const figures = parsed.session.assets.filter((asset) => asset.kind === 'figure');
+  const tables = parsed.session.assets.filter((asset) => asset.kind === 'table');
+
+  assert.equal(figures.length, 1);
+  assert.equal(figures[0].number, 1);
+  assert.match(figures[0].caption, /Figure 1: Probability distributions/);
+  assert.equal(tables.length, 0);
+});
+
+test('reading table extraction starts at the caption block instead of chart ticks', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper({ pdfUrl: null }),
+    projectId: 'demo',
+  });
+  const parsed = await service.importTextSession(session.id, {
+    sourceLabel: 'SAGE page import',
+    text: [
+      'GRPO w/o KL\tGRPO\tGRPO+Branch',
+      '0.00',
+      '0.25',
+      '0.50',
+      'Figure 2. Comparison between GRPO without KL regularization.',
+      'Table 2. Frequency analysis of reasoning patterns. We report',
+      'the average frequency over 3 seeds of detected reasoning patterns.',
+      'Reasoning Pattern Base Model GRPO GRPO + Branch',
+      'Constraint Setup 0.458 0.604 0.583',
+      'Structural Reasoning 0.291 0.377 0.301',
+      'Proof by Contradiction 0.007 0.008 0.033',
+    ].join('\n'),
+  });
+
+  const table = parsed.session.assets.find((asset) => asset.kind === 'table' && asset.number === 2);
+  assert.ok(table);
+  assert.deepEqual(table.rows[0], ['Constraint Setup', '0.458', '0.604', '0.583']);
+  assert.ok(!table.rows.some((row) => row.includes('GRPO w/o KL')));
+});
+
+test('reading table extraction creates separate assets for multiple captions on one page', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper({ pdfUrl: null }),
+    projectId: 'demo',
+  });
+  const parsed = await service.importTextSession(session.id, {
+    sourceLabel: 'Shared page table import',
+    text: [
+      'Table 3. Algorithm ablations across heterogeneous RLVR variants.',
+      'Algorithm\tAIME\tAMC23\tAvg',
+      'BNPO\t0.043\t0.390\t0.243',
+      'BNPO + Branch\t0.070\t0.435\t0.271',
+      '',
+      'Table 4. Model ablation with DeepSeek-R1-Distill-Qwen-7B.',
+      'Algorithm\tAIME\tAMC23\tAvg',
+      'GRPO\t0.250\t0.635\t0.449',
+      'GRPO + Branch\t0.260\t0.635\t0.452',
+    ].join('\n'),
+  });
+
+  const tables = parsed.session.assets.filter((asset) => asset.kind === 'table');
+
+  assert.equal(tables.length, 2);
+  assert.deepEqual(tables.map((asset) => asset.number), [3, 4]);
+  assert.deepEqual(tables[0].rows[0], ['Algorithm', 'AIME', 'AMC23', 'Avg']);
+  assert.deepEqual(tables[1].rows[0], ['Algorithm', 'AIME', 'AMC23', 'Avg']);
+  assert.match(tables[1].caption, /Table 4\. Model ablation/);
+});
+
+test('reading table extraction accepts caption text without punctuation', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper({ pdfUrl: null }),
+    projectId: 'demo',
+  });
+  const parsed = await service.importTextSession(session.id, {
+    sourceLabel: 'Punctuation-free table caption import',
+    text: [
+      'Table 1 Statistics of the datasets',
+      'Test Sets      Page      Table',
+      'Wired          124       418',
+      'PubTabNet      568       910',
+    ].join('\n'),
+  });
+
+  const tables = parsed.session.assets.filter((asset) => asset.kind === 'table');
+
+  assert.equal(tables.length, 1);
+  assert.equal(tables[0].caption, 'Table 1. Statistics of the datasets');
+  assert.deepEqual(tables[0].rows[0], ['Test Sets', 'Page', 'Table']);
+});
+
+test('reading table extraction keeps punctuation-free caption titles that start with verbs', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper({ pdfUrl: null }),
+    projectId: 'demo',
+  });
+  const parsed = await service.importTextSession(session.id, {
+    sourceLabel: 'Verb-title table caption import',
+    text: [
+      'Table 3 Compare with state-of-the-art methods on PubTabNet dataset.',
+      'Methods Acc',
+      '(%)',
+      'TEDS',
+      '(%)',
+      'TableMaster[28] 77.90 96.12 - 2144 253',
+      'LGPMA[10] 65.74 94.70 96.70 - 177',
+      'SLANet[13] 76.31 95.89 97.01 766 9.2',
+    ].join('\n'),
+  });
+
+  const table = parsed.session.assets.find((asset) => asset.kind === 'table' && asset.number === 3);
+
+  assert.ok(table);
+  assert.equal(table.caption, 'Table 3. Compare with state-of-the-art methods on PubTabNet dataset.');
+  assert.deepEqual(table.rows[0], ['TableMaster[28]', '77.90', '96.12', '-', '2144', '253']);
+});
+
+test('reading table extraction can bind rows immediately before a caption', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: buildDemoPaper({ pdfUrl: null }),
+    projectId: 'demo',
+  });
+  const parsed = await service.importTextSession(session.id, {
+    sourceLabel: 'Pre-caption table rows import',
+    text: [
+      '# figures 952 289 1,030,671 3,064,951',
+      '# tables 282 124 164,356 1,267,464',
+      'Table 1: Number of papers, figures, and tables in the manually-labeled datasets.',
+    ].join('\n'),
+  });
+
+  const tables = parsed.session.assets.filter((asset) => asset.kind === 'table');
+
+  assert.equal(tables.length, 1);
+  assert.deepEqual(tables[0].rows, [
+    ['# figures', '952', '289', '1,030,671', '3,064,951'],
+    ['# tables', '282', '124', '164,356', '1,267,464'],
+  ]);
+  assert.equal(tables[0].sourceBounds.y, 0);
 });

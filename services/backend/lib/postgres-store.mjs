@@ -13,6 +13,7 @@ import {
   normalizeUser,
 } from './identity-model.mjs';
 import { assertPostgresMigrationsApplied, runPostgresMigrations } from './postgres-migrations.mjs';
+import { normalizeNewProject } from './project-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
@@ -1151,6 +1152,34 @@ async function upsertProjectAccessRow(pool, access) {
   );
 }
 
+async function upsertProjectRow(pool, project) {
+  await pool.query(
+    `
+      INSERT INTO ares_projects (id, name, color, focus, default_query, keywords, payload, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9)
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        color = EXCLUDED.color,
+        focus = EXCLUDED.focus,
+        default_query = EXCLUDED.default_query,
+        keywords = EXCLUDED.keywords,
+        updated_at = EXCLUDED.updated_at,
+        payload = EXCLUDED.payload
+    `,
+    [
+      project.id,
+      project.name,
+      project.color,
+      project.focus,
+      project.defaultQuery,
+      jsonPayload(ensureStringArray(project.keywords)),
+      jsonPayload(project),
+      project.createdAt || nowIso(),
+      project.updatedAt || nowIso(),
+    ],
+  );
+}
+
 async function upsertAuthSessionRow(pool, session) {
   await pool.query(
     `
@@ -1374,7 +1403,7 @@ export async function createPostgresStore({
         sourceProvider: normalized.sourceProvider || 'reading',
         summary: normalized.summary || normalized.summaryCards?.tldr || '',
         title: normalized.title,
-        venue: normalized.venue || 'Unknown',
+        venue: normalized.venue || '출처 정보 없음',
         year: normalized.year ?? null,
       };
     }
@@ -1466,6 +1495,17 @@ export async function createPostgresStore({
 
     getProjects() {
       return state.projects.map(projectSummary);
+    },
+
+    async createProject(input) {
+      const project = normalizeNewProject(input, {
+        existingIds: new Set(state.projects.map((entry) => entry.id)),
+      });
+      state.projects.unshift(project);
+      state.library[project.id] = [];
+      state.readingQueue[project.id] = [];
+      await upsertProjectRow(pool, project);
+      return projectSummary(project);
     },
 
     listUsers() {
@@ -1792,13 +1832,13 @@ export async function createPostgresStore({
         relevance: Number(paper.relevance) || 0,
         runId: options.runId ? String(options.runId) : existing.runId || '',
         sessionId: options.sessionId ? String(options.sessionId) : existing.sessionId || '',
-        sourceName: ensureText(paper.sourceName, 'Queued paper'),
+        sourceName: ensureText(paper.sourceName, '읽기 대기 논문'),
         sourceProvider: ensureText(paper.sourceProvider, 'queue'),
         status: normaliseStatus(options.status || existing.status, 'queue'),
         summary: ensureText(paper.summary),
-        title: ensureText(paper.title, 'Untitled paper'),
+        title: ensureText(paper.title, '제목 없는 논문'),
         updatedAt: nowIso(),
-        venue: ensureText(paper.venue, 'Unknown'),
+        venue: ensureText(paper.venue, '출처 정보 없음'),
         year: paper.year === null || paper.year === undefined || paper.year === '' ? null : Number(paper.year),
       };
       const index = queue.findIndex((entry) => entry.paperId === nextEntry.paperId);

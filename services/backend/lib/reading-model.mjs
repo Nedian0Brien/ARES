@@ -220,6 +220,12 @@ function normaliseNote(entry, index = 0) {
     return null;
   }
 
+  const id = ensureTrimmedString(entry.id, `note-${index + 1}`);
+  const origin = ensureTrimmedString(entry.origin, entry.sourceHighlightId ? 'highlight' : 'user').toLowerCase();
+  if (origin === 'highlight' || ensureTrimmedString(entry.seedMethod, '') || /^note-seed-\d+$/i.test(id)) {
+    return null;
+  }
+
   const body = ensureTrimmedString(entry.body || entry.value || entry.text, '');
   const quote = clipText(entry.quote || entry.text || '', 900);
   const createdAt = ensureIso(entry.createdAt, nowIso());
@@ -229,9 +235,9 @@ function normaliseNote(entry, index = 0) {
     body,
     createdAt,
     evidenceLinkId: ensureTrimmedString(entry.evidenceLinkId, '') || null,
-    id: ensureTrimmedString(entry.id, `note-${index + 1}`),
+    id,
     kind: ensureTrimmedString(entry.kind || entry.label, 'note').toLowerCase(),
-    origin: ensureTrimmedString(entry.origin, entry.sourceHighlightId ? 'highlight' : 'user').toLowerCase(),
+    origin,
     page:
       entry.page === undefined || entry.page === null || entry.page === ''
         ? entry.pg === undefined || entry.pg === null || entry.pg === ''
@@ -241,7 +247,6 @@ function normaliseNote(entry, index = 0) {
     quote,
     sectionId: ensureTrimmedString(entry.sectionId || entry.section, ''),
     confidence: Math.max(0, Math.min(1, ensureNumber(entry.confidence, 0))),
-    seedMethod: ensureTrimmedString(entry.seedMethod, ''),
     sourceBounds: normaliseSourceBounds(entry.sourceBounds, entry.page || entry.pg || 1),
     sourceHighlightId: ensureTrimmedString(entry.sourceHighlightId, '') || null,
     updatedAt,
@@ -525,7 +530,7 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
 
   const next = {
     abstract: ensureTrimmedString(input.abstract, previous.abstract || ''),
-    agent: ensureTrimmedString(input.agent, previous.agent || 'Reader agent'),
+    agent: ensureTrimmedString(input.agent, previous.agent || '읽기 지원'),
     assets: ensureObjectArray(input.assets !== undefined ? input.assets : previous.assets).map(normaliseAsset).filter(Boolean),
     authors: (() => {
       const values = ensureStringArray(input.authors !== undefined ? input.authors : previous.authors, { limit: 8 });
@@ -615,9 +620,9 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
         : ensureBoolean(input.summaryRuntimeUsed),
     summaryStartedAt: ensureIso(input.summaryStartedAt, ensureIso(previous.summaryStartedAt, null)),
     summaryStatus,
-    title: ensureTrimmedString(input.title, previous.title || 'Untitled paper'),
+    title: ensureTrimmedString(input.title, previous.title || '제목 없는 논문'),
     updatedAt: ensureIso(input.updatedAt, nowIso()),
-    venue: ensureTrimmedString(input.venue, previous.venue || 'Unknown'),
+    venue: ensureTrimmedString(input.venue, previous.venue || '출처 정보 없음'),
     warning: ensureTrimmedString(input.warning, previous.warning || ''),
     year:
       input.year === undefined

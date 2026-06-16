@@ -208,7 +208,7 @@ export function createReadingRoutes({
       }
 
       if (!route.noteId) {
-        sendError(response, new Error('noteId is required.'), 400);
+        sendError(response, new Error('노트를 선택해 주세요.'), 400);
         return true;
       }
 
@@ -243,7 +243,7 @@ export function createReadingRoutes({
         ? sanitisePaperPayload(body.paper)
         : store.getPaper(projectId, String(body.paperId || '').trim());
       if (!paper) {
-        sendError(response, new Error('paper or paperId is required.'), 400);
+        sendError(response, new Error('논문을 선택해 주세요.'), 400);
         return true;
       }
 

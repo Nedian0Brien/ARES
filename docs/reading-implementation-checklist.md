@@ -204,10 +204,9 @@ Reading 탭은 더 이상 전체가 목업인 상태가 아니다. 현재 구현
   - `thumbPath`가 있으면 실제 asset file route를 렌더한다.
   - `sourceBounds`가 있으면 source region mini map과 source snippet을 표시한다.
 
-- [x] Notes seed는 parse 기반 후보임을 provenance와 confidence로 드러낸다.
-  - sections/chunks에서 claim/method/result/limit 후보를 골라 seed note를 만든다.
-  - seed highlight는 `selectionMethod`와 `confidence`를 저장하고, seed note는 `seedMethod`와 `confidence`를 저장한다.
-  - 이 값은 generated seed가 확정 요약이 아니라 parse 기반 후보라는 점을 유지하면서도 품질 점검과 UI 표시가 가능하게 한다.
+- [x] Notes는 사용자 작성/수정 산출물로만 유지한다.
+  - parse 기반 후보는 `highlights`에만 남기고 `notes`로 승격하지 않는다.
+  - 기존 runtime store에 남아 있던 `note-seed-*`, `origin: highlight`, `seedMethod` note는 Reading model 정규화에서 사용자 노트로 취급하지 않는다.
   - 사용자가 직접 작성/수정한 note CRUD는 실제 구현이다.
 
 - [x] `example.org` PDF는 명시적 demo/test fixture로 분리되어 있다.
@@ -223,12 +222,12 @@ Reading 탭은 더 이상 전체가 목업인 상태가 아니다. 현재 구현
 
 - [x] Metadata-only 논문도 Reading v1에서 기본 Reader 기능을 사용할 수 있다.
   - `pdfUrl`이 없더라도 title, abstract, summary, keyPoints, keywords를 `metadata` source artifact로 변환한다.
-  - metadata artifact는 sections, chunks, seed notes, evidence coverage, Reader chat citation 경로를 생성한다.
+  - metadata artifact는 sections, chunks, highlights, evidence coverage, Reader chat citation 경로를 생성한다.
   - PDF 본문 품질이 필요한 경우에는 업로드 PDF 또는 External OCR 텍스트 import로 더 강한 source를 연결할 수 있다.
 
 - [x] 내장 OCR 기반 scanned PDF 처리.
   - text layer가 없는 PDF는 `tesseract.js` 기반 내장 OCR을 시도한다.
-  - OCR 산출물은 sections, chunks, seed notes, summary cards, Reader chat citation 경로를 만든다.
+  - OCR 산출물은 sections, chunks, highlights, summary cards, Reader chat citation 경로를 만든다.
   - 내장 OCR이 충분하지 않으면 외부 OCR 텍스트 import recovery path를 사용할 수 있다.
 
 - [x] Figure/table 원본 위치 preview.

@@ -22,7 +22,7 @@ test('Research + Result tab renders a Lab surface instead of generic placeholder
   assert.match(appJs, /createManualExperimentRun/);
 });
 
-test('Lab surface includes Plan, Runs, Compare, and Result Dossier language', async () => {
+test('Lab surface includes user-facing plan, run, compare, and insight language', async () => {
   const appJs = await readProjectFile('web/app.js');
 
   assert.match(appJs, /Research \+ Result/);
@@ -68,19 +68,13 @@ test('Lab result comparison stores a typed paper-to-run metric contract', async 
   assert.match(appJs, /reproducedValue:\s*observedMetric/);
 });
 
-test('Failed Lab runs automatically create traceable Insight candidates', async () => {
+test('Failed Lab runs stay in Lab until the user explicitly creates an Insight', async () => {
   const appJs = await readProjectFile('web/app.js');
 
-  assert.match(appJs, /function buildFailedRunInsightCandidate/);
-  assert.match(appJs, /function createFailedRunInsightCandidate/);
+  assert.doesNotMatch(appJs, /function buildFailedRunInsightCandidate/);
+  assert.doesNotMatch(appJs, /function createFailedRunInsightCandidate/);
   assert.match(appJs, /status === "error"/);
-  assert.match(appJs, /createFailedRunInsightCandidate\(\{/);
-  assert.match(appJs, /failureCause/);
-  assert.match(appJs, /followUpExperiment/);
-  assert.match(appJs, /experimentRunIds:\s*\[runId\]/);
-  assert.match(appJs, /resultDossierIds:\s*\[dossierId\]\.filter\(Boolean\)/);
-  assert.match(appJs, /sourceRefs:\s*\[/);
-  assert.match(appJs, /type:\s*"hypothesis"/);
+  assert.doesNotMatch(appJs, /createFailedRunInsightCandidate\(\{/);
 });
 
 test('Lab imports external run logs through a bounded parser contract', async () => {
@@ -96,7 +90,7 @@ test('Lab imports external run logs through a bounded parser contract', async ()
   assert.match(appJs, /importSource:\s*"external-paste"/);
   assert.match(appJs, /artifacts:\s*parsed\.artifacts/);
   assert.match(appJs, /normaliseLabMetricComparison\(\{/);
-  assert.match(appJs, /createFailedRunInsightCandidate\(\{/);
+  assert.doesNotMatch(appJs, /createFailedRunInsightCandidate\(\{/);
 });
 
 test('Reading to Lab handoff context is preserved and visible in Lab', async () => {

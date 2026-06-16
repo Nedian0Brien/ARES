@@ -162,6 +162,44 @@ test('createStore persists saved papers and queue entries', async () => {
   assert.deepEqual(store.getLibrary('demo').map((paper) => paper.paperId), ['paper-1']);
 });
 
+test('createStore persists newly created projects with empty workspace collections', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ares-store-'));
+  const seedFile = path.join(tempDir, 'seed.json');
+  const runtimeFile = path.join(tempDir, 'runtime', 'store.json');
+
+  await fs.writeFile(
+    seedFile,
+    JSON.stringify(
+      {
+        library: {},
+        projects: [],
+        readingQueue: {},
+      },
+      null,
+      2,
+    ),
+  );
+
+  const store = await createStore({ seedFile, runtimeFile });
+  const created = await store.createProject({
+    color: '#8957c9',
+    defaultQuery: 'graph memory retrieval',
+    focus: 'Build a reusable graph memory benchmark.',
+    keywords: ['graph', 'memory'],
+    name: 'Graph Memory',
+  });
+
+  assert.equal(created.id, 'graph-memory');
+  assert.equal(created.name, 'Graph Memory');
+  assert.equal(created.libraryCount, 0);
+  assert.equal(created.queueCount, 0);
+
+  const reopened = await createStore({ seedFile, runtimeFile });
+  const savedProject = reopened.getProject('graph-memory');
+  assert.equal(savedProject.focus, 'Build a reusable graph memory benchmark.');
+  assert.deepEqual(reopened.getLibrary('graph-memory'), []);
+});
+
 test('createStore migrates and persists reading sessions plus agent runs', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ares-store-'));
   const seedFile = path.join(tempDir, 'seed.json');

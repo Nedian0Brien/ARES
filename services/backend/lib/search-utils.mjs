@@ -55,7 +55,7 @@ export function buildSearchTerms(project, query) {
 export function summariseAbstract(abstract) {
   const clean = String(abstract || '').trim();
   if (!clean) {
-    return 'Abstract metadata is not available for this paper yet.';
+    return '이 논문의 초록 정보가 아직 없습니다.';
   }
 
   const sentences = clean
@@ -140,7 +140,7 @@ export function yearBucket(year) {
 export function normaliseVenueLabel(venue) {
   const value = String(venue || '').trim();
   if (!value) {
-    return 'Unknown';
+  return '출처 정보 없음';
   }
 
   if (/arxiv/i.test(value)) {

@@ -242,7 +242,15 @@ function uploadErrorStatus(error) {
   if (/100MB|between 1 byte/i.test(message)) {
     return 413;
   }
-  if (/PDF upload content|must be a PDF/i.test(message)) {
+  if (/PDF upload content|must be a PDF|PDF 파일|업로드할 PDF/i.test(message)) {
+    return 400;
+  }
+  return 500;
+}
+
+function projectErrorStatus(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/project name is required/i.test(message)) {
     return 400;
   }
   return 500;
@@ -768,6 +776,38 @@ const server = http.createServer(async (request, response) => {
           ),
         ),
       });
+      return;
+    }
+
+    if (request.method === 'POST' && requestPath === '/api/projects') {
+      const user = requireAuthenticatedUser(request, response);
+      if (!user) {
+        return;
+      }
+      if (typeof store.createProject !== 'function') {
+        sendError(response, new Error('Project creation is not supported by this store.'), 501);
+        return;
+      }
+
+      try {
+        const body = await readJsonBody(request);
+        const project = await store.createProject(body);
+        const projectAccess =
+          typeof store.upsertProjectAccess === 'function'
+            ? await store.upsertProjectAccess({
+                projectId: project.id,
+                role: 'owner',
+                userId: user.id,
+              })
+            : null;
+        bindRequestLogContext(request, { projectId: project.id });
+        json(response, 201, {
+          project,
+          projectAccess,
+        });
+      } catch (error) {
+        sendError(response, error, projectErrorStatus(error));
+      }
       return;
     }
 

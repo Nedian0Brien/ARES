@@ -234,7 +234,7 @@ function buildDemoPdfPages(session) {
   const venue = [session.venue || 'Unknown venue', session.year || 'n/a'].filter(Boolean).join(' · ');
   const abstract = ensureTrimmedString(
     session.abstract || session.summary,
-    `${title} is prepared as a fallback reading session for the demo workspace.`,
+    `${title} is prepared as a sample reading session for the demo workspace.`,
   );
   const keyPoints = Array.isArray(session.keyPoints) && session.keyPoints.length
     ? session.keyPoints
@@ -262,7 +262,7 @@ function buildDemoPdfPages(session) {
     [
       '2 Method',
       ...wrapText(firstSentence(keyPoints[1], abstract), 76),
-      ...wrapText('The workflow caches the PDF, extracts page-level text, detects section boundaries, and stores reusable chunks for retrieval-based reader chat.', 76),
+      ...wrapText('The workflow caches the PDF, extracts page-level text, detects section boundaries, and stores passages for evidence-based reader chat.', 76),
       '',
       '3 Results',
       ...wrapText(firstSentence(keyPoints[2], abstract), 76),
@@ -271,10 +271,10 @@ function buildDemoPdfPages(session) {
     ],
     [
       '4 Limitations',
-      ...wrapText('Scanned image-only PDFs are rejected in v1 because the pipeline requires an extractable text layer. OCR is intentionally out of scope for this milestone.', 76),
+      ...wrapText('Scanned image-only PDFs need extracted text before Reading can analyze them. Import OCR text to continue.', 76),
       '',
       '5 Reproducibility',
-      ...wrapText('Key implementation parameters and follow-up notes are seeded during parse so Research can inherit them without a separate handoff format.', 76),
+      ...wrapText('Key implementation parameters and follow-up highlights are extracted during parse so Research can inherit them without a separate handoff format.', 76),
       '',
       'Table 1. Efficiency comparison.',
       'System      Latency(ms)      Quality',
@@ -328,21 +328,24 @@ function buildChunkId(page, index) {
   return `chunk-p${page}-${index + 1}`;
 }
 
+const UNNUMBERED_SECTION_HEADING_PATTERN =
+  /^(abstract|introduction|background|related work|method|methods|methodology|approach|model|models|experiments?|experimental setup|evaluation|results?|discussion|limitations?|conclusions?|future work|references|acknowledg(?:e)?ments?|appendix)$/i;
+
 function detectHeading(line) {
   const text = ensureTrimmedString(line, '');
   if (!text) {
     return false;
   }
 
-  if (/^(abstract|references)$/i.test(text)) {
+  if (UNNUMBERED_SECTION_HEADING_PATTERN.test(text)) {
     return true;
   }
 
-  if (/^\d+(\.\d+)?\s+[A-Z]/.test(text)) {
+  if (/^\d+(?:\.\d+)*\.?\s+[A-Z]/.test(text)) {
     return true;
   }
 
-  return /^[A-Z][A-Za-z0-9\s/-]{2,48}$/.test(text) && text === text.trim();
+  return false;
 }
 
 function extractSectionLabel(line) {
@@ -361,6 +364,7 @@ function extractSectionLabel(line) {
 function buildSectionsFromPages(pages, session) {
   const sections = [];
   let current = null;
+  let leadingLines = [];
 
   const pushCurrent = () => {
     if (!current) {
@@ -399,16 +403,22 @@ function buildSectionsFromPages(pages, session) {
         pushCurrent();
         current = {
           label: extractSectionLabel(line),
-          lines: [],
+          lines: sections.length ? [] : leadingLines,
           pageEnd: page.num,
           pageStart: page.num,
         };
+        leadingLines = [];
         continue;
       }
 
       if (!current) {
+        if (!sections.length) {
+          leadingLines.push(line);
+          continue;
+        }
+
         current = {
-          label: sections.length ? `Section ${sections.length + 1}` : 'Abstract',
+          label: `Section ${sections.length + 1}`,
           lines: [],
           pageEnd: page.num,
           pageStart: page.num,
@@ -424,6 +434,21 @@ function buildSectionsFromPages(pages, session) {
 
   if (sections.length) {
     return sections;
+  }
+
+  if (leadingLines.length) {
+    const body = leadingLines.join(' ').trim();
+    return [
+      {
+        id: 'abstract',
+        label: 'Abstract',
+        order: 0,
+        pageEnd: pages.at(-1)?.num || 1,
+        pageStart: pages[0]?.num || 1,
+        status: 'done',
+        summary: firstSentence(body, 'Abstract'),
+      },
+    ];
   }
 
   return [
@@ -555,28 +580,6 @@ function buildHighlights(sections, chunks, session) {
     .filter(Boolean);
 }
 
-function buildSeedNotes(highlights, existingNotes = []) {
-  if (Array.isArray(existingNotes) && existingNotes.length) {
-    return existingNotes;
-  }
-
-  const timestamp = nowIso();
-  return highlights.map((highlight, index) => ({
-    body: index === 0 ? '핵심 주장과 후속 검증 포인트를 정리합니다.' : '',
-    createdAt: timestamp,
-    id: `note-seed-${index + 1}`,
-    kind: highlight.type === 'claim' ? 'summary' : 'note',
-    origin: 'highlight',
-    page: highlight.page,
-    quote: highlight.quote || highlight.text,
-    sectionId: highlight.sectionId || '',
-    confidence: highlight.confidence || 0.5,
-    seedMethod: highlight.selectionMethod || 'parse-seed',
-    sourceHighlightId: highlight.id,
-    updatedAt: timestamp,
-  }));
-}
-
 function buildReproParams(session, sections) {
   const params = [];
   const methodSection = pickSectionByName(sections, /method|approach|setup/i);
@@ -607,12 +610,32 @@ function buildReproParams(session, sections) {
   return params;
 }
 
-function findCaptionLines(pageText, kind) {
-  const regex = kind === 'table' ? /^table\s+(\d+)\.\s*(.+)$/i : /^figure\s+(\d+)\.\s*(.+)$/i;
+function splitPageLines(pageText) {
   return ensureTrimmedString(pageText, '')
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .map((line, lineIndex) => ({ line, lineIndex }))
+    .map((line, lineIndex) => ({ line: line.trim(), lineIndex }));
+}
+
+function parseAssetNumber(value, fallback = 1) {
+  const match = ensureTrimmedString(value, '').match(/\d+/);
+  return match ? Number(match[0]) || fallback : fallback;
+}
+
+function looksLikePunctuationFreeTableCaption(value) {
+  const text = ensureTrimmedString(value, '');
+  if (!text || !/^[A-Z0-9(]/.test(text)) {
+    return false;
+  }
+
+  return !/^(?:shows?|reports?|summari[sz]es?|presents?|lists?|demonstrates?|illustrates?|compares?|provides?|contains?|describes?|uses?|is|are|was|were|can|will|may|might|would|should|we|the|a|an)\b/.test(text);
+}
+
+function findCaptionLines(pageText, kind) {
+  const regex =
+    kind === 'table'
+      ? /^table\s+([A-Za-z]?\d+(?:\.\d+)?)(?:\s*([:.])\s*|\s+)(.+)$/i
+      : /^fig(?:ure)?\.?\s+([A-Za-z]?\d+(?:\.\d+)?)\s*([:.])\s*(.+)$/i;
+  return splitPageLines(pageText)
     .filter((entry) => entry.line)
     .map(({ line, lineIndex }) => {
       const match = line.match(regex);
@@ -620,10 +643,16 @@ function findCaptionLines(pageText, kind) {
         return null;
       }
 
+      if (kind === 'table' && !match[2] && !looksLikePunctuationFreeTableCaption(match[3])) {
+        return null;
+      }
+
+      const punctuation = match[2] === ':' ? ':' : '.';
+      const number = parseAssetNumber(match[1], 1);
       return {
-        caption: clipText(`${kind === 'table' ? 'Table' : 'Figure'} ${match[1]}. ${match[2]}`, 180),
+        caption: clipText(`${kind === 'table' ? 'Table' : 'Figure'} ${number}${punctuation} ${match[3]}`, 180),
         lineIndex,
-        number: Number(match[1]) || 1,
+        number,
         sourceText: line,
       };
     })
@@ -779,7 +808,7 @@ export function createTesseractOcrEngine({ language = 'eng' } = {}) {
   };
 }
 
-function normaliseOcrPages(pages = [], sourceLabel = 'Built-in OCR') {
+function normaliseOcrPages(pages = [], sourceLabel = 'PDF OCR') {
   return (Array.isArray(pages) ? pages : [])
     .map((page, index) => ({
       num: Math.max(1, Number(page?.num || page?.page || index + 1) || index + 1),
@@ -839,26 +868,173 @@ function buildFigureSvg(caption) {
 </svg>`;
 }
 
-function inferTableRows(pageText) {
-  return ensureTrimmedString(pageText, '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .map((line) => {
-      if (line.includes('|')) {
-        return line.split('|').map((cell) => cell.trim()).filter(Boolean);
+const NUMBERISH_TABLE_VALUE = '[-+]?(?:(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?|\\d+,\\d+)';
+const NUMBERISH_TABLE_CELL = new RegExp(`^${NUMBERISH_TABLE_VALUE}(?:±${NUMBERISH_TABLE_VALUE})?%?$`);
+const TABLE_DATA_VALUE = `(?:${NUMBERISH_TABLE_VALUE}(?:±${NUMBERISH_TABLE_VALUE})?%?|[-–—])`;
+const TABLE_DATA_CELL = new RegExp(`^${TABLE_DATA_VALUE}$`);
+
+function parseTableRow(line) {
+  const text = ensureTrimmedString(line, '');
+  if (!text) {
+    return [];
+  }
+
+  if (text.includes('|')) {
+    return text.split('|').map((cell) => cell.trim()).filter(Boolean);
+  }
+
+  if (text.includes('\t')) {
+    return text.split(/\t+/).map((cell) => cell.trim()).filter(Boolean);
+  }
+
+  if (/\s{2,}/.test(text)) {
+    return text.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+  }
+
+  const tokens = text.split(/\s+/).filter(Boolean);
+  if (tokens.length >= 3 && tokens.every((token) => NUMBERISH_TABLE_CELL.test(token))) {
+    return tokens;
+  }
+
+  const numericTail = text.match(
+    new RegExp(`^(.+?)\\s+((?:${TABLE_DATA_VALUE}\\s+)+${TABLE_DATA_VALUE})$`),
+  );
+  if (numericTail) {
+    const label = numericTail[1].trim();
+    const values = numericTail[2].trim().split(/\s+/).filter((cell) => TABLE_DATA_CELL.test(cell));
+    if (label && values.filter((cell) => NUMBERISH_TABLE_CELL.test(cell)).length >= 2) {
+      return [label, ...values];
+    }
+  }
+
+  return [];
+}
+
+function isMathHeavyTableRow(row) {
+  const text = row.join(' ');
+  const mathMarks = (text.match(/[=∼≈<>∂∆∇πμσλθ∝√∑∫[\]{}|]/g) || []).length;
+  const wordMarks = (text.match(/[A-Za-z]{3,}/g) || []).length;
+  return mathMarks >= 2 && wordMarks <= 2;
+}
+
+function isUsefulCaptionlessTableRows(rows) {
+  if (rows.length < 3) {
+    return false;
+  }
+
+  const mathHeavyRows = rows.filter(isMathHeavyTableRow).length;
+  if (mathHeavyRows >= Math.ceil(rows.length / 2)) {
+    return false;
+  }
+
+  const numericRows = rows.filter((row) => row.some((cell) => NUMBERISH_TABLE_CELL.test(cell))).length;
+  return numericRows >= 2 || rows.some((row) => row.length >= 3);
+}
+
+function inferCaptionlessTableBlocks(pageText) {
+  const lines = splitPageLines(pageText);
+  const blocks = [];
+  let activeRows = [];
+  let activeStart = 0;
+
+  const flush = () => {
+    if (isUsefulCaptionlessTableRows(activeRows)) {
+      blocks.push({
+        lineIndex: activeStart,
+        lineSpan: activeRows.length,
+        rows: activeRows,
+      });
+    }
+    activeRows = [];
+    activeStart = 0;
+  };
+
+  for (const { line, lineIndex } of lines) {
+    const row = parseTableRow(line);
+    if (row.length >= 2) {
+      if (!activeRows.length) {
+        activeStart = lineIndex;
+      }
+      activeRows.push(row);
+      continue;
+    }
+    flush();
+  }
+
+  flush();
+  return blocks;
+}
+
+function inferCaptionedTableBlocks(pageText, tableCandidates) {
+  const lines = splitPageLines(pageText);
+  const captionStops = [...tableCandidates, ...findCaptionLines(pageText, 'figure')]
+    .map((entry) => entry.lineIndex)
+    .sort((a, b) => a - b);
+
+  return tableCandidates
+    .map((candidate) => {
+      const nextCaptionLine = captionStops.find((lineIndex) => lineIndex > candidate.lineIndex);
+      const endLine = Math.min(nextCaptionLine ?? lines.length, candidate.lineIndex + 32, lines.length);
+      let rows = [];
+      let firstRowLine = null;
+      let lastRowLine = candidate.lineIndex;
+      let nonRowAfterStart = 0;
+
+      for (let index = candidate.lineIndex + 1; index < endLine; index += 1) {
+        const line = lines[index]?.line || '';
+        const row = parseTableRow(line);
+        if (row.length >= 2) {
+          rows.push(row);
+          firstRowLine = firstRowLine ?? index;
+          lastRowLine = index;
+          nonRowAfterStart = 0;
+          continue;
+        }
+
+        if (firstRowLine !== null) {
+          if (!line) {
+            break;
+          }
+          nonRowAfterStart += 1;
+          if (nonRowAfterStart >= 2) {
+            break;
+          }
+        }
       }
 
-      if (line.includes('\t')) {
-        return line.split('\t').map((cell) => cell.trim()).filter(Boolean);
+      if (!rows.length) {
+        const previousCaptionLine = [...captionStops].reverse().find((lineIndex) => lineIndex < candidate.lineIndex);
+        const startLine = Math.max(previousCaptionLine === undefined ? 0 : previousCaptionLine + 1, candidate.lineIndex - 16);
+
+        for (let index = candidate.lineIndex - 1; index >= startLine; index -= 1) {
+          const line = lines[index]?.line || '';
+          const row = parseTableRow(line);
+          if (row.length >= 2) {
+            rows.unshift(row);
+            firstRowLine = index;
+            lastRowLine = candidate.lineIndex;
+            continue;
+          }
+
+          if (rows.length || line) {
+            break;
+          }
+        }
       }
 
-      if (/\s{2,}/.test(line)) {
-        return line.split(/\s{2,}/).map((cell) => cell.trim()).filter(Boolean);
+      if (!rows.length) {
+        return null;
       }
 
-      return [];
+      return {
+        caption: candidate.caption,
+        lineIndex: firstRowLine ?? candidate.lineIndex,
+        lineSpan: Math.max(1, lastRowLine - (firstRowLine ?? candidate.lineIndex) + 1),
+        number: candidate.number,
+        rows,
+      };
     })
-    .filter((row) => row.length >= 2);
+    .filter(Boolean);
 }
 
 function summariseFromSections(sections, session) {
@@ -1284,9 +1460,10 @@ export function createReadingService({
     const tablePages = artifact.tablePages || [];
     if (tablePages.length) {
       for (const page of tablePages) {
+        const pageTableCandidates = tableCandidates.filter((entry) => entry.page === page.num);
         for (let index = 0; index < (page.tables || []).length; index += 1) {
           const rows = page.tables[index];
-          const tableMeta = tableCandidates.find((entry) => entry.page === page.num);
+          const tableMeta = pageTableCandidates[index] || pageTableCandidates[0];
           const caption = tableMeta?.caption || `Table ${index + 1}`;
           const number = tableMeta?.number || index + 1;
           const dataPath = await writeJsonAsset(sessionId, `table-${page.num}-${index + 1}.json`, rows);
@@ -1313,32 +1490,37 @@ export function createReadingService({
 
     if (!tablePages.length) {
       for (const page of artifact.pages || []) {
-        const rows = inferTableRows(page.text);
-        if (!rows.length) {
+        const pageTableCandidates = tableCandidates.filter((entry) => entry.page === page.num);
+        const tableBlocks = pageTableCandidates.length
+          ? inferCaptionedTableBlocks(page.text, pageTableCandidates)
+          : inferCaptionlessTableBlocks(page.text);
+        if (!tableBlocks.length) {
           continue;
         }
 
-        const meta = tableCandidates.find((entry) => entry.page === page.num) || {
-          caption: `Table ${assets.filter((asset) => asset.kind === 'table').length + 1}`,
-          number: assets.filter((asset) => asset.kind === 'table').length + 1,
-        };
-        const dataPath = await writeJsonAsset(sessionId, `table-${page.num}.json`, rows);
-        const sourceRegion = buildAssetSourceRegion(page.text, {
-          lineIndex: meta.lineIndex,
-          lineSpan: Math.max(1, rows.length + 1),
-          page: page.num,
-          sourceText: [meta.caption, ...rows.map((row) => row.join(' '))].join(' '),
-        });
-        assets.push({
-          caption: meta.caption,
-          dataPath,
-          id: `table-${page.num}`,
-          kind: 'table',
-          number: meta.number,
-          page: page.num,
-          rows,
-          ...sourceRegion,
-        });
+        for (let index = 0; index < tableBlocks.length; index += 1) {
+          const block = tableBlocks[index];
+          const number = block.number || assets.filter((asset) => asset.kind === 'table').length + 1;
+          const caption = block.caption || `Table ${number}`;
+          const rows = block.rows;
+          const dataPath = await writeJsonAsset(sessionId, `table-${page.num}-${number}.json`, rows);
+          const sourceRegion = buildAssetSourceRegion(page.text, {
+            lineIndex: block.lineIndex,
+            lineSpan: Math.max(1, block.lineSpan || rows.length + 1),
+            page: page.num,
+            sourceText: [caption, ...rows.map((row) => row.join(' '))].join(' '),
+          });
+          assets.push({
+            caption,
+            dataPath,
+            id: `table-${page.num}-${number}`,
+            kind: 'table',
+            number,
+            page: page.num,
+            rows,
+            ...sourceRegion,
+          });
+        }
       }
     }
 
@@ -1367,7 +1549,7 @@ export function createReadingService({
     const sections = buildSectionsFromPages(pages, session);
     const chunks = buildChunksFromPages(pages, sections);
     const highlights = buildHighlights(sections, chunks, session);
-    const notes = buildSeedNotes(highlights, session.notes);
+    const notes = Array.isArray(session.notes) ? session.notes : [];
     const reproParams = buildReproParams(session, sections);
     const artifact = {
       chunks,
@@ -1779,7 +1961,7 @@ Rules:
               session: initial,
             });
             const ocrDurationMs = Math.max(0, Date.now() - ocrStartedAtMs);
-            const sourceLabel = 'Built-in OCR';
+            const sourceLabel = 'PDF OCR';
             const ocrPages = normaliseOcrPages(ocrResult?.pages, sourceLabel);
             if (ocrPages.length) {
               const ocrPageCount = ocrPages.length;
@@ -1904,7 +2086,7 @@ Rules:
     async summarizeSession(sessionId) {
       const session = await getSessionOrThrow(sessionId);
       if (session.parseStatus !== 'done' || !session.parsedArtifactPath) {
-        throw new Error('Parse paper must complete before summarize.');
+        throw new Error('Analyze the paper before generating a summary.');
       }
 
       const running = await updateSession(sessionId, {
@@ -1970,7 +2152,7 @@ Rules:
     async extractAssets(sessionId) {
       const session = await getSessionOrThrow(sessionId);
       if (session.parseStatus !== 'done' || !session.parsedArtifactPath) {
-        throw new Error('Parse paper must complete before assets can be extracted.');
+        throw new Error('Analyze the paper before extracting figures and tables.');
       }
 
       const artifact = await readParsedArtifact(session);
@@ -2030,7 +2212,7 @@ Rules:
     async chat(sessionId, { message, noteId = '', selection: selectionInput = null } = {}) {
       const session = await getSessionOrThrow(sessionId);
       if (session.parseStatus !== 'done' || !session.parsedArtifactPath) {
-        throw new Error('Parse paper must complete before chat is available.');
+        throw new Error('Analyze the paper before asking questions.');
       }
 
       const prompt = ensureTrimmedString(message, '');

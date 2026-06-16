@@ -1,13 +1,5 @@
 import { createAgentRuntime } from './agent-runtime.mjs';
 import {
-  buildInsightFallback,
-  buildReadingFallback,
-  buildResearchFallback,
-  buildResultFallback,
-  buildSearchFallback,
-  buildWritingFallback,
-} from './agent-run-fallbacks.mjs';
-import {
   buildInsightPrompt,
   buildReadingPrompt,
   buildResearchPrompt,
@@ -68,7 +60,6 @@ export const CAPABILITY_PROFILES = {
 const STAGE_TASKS = {
   search: {
     agent: 'Scout agent',
-    buildFallback: buildSearchFallback,
     buildPrompt: buildSearchPrompt,
     defaultTaskKind: 'run-agentic-search',
     outputCollections: [],
@@ -77,7 +68,6 @@ const STAGE_TASKS = {
   },
   insight: {
     agent: 'Analyst agent',
-    buildFallback: buildInsightFallback,
     buildPrompt: buildInsightPrompt,
     defaultTaskKind: 'create-insight-note',
     outputCollections: ['insightNotes'],
@@ -86,7 +76,6 @@ const STAGE_TASKS = {
   },
   reading: {
     agent: 'Reader agent',
-    buildFallback: buildReadingFallback,
     buildPrompt: buildReadingPrompt,
     bootstrap: bootstrapReadingRun,
     defaultTaskKind: 'create-reading-session',
@@ -96,7 +85,6 @@ const STAGE_TASKS = {
   },
   research: {
     agent: 'Reproduction agent',
-    buildFallback: buildResearchFallback,
     buildPrompt: buildResearchPrompt,
     defaultTaskKind: 'create-repro-plan',
     outputCollections: ['reproChecklistItems', 'experimentRuns'],
@@ -105,7 +93,6 @@ const STAGE_TASKS = {
   },
   result: {
     agent: 'Analyst report',
-    buildFallback: buildResultFallback,
     buildPrompt: buildResultPrompt,
     defaultTaskKind: 'create-result-comparison',
     outputCollections: ['resultComparisons'],
@@ -114,7 +101,6 @@ const STAGE_TASKS = {
   },
   writing: {
     agent: 'Writing agent',
-    buildFallback: buildWritingFallback,
     buildPrompt: buildWritingPrompt,
     defaultTaskKind: 'create-writing-draft',
     outputCollections: ['writingDrafts'],
@@ -206,9 +192,8 @@ function toSearchPage(value) {
 
 function searchOutputSummary(payload, query) {
   const count = payload.results.length;
-  const provider = payload.provider || 'search provider';
-  const suffix = count === 1 ? 'result' : 'results';
-  return `Scout returned ${count} ${suffix} for "${truncate(query, 120)}" via ${provider}.`;
+  const suffix = count === 1 ? 'paper' : 'papers';
+  return `Found ${count} ${suffix} for "${truncate(query, 120)}".`;
 }
 
 function isRunCancelRequested(store, runId) {
@@ -496,7 +481,10 @@ async function persistTaskOutputs({ context, definition, output, run, store }) {
 
   if (definition.stage === 'reading') {
     const paper = context.paper;
-    const sessionPayload = output.readingSessions[0] || buildReadingFallback({ context }).readingSessions[0];
+    const sessionPayload = output.readingSessions[0];
+    if (!sessionPayload) {
+      throw new Error('Could not prepare the reading result.');
+    }
     const session = await store.upsertReadingSession({
       ...sessionPayload,
       abstract: paper.abstract || sessionPayload.abstract || '',
@@ -784,40 +772,19 @@ export function createAgentRunService({
         return;
       }
 
-      if (definition.stage === 'search') {
-        await notifyingStore.updateAgentRun(runId, {
-          error: message,
-          finishedAt: nowIso(),
-          heartbeatAt: null,
-          leaseExpiresAt: null,
-          leaseOwner: '',
-          outputRef: [],
-          outputSummary: `Agentic search failed: ${message}`,
-          status: 'error',
-          warning: '',
-        });
-        return;
-      }
-
-      const fallback = definition.buildFallback({ context, error });
-      const persisted = await persistTaskOutputs({
-        context,
-        definition,
-        output: normaliseAgentPayload(fallback, definition),
-        run,
-        store: notifyingStore,
-      });
-
       await notifyingStore.updateAgentRun(runId, {
-        createdAssetIds: uniqueStrings([...(run.createdAssetIds || []), ...persisted.createdAssetIds]),
+        error: message,
         finishedAt: nowIso(),
         heartbeatAt: null,
         leaseExpiresAt: null,
         leaseOwner: '',
-        outputRef: persisted.outputRef,
-        outputSummary: persisted.outputSummary,
-        status: 'done',
-        warning: combineWarnings(message),
+        outputRef: [],
+        outputSummary:
+          definition.stage === 'search'
+            ? 'Search did not finish. Try again.'
+            : `${definition.agent} did not finish. Try again.`,
+        status: 'error',
+        warning: '',
       });
     } finally {
       activeRuns.delete(runId);

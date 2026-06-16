@@ -4,6 +4,7 @@
 .env
 .runtime
 .worktrees
+.superpowers/brainstorm/*
 node_modules
 data/runtime/store.json
 data/runtime/reading/

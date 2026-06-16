@@ -130,7 +130,7 @@ test('Reader imports external OCR text to recover an unparsed paper', async ({ p
   await expect(page.locator('.reading-metabar-title')).toHaveText(session.title);
   const textImportForm = page.locator('[data-action="submit-reading-text-import-form"]:visible');
   await expect(textImportForm).toBeVisible();
-  await expect(textImportForm.getByText('Built-in OCR fallback')).toBeVisible();
+  await expect(textImportForm.getByText('Import extracted text')).toBeVisible();
   await expect(textImportForm.locator('[name="readingTextImportSource"]')).toHaveValue('External OCR import');
   await textImportForm.locator('[name="readingTextImport"]').fill([
     'Abstract',
@@ -168,6 +168,12 @@ test('Reader PDF navigation, selection note, and Lab handoff work together', asy
   await expect(page.locator('[data-reading-pdf-page="1"]')).toBeVisible();
   await expect(page.locator('.reading-note-card').first()).toBeVisible();
   await expect(page.locator('.reading-pdf-annotation-marker').first()).toBeVisible();
+
+  await page.locator('[data-action="set-reading-rail"][data-reading-rail="outline"]').click();
+  const outlineJump = page.locator('.reading-outline-item[data-action="jump-reading-page"]').first();
+  const outlinePage = await outlineJump.getAttribute('data-reading-page');
+  await outlineJump.click();
+  await expect(page.locator(`[data-reading-pdf-page="${outlinePage}"]`)).toHaveClass(/is-targeted/);
 
   await page.locator('[data-action="toggle-reading-pdf-dock-panel"][data-reading-pdf-dock-panel="search"]').click();
   await expect(page.locator('.pdf-search-panel.visible')).toBeVisible();

@@ -3,6 +3,7 @@ let activeRenderToken = 0;
 let activePageObserver = null;
 let activeAnnotations = [];
 let activeSourceHighlight = null;
+const PDF_VIEWER_STATE_KEY = '__aresReadingPdfViewerState';
 
 function setMessage(host, message, className = '') {
   if (!host) {
@@ -242,6 +243,29 @@ function createPdfPageShell(viewport, pageNumber) {
   return { surface, wrapper };
 }
 
+function createPdfPagePlaceholder(pageNumber) {
+  const placeholder = document.createElement('div');
+  placeholder.className = 'reading-pdf-page-placeholder';
+  placeholder.textContent = `Page ${pageNumber}`;
+  return placeholder;
+}
+
+function getPdfViewerState(host) {
+  return host?.[PDF_VIEWER_STATE_KEY] || null;
+}
+
+function setPdfViewerState(host, viewerState) {
+  if (host) {
+    host[PDF_VIEWER_STATE_KEY] = viewerState;
+  }
+}
+
+function clearPdfViewerState(host) {
+  if (host?.[PDF_VIEWER_STATE_KEY]) {
+    delete host[PDF_VIEWER_STATE_KEY];
+  }
+}
+
 async function createSelectableTextLayer({ page, pdfjsLib, viewport }) {
   const layer = document.createElement('div');
   layer.className = 'reading-pdf-text-layer textLayer';
@@ -286,21 +310,22 @@ export function resetReadingPdfSurface() {
   disconnectActivePageObserver();
 }
 
-async function renderPdfPage({ pageRecord, pdfjsLib, renderToken }) {
+async function renderPdfPage({ force = false, pageRecord, pdfjsLib, renderToken }) {
   const { page, surface, viewport, wrapper } = pageRecord;
-  if (renderToken !== activeRenderToken || wrapper.dataset.renderState === 'ready') {
+  if (renderToken !== activeRenderToken || (!force && wrapper.dataset.renderState === 'ready')) {
     return;
   }
 
-  if (pageRecord.renderPromise) {
+  if (!force && pageRecord.renderPromise) {
     await pageRecord.renderPromise;
     return;
   }
 
-  pageRecord.renderPromise = (async () => {
+  const renderPromise = (async () => {
     wrapper.dataset.renderState = 'rendering';
     const outputScale = window.devicePixelRatio || 1;
-    const canvas = document.createElement('canvas');
+    const existingCanvas = force ? null : surface.querySelector('.reading-pdf-canvas');
+    const canvas = existingCanvas || document.createElement('canvas');
     canvas.className = 'reading-pdf-canvas';
     const context = canvas.getContext('2d', { alpha: false });
     canvas.width = Math.ceil(viewport.width * outputScale);
@@ -308,13 +333,22 @@ async function renderPdfPage({ pageRecord, pdfjsLib, renderToken }) {
     canvas.style.width = `${viewport.width}px`;
     canvas.style.height = `${viewport.height}px`;
 
-    surface.replaceChildren(canvas);
+    if (!existingCanvas) {
+      surface.replaceChildren(canvas);
+    } else {
+      surface.querySelector('.reading-pdf-text-layer')?.remove();
+      surface.querySelector('.reading-pdf-annotation-layer')?.remove();
+      surface.querySelector('.reading-pdf-source-highlight')?.remove();
+    }
 
-    await page.render({
+    const renderTask = page.render({
       canvasContext: context,
       transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null,
       viewport,
-    }).promise;
+    });
+    pageRecord.renderTask = renderTask;
+    await renderTask.promise;
+    pageRecord.renderTask = null;
 
     if (renderToken !== activeRenderToken) {
       return;
@@ -336,9 +370,68 @@ async function renderPdfPage({ pageRecord, pdfjsLib, renderToken }) {
 
     wrapper.dataset.renderState = 'error';
     surface.innerHTML = `<div class="reading-pdf-loading is-error">${error instanceof Error ? error.message : String(error)}</div>`;
+  }).finally(() => {
+    if (pageRecord.renderPromise === renderPromise) {
+      pageRecord.renderPromise = null;
+    }
   });
+  pageRecord.renderPromise = renderPromise;
 
   await pageRecord.renderPromise;
+}
+
+function updatePdfPageRecordZoom(pageRecord, zoom) {
+  const pageNumber = Number(pageRecord.wrapper.dataset.readingPdfPage) || 1;
+  const viewport = pageRecord.page.getViewport({ scale: 1.28 * (zoom / 100) });
+  pageRecord.viewport = viewport;
+  applyPdfPageMetrics(pageRecord.surface, viewport);
+  pageRecord.renderTask?.cancel?.();
+  pageRecord.renderTask = null;
+  pageRecord.renderPromise = null;
+  pageRecord.wrapper.dataset.renderState = 'pending';
+
+  const canvas = pageRecord.surface.querySelector('.reading-pdf-canvas');
+  if (canvas) {
+    canvas.style.width = `${viewport.width}px`;
+    canvas.style.height = `${viewport.height}px`;
+  } else if (!pageRecord.surface.querySelector('.reading-pdf-page-placeholder')) {
+    pageRecord.surface.replaceChildren(createPdfPagePlaceholder(pageNumber));
+  }
+}
+
+function rescaleHydratedPdfPages({ host, pageRecords, pdfjsLib, targetPage, zoom }) {
+  if (!pageRecords?.length) {
+    return false;
+  }
+
+  const previousZoom = Number(host.dataset.pdfZoom || 100) || 100;
+  const previousScrollTop = host.scrollTop;
+  const renderToken = ++activeRenderToken;
+  disconnectActivePageObserver();
+  host.dataset.pdfZoom = String(zoom);
+  host.dataset.renderState = 'ready';
+
+  pageRecords.forEach((pageRecord) => {
+    updatePdfPageRecordZoom(pageRecord, zoom);
+    if (
+      Number(pageRecord.wrapper.dataset.readingPdfPage) <= 2 ||
+      Number(pageRecord.wrapper.dataset.readingPdfPage) === Number(targetPage) ||
+      Number(pageRecord.wrapper.dataset.readingPdfPage) === Number(activeSourceHighlight?.page)
+    ) {
+      void renderPdfPage({ force: true, pageRecord, pdfjsLib, renderToken });
+    }
+  });
+
+  host.scrollTop = Math.round(previousScrollTop * (zoom / previousZoom));
+  observePdfPages({ host, pageRecords, pdfjsLib, renderToken });
+  syncReadingPdfAnnotations(host, activeAnnotations);
+  syncReadingPdfSourceHighlight(host, activeSourceHighlight);
+  if (targetPage) {
+    window.requestAnimationFrame(() => {
+      scrollReadingPdfToPage(host, targetPage);
+    });
+  }
+  return true;
 }
 
 function observePdfPages({ host, pageRecords, pdfjsLib, renderToken }) {
@@ -393,6 +486,22 @@ export async function hydrateReadingPdfSurface({ annotations = [], baseUrl, host
   const nextZoomKey = String(nextZoom);
   activeAnnotations = normalizePdfAnnotations(annotations);
   activeSourceHighlight = normalizeSourceHighlight(sourceHighlight);
+  if (host.dataset.renderState === 'ready' && host.dataset.pdfUrl === nextPdfUrl && host.dataset.pdfZoom !== nextZoomKey) {
+    const viewerState = getPdfViewerState(host);
+    if (
+      viewerState?.pdfUrl === nextPdfUrl &&
+      rescaleHydratedPdfPages({
+        host,
+        pageRecords: viewerState.pageRecords,
+        pdfjsLib: viewerState.pdfjsLib,
+        targetPage,
+        zoom: nextZoom,
+      })
+    ) {
+      return;
+    }
+  }
+
   if (host.dataset.renderState === 'ready' && host.dataset.pdfUrl === nextPdfUrl && host.dataset.pdfZoom === nextZoomKey) {
     syncReadingPdfAnnotations(host, activeAnnotations);
     syncReadingPdfSourceHighlight(host, activeSourceHighlight);
@@ -406,6 +515,7 @@ export async function hydrateReadingPdfSurface({ annotations = [], baseUrl, host
 
   const renderToken = ++activeRenderToken;
   disconnectActivePageObserver();
+  clearPdfViewerState(host);
   host.dataset.renderState = 'loading';
   host.dataset.pdfUrl = nextPdfUrl;
   host.dataset.pdfZoom = nextZoomKey;
@@ -440,6 +550,7 @@ export async function hydrateReadingPdfSurface({ annotations = [], baseUrl, host
     }
 
     observePdfPages({ host, pageRecords, pdfjsLib, renderToken });
+    setPdfViewerState(host, { pageRecords, pdf, pdfjsLib, pdfUrl: nextPdfUrl });
     syncReadingPdfAnnotations(host, activeAnnotations);
     syncReadingPdfSourceHighlight(host, activeSourceHighlight);
     if (targetPage) {

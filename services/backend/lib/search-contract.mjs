@@ -105,7 +105,7 @@ export function sanitisePaperRecord(payload) {
     openAccess: Boolean(payload.openAccess),
     paperUrl: payload.paperUrl ? String(payload.paperUrl) : null,
     pdfUrl: payload.pdfUrl ? String(payload.pdfUrl) : null,
-    sourceName: String(payload.sourceName || 'Unknown provider'),
+    sourceName: String(payload.sourceName || '출처 정보 없음'),
     sourceProvider: String(payload.sourceProvider || 'manual'),
     relevance: Math.max(0, Math.min(100, Number(payload.relevance) || 0)),
   };

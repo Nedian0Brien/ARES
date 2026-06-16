@@ -211,6 +211,36 @@ test('required auth mode rejects anonymous API access and filters project lists'
     ['owned'],
   );
 
+  const createProjectResponse = await fetch(new URL('/api/projects', server.url), {
+    body: JSON.stringify({
+      color: '#8957c9',
+      defaultQuery: 'project creation modal',
+      focus: 'Validate project creation from the workspace sidebar.',
+      keywords: ['project', 'creation'],
+      name: 'Creation Flow',
+    }),
+    headers: {
+      ...userHeaders('owner-user'),
+      'content-type': 'application/json',
+    },
+    method: 'POST',
+  });
+  const createProjectPayload = await createProjectResponse.json();
+  assert.equal(createProjectResponse.status, 201);
+  assert.equal(createProjectPayload.project.id, 'creation-flow');
+  assert.equal(createProjectPayload.project.libraryCount, 0);
+  assert.equal(createProjectPayload.projectAccess.role, 'owner');
+  assert.equal(createProjectPayload.projectAccess.userId, 'owner-user');
+
+  const ownerProjectsAfterCreateResponse = await fetch(new URL('/api/projects', server.url), {
+    headers: userHeaders('owner-user'),
+  });
+  const ownerProjectsAfterCreatePayload = await ownerProjectsAfterCreateResponse.json();
+  assert.deepEqual(
+    ownerProjectsAfterCreatePayload.projects.map((project) => project.id),
+    ['creation-flow', 'owned'],
+  );
+
   const runsResponse = await fetch(new URL('/api/agent-runs', server.url), {
     headers: userHeaders('owner-user'),
   });

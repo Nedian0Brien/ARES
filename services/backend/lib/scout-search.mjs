@@ -378,8 +378,8 @@ export function createScoutSearchService({
             }),
           );
           await emitProgress(onProgress, {
-            detail: `${toolPayload.results.length} OpenAlex candidate paper(s) returned.`,
-            label: 'OpenAlex tool result',
+            detail: `Found ${toolPayload.results.length} candidate paper(s).`,
+            label: 'Candidates collected',
             source: 'backend',
             status: 'done',
             type: 'tool',
@@ -388,21 +388,21 @@ export function createScoutSearchService({
           const message = error instanceof Error ? error.message : String(error);
           if (searchRun) {
             await runStore.updateAgentRun(searchRun.id, {
-              error: `Scout OpenAlex tool failed: ${message}`,
+              error: message,
               finishedAt: new Date().toISOString(),
-              outputSummary: `Scout OpenAlex tool failed: ${message}`,
+              outputSummary: 'Could not load candidate papers. Try again.',
               status: 'error',
               warning: '',
             });
           }
 
-          throw new Error(`Scout OpenAlex tool failed: ${message}`);
+          throw new Error(message);
         }
 
         try {
           await emitProgress(onProgress, {
-            detail: `Ranking ${toolPayload.results.length} candidate paper(s) with ${runtimeLabel || 'Scout'}.`,
-            label: 'Scout ranking started',
+            detail: `Ranking ${toolPayload.results.length} candidate paper(s).`,
+            label: 'Ranking candidates',
             source: 'backend',
             status: 'running',
             type: 'agent',
@@ -418,8 +418,8 @@ export function createScoutSearchService({
           });
           const rankedResults = selectRankedCandidates(toolPayload.results, rankPayload, perPage);
           await emitProgress(onProgress, {
-            detail: `Selected ${rankedResults.length} paper(s) for the live result set.`,
-            label: 'Scout ranking complete',
+            detail: `Selected ${rankedResults.length} paper(s).`,
+            label: 'Ranking complete',
             source: 'backend',
             status: 'done',
             type: 'agent',
@@ -440,7 +440,7 @@ export function createScoutSearchService({
           if (searchRun) {
             await runStore.updateAgentRun(searchRun.id, {
               finishedAt: new Date().toISOString(),
-              outputSummary: `Scout returned ${payload.results.length} result(s).`,
+              outputSummary: `Found ${payload.results.length} paper(s).`,
               status: 'done',
               warning: payload.warning || '',
             });
@@ -451,15 +451,15 @@ export function createScoutSearchService({
           const message = error instanceof Error ? error.message : String(error);
           if (searchRun) {
             await runStore.updateAgentRun(searchRun.id, {
-              error: `Scout agent failed: ${message}`,
+              error: message,
               finishedAt: new Date().toISOString(),
-              outputSummary: `Scout agent failed: ${message}`,
+              outputSummary: 'Search did not finish. Try again.',
               status: 'error',
               warning: '',
             });
           }
 
-          throw new Error(`Scout agent failed: ${message}`);
+          throw new Error(message);
         }
       }
 
@@ -486,7 +486,7 @@ export function createScoutSearchService({
         if (searchRun) {
           await runStore.updateAgentRun(searchRun.id, {
             finishedAt: new Date().toISOString(),
-            outputSummary: `Scout fell back to OpenAlex with ${payload.results.length} result(s).`,
+            outputSummary: `Found ${payload.results.length} paper(s).`,
             status: 'done',
             warning: payload.warning || '',
           });
@@ -515,7 +515,7 @@ export function createScoutSearchService({
       if (searchRun) {
         await runStore.updateAgentRun(searchRun.id, {
           finishedAt: new Date().toISOString(),
-          outputSummary: `Scout fell back to ${payload.provider || 'seed'}.`,
+          outputSummary: 'Prepared results from saved candidate papers.',
           status: 'done',
           warning: payload.warning || '',
         });

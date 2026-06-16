@@ -161,7 +161,7 @@ test('Scout search reports OpenAlex tool failure without starting the agent', as
         scopes: [{ id: 'acl24', type: 'conference', label: 'ACL 2024', meta: { venue: 'ACL' } }],
         page: 1,
       }),
-    /Scout OpenAlex tool failed: OpenAlex unavailable/,
+    /OpenAlex unavailable/,
   );
 
   assert.equal(runtimeCalls, 0);
@@ -199,7 +199,7 @@ test('Scout search reports runtime failure after successful tool retrieval', asy
         scopes: [{ id: 'acl24', type: 'conference', label: 'ACL 2024', meta: { venue: 'ACL' } }],
         page: 1,
       }),
-    /Scout agent failed: runtime timeout/,
+    /runtime timeout/,
   );
 
   assert.equal(directCalls, 1);

@@ -94,7 +94,7 @@ test('Insight cards persist and render quality review criteria', async () => {
   assert.match(appJs, /qualityCriteria:\s*\{/);
 });
 
-test('Insight surface automatically clusters claims and evaluates quality signals', async () => {
+test('Insight surface keeps derived clusters separate from saved card edits', async () => {
   const [appJs, modelJs] = await Promise.all([
     readProjectFile('web/app.js'),
     readProjectFile('services/backend/lib/asset-model.mjs'),
@@ -102,9 +102,9 @@ test('Insight surface automatically clusters claims and evaluates quality signal
 
   assert.match(modelJs, /claimCluster/);
   assert.match(appJs, /function buildInsightClaimCluster/);
-  assert.match(appJs, /function evaluateInsightQuality/);
   assert.match(appJs, /renderInsightClusterSummary/);
   assert.match(appJs, /Claim clusters/);
   assert.match(appJs, /related claims/);
-  assert.match(appJs, /auto quality/);
+  assert.doesNotMatch(appJs, /const evaluatedCard = enrichInsightCardForQuality/);
+  assert.doesNotMatch(appJs, /const nextCard = enrichInsightCardForQuality\(\s*\{/);
 });

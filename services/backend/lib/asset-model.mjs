@@ -198,10 +198,10 @@ export function normalisePaper(input = {}, options = {}) {
     questionIds: ensureTextArray(input.questionIds, 16),
     source: ensureText(input.source || input.sourceProvider || input.sourceName, 'local'),
     status: normaliseStatus(input.status, VALID_GENERIC_STATUSES, input.savedAt ? 'done' : 'queue'),
-    title: ensureText(input.title, 'Untitled paper'),
+    title: ensureText(input.title, '제목 없는 논문'),
     updatedAt: ensureText(input.updatedAt || input.savedAt || input.queuedAt, nowIso()),
     url: input.url || input.paperUrl || null,
-    venue: ensureText(input.venue, 'Unknown'),
+    venue: ensureText(input.venue, '출처 정보 없음'),
     year: ensureNumber(input.year),
   };
 }

@@ -44,7 +44,7 @@ ARES는 화면 목업 단계가 아니다. 현재 앱은 단일 Node 백엔드, 
 | Lab | 부분 완료 | Reading handoff, reproduction plan, manual run result edit, result dossier 연결이 동작한다. 실제 실험 실행 runner는 없다 |
 | Insight | 부분 완료 | Insight card 생성, 선택, 수정, 삭제, evidence/draft 참조 정리가 동작한다. claim clustering과 기본 품질 평가는 자동으로 계산/저장한다. 운영 품질 루프와 사람이 검토할 평가 리포트는 더 확장해야 한다 |
 | Write | 부분 완료 | Draft section CRUD와 evidence-backed writing surface가 있다. 완성 문서 export 품질과 citation formatting은 더 검증해야 한다 |
-| Backend runtime | 부분 완료 | Agent run 상태 저장, SSE, fallback, Codex runtime adapter, 부팅 시 interrupted run 복구가 있다. 취소 요청은 file/PostgreSQL store에 `canceled`, `cancelReason`, `cancelRequestedAt`으로 지속화되며, 늦게 도착한 search 결과가 취소 run을 완료 상태로 덮어쓰지 않는다. Codex runtime은 별도 process group으로 실행되고 취소 시 process group에 SIGTERM을 보낸다. Reader summary/chat은 `ARES_REQUIRE_AGENT_RUNTIME=true`에서 runtime unavailable fallback 저장을 차단한다 |
+| Backend runtime | 부분 완료 | Agent run 상태 저장, SSE, Codex runtime adapter, 부팅 시 interrupted run 복구가 있다. 취소 요청은 file/PostgreSQL store에 `canceled`, `cancelReason`, `cancelRequestedAt`으로 지속화되며, 늦게 도착한 search 결과가 취소 run을 완료 상태로 덮어쓰지 않는다. Codex runtime은 별도 process group으로 실행되고 취소 시 process group에 SIGTERM을 보낸다. 실패한 stage run은 사용자 asset을 만들지 않고 `error`로 끝난다. Reader summary/chat은 `ARES_REQUIRE_AGENT_RUNTIME=true`에서 runtime unavailable fallback 저장을 차단한다 |
 | Storage | 부분 완료 | file store와 PostgreSQL store가 같은 public contract를 제공하고 실제 PostgreSQL E2E를 통과했다. 동시성, migration, 운영 백업 검증은 부족하다 |
 | Frontend QA | 부분 완료 | lint, tests, Playwright interaction smoke 통과. Core tab navigation, Read Library 진입, Reader PDF page jump, PDF selection note, Reading -> Lab handoff, mobile bottom nav, mobile PDF dock, console error, failed request 수집을 검증한다. 더 깊은 브라우저/기기 매트릭스 검증은 남아 있다 |
 
@@ -130,7 +130,8 @@ ARES는 화면 목업 단계가 아니다. 현재 앱은 단일 Node 백엔드, 
 - [x] PDF annotation layer를 추가한다.
   - 세션의 note/highlight를 PDF annotation layer로 정규화한다.
   - PDF selection으로 만든 note는 호환용 union `sourceBounds`와 줄별 `sourceBounds.rects`를 `page-ratio`로 저장하고 PDF canvas 위 annotation box로 표시한다.
-  - parse seed highlight/note는 각각 selection/seed method와 confidence를 저장해 generated candidate의 근거 수준을 추적한다.
+  - parse seed highlight는 selection method와 confidence를 저장해 generated candidate의 근거 수준을 추적한다.
+  - Notes는 사용자 작성 산출물로만 유지하며, legacy seed note는 Reading model 정규화에서 제외한다.
   - 좌표가 없는 기존 note/highlight는 page-level marker로 fallback한다.
   - 남은 리스크: 브라우저 `Selection.getClientRects()` 기반 rect라 glyph-level polygon이나 cross-page selection 정밀도는 별도 검증이 필요하다.
 
@@ -166,15 +167,15 @@ ARES는 화면 목업 단계가 아니다. 현재 앱은 단일 Node 백엔드, 
 - [x] 실제 experiment runner 또는 외부 run import 계약을 정한다.
   - Lab은 명령을 직접 실행하지 않고, 외부 실행 로그를 `external-import` run으로 들여온다.
   - import form은 command, run log, artifact URL, paper baseline, unit을 받고 metric parser로 result dossier를 만든다.
-  - 실패 로그는 Insight 후보 생성 경로로 이어진다.
+  - 실패 로그는 Lab run과 result dossier에 남고, Insight 후보는 사용자가 명시적으로 만들 때만 생성한다.
 
 - [x] result comparison을 paper metric과 run metric 사이의 typed contract로 만든다.
   - Lab result form은 paper baseline, observed value, unit을 받는다.
   - result dossier comparison은 metric, unit, paperValue, reproducedValue, delta, deltaValue, status를 저장한다.
 
-- [x] failed run 분석을 Insight 후보로 자동 연결한다.
-  - Lab result를 `error` 상태로 저장하면 실패 원인, 다음 실험, evidenceRefs, run/dossier refs를 담은 Insight 후보를 만든다.
-  - Insight card는 failure cause와 follow-up을 카드 본문에 표시한다.
+- [x] failed run 분석은 Lab에 남기고 Insight 자동 생성을 차단한다.
+  - Lab result를 `error` 상태로 저장해도 Insight 후보를 자동 생성하지 않는다.
+  - 기존 Insight card에 failure cause와 follow-up이 있으면 카드 본문에 표시한다.
 
 ### P4. Insight/Write 품질
 

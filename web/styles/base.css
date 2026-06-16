@@ -115,7 +115,7 @@ body {
   font-family: "Inter", -apple-system, sans-serif;
   font-feature-settings: "cv11", "ss01", "ss03";
   -webkit-font-smoothing: antialiased;
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: -0.006em;
   overflow-x: clip;
   overflow-y: hidden;
@@ -177,7 +177,7 @@ a {
   color: var(--t3);
   display: inline-flex;
   font-family: "Inter", sans-serif;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 500;
   height: 18px;
   justify-content: center;
@@ -209,7 +209,7 @@ a {
   background: var(--control-strong-bg);
   border: none;
   color: var(--control-strong-fg);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   padding: 6px 12px;
 }
@@ -222,7 +222,7 @@ a {
   background: var(--s1);
   border: 1px solid var(--b1);
   color: var(--tx);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   padding: 5px 11px;
 }
@@ -235,6 +235,8 @@ a {
 .btn-p:focus-visible,
 .btn-s:focus-visible,
 .btn-g:focus-visible,
+.project-create-modal-close:focus-visible,
+.project-create-color:focus-visible,
 .panel-toggle-btn:focus-visible,
 .hero-submit-btn:focus-visible,
 .dashboard-sbtn:focus-visible,
@@ -293,7 +295,7 @@ a {
   border-radius: 4px;
   color: var(--t2);
   display: inline-flex;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   gap: 4px;
   letter-spacing: -0.003em;
@@ -392,7 +394,7 @@ a {
 }
 
 .sidebar-collapse-btn .sidebar-action-label {
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
   letter-spacing: 0.01em;
 }
@@ -486,7 +488,7 @@ a {
   color: var(--on-accent);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   height: 24px;
   justify-content: center;
@@ -502,7 +504,7 @@ a {
 .brand-title {
   color: var(--tx);
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 550;
   letter-spacing: -0.01em;
 }
@@ -510,17 +512,39 @@ a {
 .brand-subtitle {
   color: var(--t3);
   display: block;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.35;
 }
 
 .sidebar-label {
   color: var(--t3);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.08em;
   padding: 4px 8px 6px;
   text-transform: uppercase;
+}
+
+.sidebar-label-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sidebar-label-row .sidebar-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-add-btn {
+  flex: 0 0 auto;
+  height: 22px;
+  width: 22px;
+}
+
+.desktop-sidebar[data-collapsed="true"] .sidebar-label-row {
+  justify-content: center;
 }
 
 .sidebar-action {
@@ -540,7 +564,7 @@ a {
 
 .sidebar-action-label {
   flex: 1;
-  font-size: 12.5px;
+  font-size: 13.5px;
   min-width: 0;
 }
 
@@ -580,7 +604,7 @@ a {
   color: var(--t2);
   display: block;
   flex: 1;
-  font-size: 12.5px;
+  font-size: 13.5px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -649,7 +673,7 @@ a {
 .workflow-stage-label {
   color: var(--t2);
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 450;
   letter-spacing: -0.005em;
   line-height: 1.2;
@@ -695,6 +719,157 @@ a {
   color: var(--t2);
 }
 
+.project-create-modal-overlay {
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: fixed;
+  visibility: hidden;
+  z-index: 95;
+}
+
+.project-create-modal-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.project-create-modal-backdrop {
+  background: rgba(17, 24, 28, 0.24);
+  border: none;
+  inset: 0;
+  position: absolute;
+}
+
+.project-create-modal-panel {
+  align-items: center;
+  display: flex;
+  inset: var(--viewport-safe-top) 0 0;
+  justify-content: center;
+  padding: 20px 20px calc(20px + var(--viewport-bottom-occlusion));
+  pointer-events: none;
+  position: absolute;
+}
+
+.project-create-modal-surface {
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: 10px;
+  box-shadow: var(--shadow-popover);
+  color: var(--tx);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: calc(var(--mobile-viewport-height) - var(--viewport-safe-top) - var(--viewport-bottom-occlusion) - 40px);
+  overflow: auto;
+  padding: 16px;
+  pointer-events: auto;
+  width: min(100%, 420px);
+}
+
+.project-create-modal-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.project-create-modal-title {
+  color: var(--tx);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.project-create-modal-close {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--b1);
+  border-radius: 6px;
+  color: var(--t2);
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.project-create-modal-close:hover {
+  background: var(--s2);
+}
+
+.project-create-form {
+  display: grid;
+  gap: 12px;
+}
+
+.project-create-field {
+  display: grid;
+  gap: 6px;
+}
+
+.project-create-field span {
+  color: var(--t3);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project-create-field input,
+.project-create-field textarea {
+  background: var(--s2);
+  border: 1px solid var(--b1);
+  border-radius: 7px;
+  color: var(--tx);
+  min-width: 0;
+  padding: 8px 9px;
+  resize: vertical;
+  width: 100%;
+}
+
+.project-create-field input:focus,
+.project-create-field textarea:focus {
+  border-color: var(--b2);
+  outline: 2px solid rgba(94, 106, 210, 0.14);
+  outline-offset: 1px;
+}
+
+.project-create-color-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-create-color {
+  background: var(--project-create-color);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  height: 22px;
+  width: 22px;
+}
+
+.project-create-color.is-active {
+  border-color: var(--tx);
+  box-shadow: 0 0 0 2px var(--s1), 0 0 0 3px var(--b2);
+}
+
+.project-create-error {
+  background: rgba(192, 78, 104, 0.1);
+  border: 1px solid rgba(192, 78, 104, 0.22);
+  border-radius: 7px;
+  color: var(--insight);
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 8px 9px;
+}
+
+.project-create-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .sidebar-menu {
   background: var(--s1);
   border: 1px solid var(--b1);
@@ -715,7 +890,7 @@ a {
   border-radius: 6px;
   color: var(--t2);
   display: flex;
-  font-size: 12.5px;
+  font-size: 13.5px;
   padding: 7px 8px;
   text-align: left;
   width: 100%;
@@ -748,7 +923,7 @@ a {
   color: var(--on-accent);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   height: 22px;
   justify-content: center;
@@ -759,14 +934,14 @@ a {
 .account-name {
   color: var(--t2);
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
 }
 
 .account-plan {
   color: var(--t3);
   display: block;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .workspace {
@@ -808,7 +983,7 @@ a {
 
 .topbar-stage-label {
   color: var(--tx);
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
   min-width: 0;
@@ -819,12 +994,12 @@ a {
 
 .topbar-separator {
   color: var(--t4);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .topbar-stage-mode {
   color: var(--t2);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   min-width: 0;
 }
@@ -841,7 +1016,7 @@ a {
 .topbar-crumb-separator {
   color: var(--t4);
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .topbar-crumb-link {
@@ -852,7 +1027,7 @@ a {
   cursor: pointer;
   flex: 0 0 auto;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   margin: 0;
   padding: 2px 6px;
   transition:
@@ -873,7 +1048,7 @@ a {
 .topbar-crumb-current {
   color: var(--t2);
   flex: 1 1 auto;
-  font-size: 12px;
+  font-size: 13px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -903,7 +1078,7 @@ a {
   border-radius: 5px;
   color: var(--t3);
   display: inline-flex;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 500;
   gap: 5px;
   height: 24px;
@@ -955,14 +1130,14 @@ a {
 
 .workflow-mode-kicker {
   color: var(--t3);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 650;
   text-transform: uppercase;
 }
 
 .workflow-mode-title {
   color: var(--tx);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -991,7 +1166,7 @@ a {
 
 .workflow-mode-btn small {
   color: var(--t3);
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 
 .workflow-mode-btn.is-active {
@@ -1022,14 +1197,14 @@ a {
 .placeholder-card-label,
 .agent-panel-eyebrow {
   color: var(--t3);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .filter-eyebrow {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   margin-bottom: 10px;
 }
@@ -1040,7 +1215,7 @@ a {
 
 .filter-group-title {
   color: var(--t3);
-  font-size: 11px;
+  font-size: 12px;
   margin-bottom: 6px;
 }
 
@@ -1049,7 +1224,7 @@ a {
   color: var(--t2);
   cursor: pointer;
   display: flex;
-  font-size: 12.5px;
+  font-size: 13.5px;
   gap: 7px;
   padding: 3px 0;
 }
@@ -1079,7 +1254,7 @@ a {
 
 .filter-range-value {
   color: var(--t2);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 3px;
 }
 
@@ -1103,12 +1278,12 @@ a {
 
 .library-metric-label {
   color: var(--t3);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .library-project-name {
   color: var(--t3);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 6px;
 }
 
@@ -1154,7 +1329,7 @@ a {
   border: none;
   color: var(--tx);
   flex: 1;
-  font-size: 13px;
+  font-size: 14px;
   min-width: 0;
   outline: none;
 }
@@ -1168,7 +1343,7 @@ a {
   color: var(--t3);
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: 13px;
   gap: 10px;
 }
 
@@ -1190,7 +1365,7 @@ a {
   border: 1px solid var(--b1);
   border-radius: 6px;
   color: var(--t2);
-  font-size: 12px;
+  font-size: 13px;
   padding: 4px 8px;
 }
 
@@ -1216,7 +1391,7 @@ a {
   border-radius: 6px;
   color: var(--t2);
   display: flex;
-  font-size: 12px;
+  font-size: 13px;
   gap: 8px;
   line-height: 1.6;
   margin-top: 10px;
@@ -1256,7 +1431,7 @@ a {
 
 .paper-title {
   color: var(--tx);
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.45;
@@ -1272,18 +1447,18 @@ a {
 
 .paper-authors {
   color: var(--t3);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .paper-meta-separator {
   color: var(--t4);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .paper-score {
   color: var(--t2);
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -1311,7 +1486,7 @@ a {
 }
 
 .preview-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 550;
   letter-spacing: -0.01em;
   line-height: 1.4;
@@ -1330,13 +1505,13 @@ a {
 
 .preview-section-title {
   color: var(--t3);
-  font-size: 11px;
+  font-size: 12px;
   margin-bottom: 6px;
 }
 
 .preview-copy {
   color: var(--t2);
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.65;
 }
 
@@ -1344,7 +1519,7 @@ a {
   align-items: center;
   color: var(--t2);
   display: flex;
-  font-size: 12.5px;
+  font-size: 13.5px;
   gap: 8px;
   padding: 3px 0;
 }
@@ -1363,7 +1538,7 @@ a {
 .preview-card-value {
   color: var(--read);
   flex: 1;
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1385,7 +1560,7 @@ a {
 .empty-state,
 .loading-state {
   color: var(--t3);
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.65;
   padding: 16px 18px;
 }
@@ -1416,7 +1591,7 @@ a {
 
 .placeholder-copy {
   color: var(--t2);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.75;
   margin-bottom: 18px;
   max-width: 56ch;
@@ -1441,7 +1616,7 @@ a {
 
 .placeholder-card h3 {
   color: var(--tx);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 550;
   letter-spacing: -0.01em;
   margin-bottom: 6px;
@@ -1449,7 +1624,7 @@ a {
 
 .placeholder-card p {
   color: var(--t2);
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
@@ -1462,7 +1637,7 @@ a {
 
 .placeholder-tint p {
   color: var(--t2);
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.7;
 }
 
@@ -1487,7 +1662,7 @@ a {
   align-items: center;
   display: inline-flex;
   gap: 7px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 550;
 }
 
@@ -1507,7 +1682,7 @@ a {
 
 .agent-panel-section p {
   color: var(--t2);
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.6;
 }
 
@@ -1522,7 +1697,7 @@ a {
   align-items: center;
   border-bottom: 1px solid var(--b1);
   display: flex;
-  font-size: 11.5px;
+  font-size: 12.5px;
   justify-content: space-between;
   padding: 4px 0;
 }

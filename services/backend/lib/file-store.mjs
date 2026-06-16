@@ -11,6 +11,7 @@ import {
   normalizeProjectAccess,
   normalizeUser,
 } from './identity-model.mjs';
+import { normalizeNewProject } from './project-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
 
 const PROJECT_MAP_COLLECTIONS = ['library', 'readingQueue'];
@@ -356,7 +357,7 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         sourceProvider: normalized.sourceProvider || 'reading',
         summary: normalized.summary || normalized.summaryCards?.tldr || '',
         title: normalized.title,
-        venue: normalized.venue || 'Unknown',
+        venue: normalized.venue || '출처 정보 없음',
         year: normalized.year ?? null,
       };
     }
@@ -447,6 +448,17 @@ export async function createFileStore({ seedFile, runtimeFile }) {
 
     getProjects() {
       return state.projects.map(projectSummary);
+    },
+
+    async createProject(input) {
+      const project = normalizeNewProject(input, {
+        existingIds: new Set(state.projects.map((entry) => entry.id)),
+      });
+      state.projects.unshift(project);
+      state.library[project.id] = [];
+      state.readingQueue[project.id] = [];
+      await persist();
+      return projectSummary(project);
     },
 
     listUsers() {
@@ -747,13 +759,13 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         relevance: Number(paper.relevance) || 0,
         runId: options.runId ? String(options.runId) : existing.runId || '',
         sessionId: options.sessionId ? String(options.sessionId) : existing.sessionId || '',
-        sourceName: ensureText(paper.sourceName, 'Queued paper'),
+        sourceName: ensureText(paper.sourceName, '읽기 대기 논문'),
         sourceProvider: ensureText(paper.sourceProvider, 'queue'),
         status: normaliseStatus(options.status || existing.status, 'queue'),
         summary: ensureText(paper.summary),
-        title: ensureText(paper.title, 'Untitled paper'),
+        title: ensureText(paper.title, '제목 없는 논문'),
         updatedAt: nowIso(),
-        venue: ensureText(paper.venue, 'Unknown'),
+        venue: ensureText(paper.venue, '출처 정보 없음'),
         year: paper.year === null || paper.year === undefined || paper.year === '' ? null : Number(paper.year),
       };
       const index = queue.findIndex((entry) => entry.paperId === nextEntry.paperId);

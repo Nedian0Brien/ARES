@@ -26,7 +26,7 @@ async function readProjectStyles() {
   return chunks.join('\n');
 }
 
-test('Search + Reading tab exposes Discover, Library, and Reader modes', async () => {
+test('Search + Reading tab exposes user-facing search, library, and reader modes', async () => {
   const appJs = await readProjectFile('web/app.js');
 
   assert.match(appJs, /function renderWorkflowModeNav/);
@@ -74,6 +74,28 @@ test('Visible dashboard controls are wired actions or non-interactive status tex
   assert.doesNotMatch(searchJs, /<button type="button" class="btn-g results-summary-btn/);
   assert.doesNotMatch(appJs, /<button type="button" class="workspace-switch/);
   assert.doesNotMatch(appJs, /<button type="button" class="sidebar-account/);
+});
+
+test('Sidebar project add button opens a project creation modal', async () => {
+  const [appJs, stylesCss] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectStyles(),
+  ]);
+
+  assert.match(appJs, /projectModalOpen: false/);
+  assert.match(appJs, /data-action="open-project-modal"/);
+  assert.match(appJs, /aria-label="Add project"/);
+  assert.match(appJs, /project-create-modal-overlay/);
+  assert.match(appJs, /role="dialog"/);
+  assert.match(appJs, /aria-modal="true"/);
+  assert.match(appJs, /data-action="submit-project-modal"/);
+  assert.match(appJs, /name="projectName"/);
+  assert.match(appJs, /name="projectFocus"/);
+  assert.match(appJs, /api\("api\/projects"/);
+  assert.match(appJs, /method: "POST"/);
+  assert.match(appJs, /state\.activeProjectId = payload\.project\.id/);
+  assert.match(stylesCss, /\.project-create-modal-overlay/);
+  assert.match(stylesCss, /\.project-create-modal-surface/);
 });
 
 test('Theme switcher persists light, dark, and system modes through shared CSS tokens', async () => {
@@ -238,6 +260,20 @@ test('Reader PDF view renders page-level annotation markers from notes and highl
   assert.match(stylesCss, /\.reading-pdf-annotation-marker/);
 });
 
+test('Reader Notes panel keeps generated highlight seeds out of editable notes', async () => {
+  const [readingJs, controllerJs] = await Promise.all([
+    readProjectFile('web/app/features/reading.js'),
+    readProjectFile('web/app/features/reading-pdf-controller.js'),
+  ]);
+
+  assert.match(readingJs, /function isGeneratedReadingNote\(note\)/);
+  assert.match(readingJs, /notes\.filter\(\(note\) => !isGeneratedReadingNote\(note\)\)/);
+  assert.match(readingJs, /Save a passage as a note to see it here\./);
+  assert.doesNotMatch(readingJs, /하이라이트 seed가 비어 있습니다/);
+  assert.doesNotMatch(readingJs, /Parse 단계에서 추출된 하이라이트입니다/);
+  assert.match(controllerJs, /notes\.filter\(\(note\) => !isGeneratedReadingNote\(note\)\)/);
+});
+
 test('Reader PDF selection notes preserve page-ratio highlight boxes', async () => {
   const [appJs, controllerJs, viewerJs, stylesCss] = await Promise.all([
     readProjectFile('web/app.js'),
@@ -280,11 +316,12 @@ test('Reader chat marks assistant answers with no citations as insufficient evid
   assert.match(readingJs, /Insufficient evidence/);
 });
 
-test('Reader chat context label reflects hybrid retrieval instead of lexical-only retrieval', async () => {
+test('Reader chat context label is user-facing instead of retrieval jargon', async () => {
   const readingJs = await readProjectFile('web/app/features/reading.js');
 
-  assert.match(readingJs, /Context: hybrid retrieval chunks/);
+  assert.match(readingJs, /Answers include paper evidence/);
   assert.doesNotMatch(readingJs, /Context: lexical retrieval top-K chunks/);
+  assert.doesNotMatch(readingJs, /Context: hybrid retrieval chunks/);
 });
 
 test('Reader chat exposes retrieval confidence telemetry', async () => {
@@ -294,10 +331,10 @@ test('Reader chat exposes retrieval confidence telemetry', async () => {
   ]);
 
   assert.match(readingJs, /renderReadingRetrievalPill/);
-  assert.match(readingJs, /Low confidence retrieval/);
-  assert.match(readingJs, /Hybrid retrieval/);
-  assert.match(readingJs, /retrieval\.minEvidenceScore/);
-  assert.match(readingJs, /min \$\{escapeHtml\(String\(minEvidenceScore\)\)\}/);
+  assert.match(readingJs, /Weak evidence/);
+  assert.match(readingJs, /Evidence checked/);
+  assert.doesNotMatch(readingJs, /Low confidence retrieval/);
+  assert.doesNotMatch(readingJs, /Hybrid retrieval/);
   assert.match(styles, /\.reading-retrieval-pill/);
   assert.match(styles, /\.reading-retrieval-pill\.is-low/);
 });
@@ -336,8 +373,8 @@ test('Reader summary exposes evidence coverage report', async () => {
 
   assert.match(readingJs, /evidenceCoverage/);
   assert.match(readingJs, /reading-evidence-coverage/);
-  assert.match(readingJs, /Retrieval ready/);
-  assert.match(readingJs, /Source-bounded assets/);
+  assert.match(readingJs, /Evidence search/);
+  assert.match(readingJs, /Located in source/);
   assert.match(styles, /\.reading-evidence-coverage/);
 });
 
@@ -423,6 +460,16 @@ test('PDF viewer renders long documents progressively instead of blocking on eve
   assert.doesNotMatch(viewerJs, /host\.appendChild\(fragment\)/);
 });
 
+test('PDF viewer zoom rescales hydrated pages without reloading the document', async () => {
+  const viewerJs = await readProjectFile('web/app/lib/pdf-viewer.js');
+
+  assert.match(viewerJs, /function rescaleHydratedPdfPages/);
+  assert.match(viewerJs, /getPdfViewerState\(host\)/);
+  assert.match(viewerJs, /host\.dataset\.pdfUrl === nextPdfUrl && host\.dataset\.pdfZoom !== nextZoomKey/);
+  assert.match(viewerJs, /rescaleHydratedPdfPages\(\{/);
+  assert.match(viewerJs, /pdfjsLib\.getDocument\(\{ url: pdfUrl \}\)/);
+});
+
 test('Reading PDF hydration is isolated behind a controller module', async () => {
   const [appJs, controllerJs] = await Promise.all([
     readProjectFile('web/app.js'),
@@ -455,6 +502,32 @@ test('Reader PDF tools expose document search, page thumbnails, and zoom control
   assert.match(readingJs, /data-action="fit-reading-pdf-zoom"/);
 });
 
+test('Reader outline table of contents jumps to PDF pages', async () => {
+  const [appJs, readingJs] = await Promise.all([
+    readProjectFile('web/app.js'),
+    readProjectFile('web/app/features/reading.js'),
+  ]);
+
+  assert.match(readingJs, /const renderOutlineItems =/);
+  assert.match(readingJs, /data-action="jump-reading-page"/);
+  assert.match(readingJs, /data-reading-page="\$\{escapeHtml\(String\(page\)\)\}"/);
+  assert.match(appJs, /if \(action === "jump-reading-page"\)/);
+  assert.match(appJs, /state\.readingDocumentTab = "pdf"/);
+  assert.match(appJs, /readingPdfController\.scrollToPage\(page\)/);
+});
+
+test('Reader detail stage exposes view metadata needed to preserve the PDF host', async () => {
+  const [readingJs, patchJs] = await Promise.all([
+    readProjectFile('web/app/features/reading.js'),
+    readProjectFile('web/app/features/reading-stage-patch.js'),
+  ]);
+
+  assert.match(readingJs, /data-reading-view="detail"/);
+  assert.match(patchJs, /currentStage\.dataset\.readingView/);
+  assert.match(patchJs, /nextStage\.dataset\.readingView/);
+  assert.match(patchJs, /patchReadingSplitPreservingPdf\(currentSplit, nextSplit\)/);
+});
+
 test('Reader exposes built-in OCR and manual text import recovery paths', async () => {
   const [appJs, envExample, packageJson, readingJs, indexJs, readingRoutesJs] = await Promise.all([
     readProjectFile('web/app.js'),
@@ -481,10 +554,9 @@ test('Reader exposes built-in OCR and manual text import recovery paths', async 
   assert.match(readingJs, /name="readingTextImportTool"/);
   assert.match(readingJs, /name="readingTextImportGeneratedAt"/);
   assert.match(readingJs, /data-action="submit-reading-text-import-form"/);
-  assert.match(readingJs, /Built-in OCR/);
-  assert.match(readingJs, /External OCR/);
+  assert.match(readingJs, /External OCR import/);
   assert.match(readingJs, /OCR pages/);
-  assert.match(readingJs, /OCR latency/);
+  assert.match(readingJs, /OCR time/);
 });
 
 test('Reading DOM patching is isolated from the app shell', async () => {

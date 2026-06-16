@@ -28,7 +28,7 @@ test('Writing tab renders a dedicated evidence-backed drafting surface', async (
   assert.match(appJs, /createDraftSectionFromInsight/);
 });
 
-test('Writing surface exposes Outline, Draft, Sources, and evidence bundle concepts', async () => {
+test('Writing surface exposes user-facing outline, draft, sources, and evidence concepts', async () => {
   const appJs = await readProjectFile('web/app.js');
 
   assert.match(appJs, /Outline/);
@@ -49,6 +49,14 @@ test('Writing actions cover generation, evidence insertion, suggestions, and exp
   assert.match(appJs, /Accept suggestion/);
   assert.match(appJs, /data-action="export-writing-draft"/);
   assert.match(appJs, /Export/);
+});
+
+test('Writing section creation requires an existing draft instead of creating one implicitly', async () => {
+  const appJs = await readProjectFile('web/app.js');
+
+  assert.match(appJs, /async function createDraftSectionFromInsight/);
+  assert.match(appJs, /Create a draft first/);
+  assert.doesNotMatch(appJs, /await api\(`api\/projects\/\\$\\{encodeURIComponent\(project\.id\)\\}\/drafts`/);
 });
 
 test('Writing default draft candidates include only accepted insight cards', () => {

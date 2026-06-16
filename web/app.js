@@ -153,6 +153,15 @@ const WORKFLOW_TABS = [
   },
 ];
 
+const PROJECT_COLOR_OPTIONS = [
+  TOKENS.read,
+  TOKENS.search,
+  TOKENS.research,
+  TOKENS.insight,
+  TOKENS.writing,
+  TOKENS.result,
+];
+
 const WORKFLOW_STAGES = [
   {
     id: "search",
@@ -337,6 +346,9 @@ const state = {
   activeQuestionId: "",
   searchInput: "",
   projects: [],
+  projectModalOpen: false,
+  projectModalColor: PROJECT_COLOR_OPTIONS[0],
+  projectSaving: false,
   projectGraph: null,
   projectLibrary: [],
   results: [],
@@ -786,6 +798,46 @@ function statusColor(status) {
   }[status] || TOKENS.t3;
 }
 
+function statusLabel(status) {
+  return {
+    done: "Done",
+    running: "Running",
+    todo: "To do",
+    queue: "Queued",
+    error: "Error",
+    draft: "Draft",
+    review: "Review",
+    empty: "Empty",
+  }[status] || status || "Unknown";
+}
+
+function confidenceLabel(value) {
+  return {
+    unrated: "Unrated",
+    low: "Low",
+    medium: "Medium",
+    high: "High",
+  }[value] || value || "Unrated";
+}
+
+function evidenceCoverageLabel(value) {
+  return {
+    unrated: "Unrated",
+    weak: "Weak",
+    partial: "Partial",
+    strong: "Strong",
+  }[value] || value || "Unrated";
+}
+
+function contradictionLabel(value) {
+  return {
+    unchecked: "Unchecked",
+    none: "None",
+    possible: "Possible",
+    conflict: "Conflict",
+  }[value] || value || "Unchecked";
+}
+
 function statusIcon(status) {
   const color = statusColor(status);
   if (status === "done") {
@@ -839,7 +891,7 @@ function api(path, options = {}) {
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       if (response.status === 413) {
-        throw new Error(`PDF 파일은 최대 ${MAX_READING_PDF_UPLOAD_LABEL}까지 업로드할 수 있습니다.`);
+        throw new Error(`Upload a PDF up to ${MAX_READING_PDF_UPLOAD_LABEL}.`);
       }
       throw new Error(payload.error || `Request failed with ${response.status}`);
     }
@@ -1107,33 +1159,6 @@ function parseLabImportPayload(payload) {
   return parseLabImportPayloadValue(payload);
 }
 
-function buildFailedRunInsightCandidate({ comparison, dossierId, notes, plan, run, runId }) {
-  const failureCause = String(notes || run?.notes || run?.error || "Run failed without a recorded cause.")
-    .replace(/\s+/g, " ")
-    .slice(0, 220);
-  const metric = comparison?.metric || Object.keys(run?.metrics || {})[0] || "primary";
-  const followUpExperiment = `Fix failure cause and rerun ${metric}.`;
-
-  return {
-    claim: `Run failed: ${failureCause}`,
-    confidence: "unrated",
-    createdBy: "lab",
-    evidenceLinkIds: Array.isArray(plan?.evidenceLinkIds) ? plan.evidenceLinkIds : [],
-    experimentRunIds: [runId],
-    failureCause,
-    followUpExperiment,
-    nextAction: followUpExperiment,
-    questionId: plan?.questionId || activeResearchQuestion()?.id || "",
-    resultDossierIds: [dossierId].filter(Boolean),
-    sourceRefs: [
-      { id: runId, label: run?.title || `${run?.kind || "Manual"} run`, type: "experimentRun" },
-      { id: dossierId, label: "Result dossier", type: "resultDossier" },
-    ].filter((ref) => ref.id),
-    status: "draft",
-    type: "hypothesis",
-  };
-}
-
 const INSIGHT_CLUSTER_STOPWORDS = new Set([
   "about",
   "after",
@@ -1284,21 +1309,6 @@ function renderInsightClusterSummary(clusters = []) {
   `;
 }
 
-async function createFailedRunInsightCandidate({ comparison, dossier, notes, plan, project, run, runId }) {
-  const insightCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
-  const existingCard = insightCards.find((card) => Array.isArray(card.experimentRunIds) && card.experimentRunIds.includes(runId));
-  const dossierId = dossier?.id || "";
-  const candidate = buildFailedRunInsightCandidate({ comparison, dossierId, notes, plan, run, runId });
-  const payload = await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
-    method: "POST",
-    body: JSON.stringify({
-      ...(existingCard || {}),
-      ...candidate,
-    }),
-  });
-  state.activeInsightCardId = payload.asset?.id || existingCard?.id || state.activeInsightCardId;
-}
-
 async function importExternalExperimentRun(form) {
   const project = activeProject();
   if (!project || !form) {
@@ -1368,18 +1378,6 @@ async function importExternalExperimentRun(form) {
         status: parsed.status === "done" ? "done" : "draft",
       }),
     });
-
-    if (parsed.status === "error" && runId) {
-      await createFailedRunInsightCandidate({
-        comparison,
-        dossier: dossierPayload?.asset || null,
-        notes: parsed.config.rawLog,
-        plan,
-        project,
-        run,
-        runId,
-      });
-    }
 
     await loadProjectGraph();
   } finally {
@@ -1464,18 +1462,6 @@ async function saveLabExperimentResult(form) {
       }),
     });
 
-    if (status === "error") {
-      await createFailedRunInsightCandidate({
-        comparison,
-        dossier: dossierPayload?.asset || existingDossier || null,
-        notes,
-        plan,
-        project,
-        run,
-        runId,
-      });
-    }
-
     await loadProjectGraph();
   } finally {
     state.labSavingRunId = "";
@@ -1495,7 +1481,6 @@ async function createInsightCardFromEvidence() {
     render();
     return;
   }
-  const existingCards = Array.isArray(state.projectGraph?.insightCards) ? state.projectGraph.insightCards : [];
   const draftCard = {
     claim: String(evidence.text).replace(/\s+/g, " ").slice(0, 180),
     confidence: "unrated",
@@ -1504,11 +1489,10 @@ async function createInsightCardFromEvidence() {
     questionId: activeResearchQuestion()?.id || "",
     type: "claim",
   };
-  const evaluatedCard = enrichInsightCardForQuality(draftCard, [...existingCards, draftCard]);
 
   const payload = await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
     method: "POST",
-    body: JSON.stringify(evaluatedCard),
+    body: JSON.stringify(draftCard),
   });
 
   state.activeInsightCardId = payload.asset?.id || state.activeInsightCardId;
@@ -1548,22 +1532,19 @@ async function saveInsightCardEdit(form) {
   state.insightSavingCardId = cardId;
   render();
   try {
-    const nextCard = enrichInsightCardForQuality(
-      {
-        ...card,
-        claim,
-        confidence,
-        nextAction,
-        qualityCriteria: {
-          ...(card.qualityCriteria || {}),
-          contradictionFlag,
-          evidenceCoverage,
-          followUpExperimentId,
-        },
-        type,
+    const nextCard = {
+      ...card,
+      claim,
+      confidence,
+      nextAction,
+      qualityCriteria: {
+        ...(card.qualityCriteria || {}),
+        contradictionFlag,
+        evidenceCoverage,
+        followUpExperimentId,
       },
-      insightCards,
-    );
+      type,
+    };
     const payload = await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
       method: "POST",
       body: JSON.stringify(nextCard),
@@ -1658,17 +1639,14 @@ async function createFollowUpExperimentFromInsight(cardId = state.activeInsightC
 
   const runId = runPayload.asset?.id || "";
   if (runId) {
-    const nextCard = enrichInsightCardForQuality(
-      {
-        ...insightCard,
-        experimentRunIds: Array.from(new Set([...(insightCard.experimentRunIds || []), runId])),
-        qualityCriteria: {
-          ...(insightCard.qualityCriteria || {}),
-          followUpExperimentId: runId,
-        },
+    const nextCard = {
+      ...insightCard,
+      experimentRunIds: Array.from(new Set([...(insightCard.experimentRunIds || []), runId])),
+      qualityCriteria: {
+        ...(insightCard.qualityCriteria || {}),
+        followUpExperimentId: runId,
       },
-      insightCards,
-    );
+    };
     await api(`api/projects/${encodeURIComponent(project.id)}/insight-cards`, {
       method: "POST",
       body: JSON.stringify(nextCard),
@@ -1697,16 +1675,12 @@ async function createDraftSectionFromInsight() {
     return;
   }
 
-  const draft =
-    drafts[0] ||
-    (
-      await api(`api/projects/${encodeURIComponent(project.id)}/drafts`, {
-        method: "POST",
-        body: JSON.stringify({
-          title: `${project.name || "ARES"} draft`,
-        }),
-      })
-    ).asset;
+  const draft = drafts[0] || null;
+  if (!draft?.id) {
+    state.error = "Create a draft first.";
+    render();
+    return;
+  }
 
   const payload = await api(`api/projects/${encodeURIComponent(project.id)}/draft-sections`, {
     method: "POST",
@@ -1844,14 +1818,13 @@ function readingGenerationProvenanceLine(source, kind = "summary") {
 
   const label =
     generatedBy === "fallback"
-      ? "local fallback"
+      ? "needs review"
       : generatedBy === "external-ocr"
-        ? "external OCR import"
+        ? "imported text"
         : generatedBy === "built-in-ocr"
-          ? "built-in OCR"
-          : "agent generated";
-  const fallbackReason = kind === "summary" ? source?.summaryFallbackReason : source?.fallbackReason;
-  return fallbackReason ? `${label} (${fallbackReason})` : label;
+          ? "PDF text"
+          : "generated";
+  return label;
 }
 
 function readingOcrProvenanceLines(session) {
@@ -2275,192 +2248,6 @@ function deriveReadingNotes(session) {
     memo: "Parse 단계에서 추출된 하이라이트입니다.",
     pg: highlight.page || readingSectionPage(index + 1),
   }));
-}
-
-function buildPreviewReadingPaper(project) {
-  const keywords = Array.isArray(project?.keywords) ? project.keywords.filter(Boolean).slice(0, 6) : [];
-  const focus = readingText(project?.focus, `${project?.name || "Project"} reading workspace`);
-  const query = readingText(project?.defaultQuery, keywords.join(", "));
-  const timestamp = new Date().toISOString();
-
-  return {
-    paperId: `preview-paper-${project?.id || "project"}`,
-    title: `${project?.name || "Project"} reading workspace`,
-    authors: ["ARES Reader"],
-    venue: "Preview session",
-    year: new Date().getFullYear(),
-    abstract: focus,
-    summary: `${focus} Search 탭에서 논문을 저장하면 이 Reading 워크벤치가 실제 구조화 세션으로 이어집니다.`,
-    keyPoints: (() => {
-      const previewPoints = keywords.slice(0, 3).map((keyword) => `${keyword} 관점에서 핵심 주장과 재현 포인트를 우선 정리합니다.`);
-      return previewPoints.length
-        ? previewPoints
-        : [`${project?.name || "현재 프로젝트"}의 reading workflow를 바로 확인할 수 있는 starter session입니다.`];
-    })(),
-    keywords,
-    matchedKeywords: keywords.slice(0, 4),
-    paperUrl: "",
-    pdfUrl: "",
-    sourceName: "ARES preview",
-    sourceProvider: "preview",
-    citedByCount: 0,
-    openAccess: true,
-    relevance: 91,
-    savedAt: timestamp,
-    updatedAt: timestamp,
-    query,
-  };
-}
-
-function buildPreviewReadingSections(project, paper) {
-  const focus = readingSentence(project?.focus, `${paper?.title || "Paper"} overview`);
-  const summary = readingSentence(paper?.summary || paper?.abstract, focus);
-  const keyPoints = Array.isArray(paper?.keyPoints) ? paper.keyPoints.filter(Boolean) : [];
-  const keywords = Array.isArray(paper?.keywords) ? paper.keywords.filter(Boolean) : [];
-
-  return [
-    {
-      id: "overview",
-      label: "1. Overview",
-      status: "done",
-      summary: focus,
-    },
-    {
-      id: "method",
-      label: "2. Method / Setup",
-      status: "done",
-      summary: readingSentence(keyPoints[0], summary || focus),
-    },
-    {
-      id: "result",
-      label: "3. Result Snapshot",
-      status: "done",
-      summary: readingSentence(
-        keyPoints[1],
-        `${paper?.title || "This work"}의 주요 결과와 효율 포인트를 빠르게 비교할 수 있도록 정리합니다.`,
-      ),
-    },
-    {
-      id: "limit",
-      label: "4. Limits & Follow-up",
-      status: "done",
-      summary: readingSentence(
-        keyPoints[2],
-        `${keywords.slice(0, 2).join(", ") || "후속 검토"} 관점에서 한계와 다음 액션을 정리합니다.`,
-      ),
-    },
-  ];
-}
-
-function buildPreviewReadingSession(project, paper, index = 0) {
-  const safePaper = paper || buildPreviewReadingPaper(project);
-  const keywords = Array.isArray(safePaper.keywords) ? safePaper.keywords.filter(Boolean).slice(0, 6) : [];
-  const keyPoints = Array.isArray(safePaper.keyPoints) ? safePaper.keyPoints.filter(Boolean).slice(0, 4) : [];
-  const sections = buildPreviewReadingSections(project, safePaper);
-  const sessionId = `preview-session-${project?.id || "project"}-${safePaper.paperId || index}`;
-  const timestamp = safePaper.updatedAt || safePaper.savedAt || new Date().toISOString();
-  const focus = readingSentence(project?.focus, safePaper.summary || safePaper.abstract || safePaper.title || "Reading preview");
-  const summary = readingSentence(
-    safePaper.summary || safePaper.abstract,
-    `${safePaper.title || "Saved paper"}를 Reading 워크벤치에서 바로 검토할 수 있도록 starter session을 구성했습니다.`,
-  );
-  const sourceProvider = readingText(safePaper.sourceProvider, "preview");
-  const usingProjectPreview = sourceProvider === "preview";
-
-  return {
-    id: sessionId,
-    projectId: project?.id || "",
-    runId: "",
-    paperId: safePaper.paperId || sessionId,
-    title: safePaper.title || `${project?.name || "Project"} reading workspace`,
-    authors: Array.isArray(safePaper.authors) && safePaper.authors.length ? safePaper.authors.slice(0, 8) : ["ARES Reader"],
-    venue: safePaper.venue || "Preview session",
-    year: safePaper.year ?? null,
-    abstract: safePaper.abstract || focus,
-    summary,
-    keyPoints,
-    keywords,
-    matchedKeywords: Array.isArray(safePaper.matchedKeywords) ? safePaper.matchedKeywords.slice(0, 6) : keywords.slice(0, 4),
-    citedByCount: Number(safePaper.citedByCount) || 0,
-    openAccess: safePaper.openAccess !== false,
-    relevance: Number(safePaper.relevance) || 0,
-    paperUrl: safePaper.paperUrl || "",
-    pdfUrl: safePaper.pdfUrl || "",
-    sourceName: safePaper.sourceName || (usingProjectPreview ? "ARES preview" : "Saved paper"),
-    sourceProvider,
-    status: "done",
-    warning: usingProjectPreview ? "Saved paper가 아직 없어 프로젝트 focus 기반 preview session을 표시 중입니다." : "",
-    createdAt: safePaper.savedAt || timestamp,
-    updatedAt: timestamp,
-    sections,
-    highlights: [
-      {
-        id: `${sessionId}-highlight-claim`,
-        type: "claim",
-        text: summary,
-        section: "overview",
-      },
-      {
-        id: `${sessionId}-highlight-method`,
-        type: "method",
-        text: readingSentence(keyPoints[0], sections[1]?.summary || summary),
-        section: "method",
-      },
-      {
-        id: `${sessionId}-highlight-result`,
-        type: "result",
-        text: readingSentence(keyPoints[1], sections[2]?.summary || sections[1]?.summary || summary),
-        section: "result",
-      },
-      {
-        id: `${sessionId}-highlight-limit`,
-        type: "limit",
-        text: readingSentence(keyPoints[2], sections[3]?.summary || focus),
-        section: "limit",
-      },
-    ],
-    notes: [
-      {
-        id: `${sessionId}-note-focus`,
-        label: "summary",
-        value: focus,
-      },
-      {
-        id: `${sessionId}-note-followup`,
-        label: "note",
-        value: readingSentence(
-          safePaper.query,
-          `${project?.name || "현재 프로젝트"} 기준으로 후속 실험과 비교 포인트를 이어서 정리합니다.`,
-        ),
-      },
-    ],
-    reproParams: [
-      {
-        id: `${sessionId}-param-focus`,
-        label: "Project focus",
-        value: focus,
-      },
-      {
-        id: `${sessionId}-param-keywords`,
-        label: "Matched keywords",
-        value: keywords.join(", ") || "No keywords yet",
-      },
-      {
-        id: `${sessionId}-param-access`,
-        label: "Open access",
-        value: safePaper.openAccess === false ? "Manual source check needed" : "Likely reproducible with public sources",
-      },
-    ],
-  };
-}
-
-function buildPreviewReadingSessions(project) {
-  if (!project) {
-    return [];
-  }
-
-  const papers = Array.isArray(project.recentLibrary) && project.recentLibrary.length ? project.recentLibrary : [buildPreviewReadingPaper(project)];
-  return sortReadingSessions(papers.map((paper, index) => buildPreviewReadingSession(project, paper, index)));
 }
 
 function effectiveReadingSessions(project = activeProject()) {
@@ -2942,6 +2729,73 @@ async function loadProjects() {
   setProjects(payload.projects || []);
 }
 
+function closeProjectModal() {
+  state.projectModalOpen = false;
+  state.projectModalColor = PROJECT_COLOR_OPTIONS[0];
+  state.projectSaving = false;
+}
+
+function focusProjectModalInput() {
+  window.setTimeout(() => {
+    document.querySelector('[name="projectName"]')?.focus({ preventScroll: true });
+  }, 0);
+}
+
+function projectKeywordsFromInput(value) {
+  return String(value || "")
+    .split(",")
+    .map((keyword) => keyword.trim())
+    .filter(Boolean);
+}
+
+async function createProjectFromForm(form) {
+  const formData = new FormData(form);
+  const name = String(formData.get("projectName") || "").trim();
+  if (!name) {
+    state.error = "Enter a project name.";
+    state.projectModalOpen = true;
+    render();
+    focusProjectModalInput();
+    return;
+  }
+
+  state.projectSaving = true;
+  state.error = "";
+  render();
+
+  try {
+    const payload = await api("api/projects", {
+      method: "POST",
+      body: JSON.stringify({
+        color: String(formData.get("projectColor") || state.projectModalColor || PROJECT_COLOR_OPTIONS[0]),
+        defaultQuery: String(formData.get("projectDefaultQuery") || "").trim(),
+        focus: String(formData.get("projectFocus") || "").trim(),
+        keywords: projectKeywordsFromInput(formData.get("projectKeywords")),
+        name,
+      }),
+    });
+    const project = payload.project;
+    state.projects = [project, ...state.projects.filter((entry) => entry.id !== project.id)];
+    state.activeProjectId = payload.project.id;
+    saveStorage(STORAGE_KEYS.project, state.activeProjectId);
+    closeProjectModal();
+    resetSearchState();
+    await loadProjectGraph();
+    state.searchInput = activeResearchQuestion()?.prompt || activeProject()?.defaultQuery || "";
+    await loadProjectLibrary();
+    await loadReadingSessions({ preserveSelection: false });
+  } catch (error) {
+    state.error = error.message;
+    state.projectModalOpen = true;
+    state.projectSaving = false;
+  }
+
+  render();
+  if (state.projectModalOpen) {
+    focusProjectModalInput();
+  }
+}
+
 async function loadProjectGraph() {
   const project = activeProject();
   if (!project) {
@@ -3020,7 +2874,7 @@ async function applyAgentRunPayload(payload) {
     applyAgenticSearchOutput(run.outputPayload, { preserveSelection: true });
     state.loading = !isTerminalAgentRunStatus(run.status);
     if (run.status === "error") {
-      state.error = run.error || run.outputSummary || "Agentic Search failed.";
+      state.error = run.error || run.outputSummary || "Search did not finish. Try again.";
     }
   }
 
@@ -3386,7 +3240,7 @@ async function startAgenticSearchRun({ query } = {}) {
     state.searchAgentRun = {
       ...optimisticRun,
       error: error.message,
-      outputSummary: `Agentic search could not start: ${error.message}`,
+      outputSummary: `Search could not start: ${error.message}`,
       status: "done",
       warning: error.message,
     };
@@ -3477,13 +3331,13 @@ async function uploadReadingPdf(file) {
   }
 
   if (file.type && file.type !== "application/pdf") {
-    state.error = "PDF 파일만 업로드할 수 있습니다.";
+    state.error = "Upload a PDF file.";
     render();
     return;
   }
 
   if (file.size > MAX_READING_PDF_UPLOAD_BYTES) {
-    state.error = `PDF 파일은 최대 ${MAX_READING_PDF_UPLOAD_LABEL}까지 업로드할 수 있습니다.`;
+    state.error = `Upload a PDF up to ${MAX_READING_PDF_UPLOAD_LABEL}.`;
     render();
     return;
   }
@@ -3664,7 +3518,20 @@ function renderSidebar() {
       </section>
 
       <section class="sidebar-section">
-        <p class="sidebar-label">Project</p>
+        <div class="sidebar-label-row">
+            <p class="sidebar-label">Projects</p>
+          <button
+            type="button"
+            class="sidebar-icon-btn project-add-btn"
+            data-action="open-project-modal"
+            aria-haspopup="dialog"
+            aria-expanded="${state.projectModalOpen ? "true" : "false"}"
+            aria-label="Add project"
+            title="Add project"
+          >
+            ${icon("plus", { size: 13, color: "currentColor" })}
+          </button>
+        </div>
         <div class="project-list">
           ${state.projects
             .map((project) => {
@@ -3775,9 +3642,9 @@ function renderTopbar() {
     ? `
         <span class="topbar-separator topbar-breadcrumb-bridge">/</span>
         <nav class="topbar-breadcrumb" aria-label="Search breadcrumb">
-          <span class="topbar-crumb-link">Agentic</span>
+          <span class="topbar-crumb-link">Agent Search</span>
           <span class="topbar-crumb-separator" aria-hidden="true">/</span>
-          <span class="topbar-crumb-current">${escapeHtml(searchRun.id ? `Run #${String(searchRun.id).replace(/^run[-_]?/i, "").slice(-4).toUpperCase()}` : "Run 준비 중")}</span>
+          <span class="topbar-crumb-current">${escapeHtml(searchRun.id ? `Run #${String(searchRun.id).replace(/^run[-_]?/i, "").slice(-4).toUpperCase()}` : "Run pending")}</span>
         </nav>
       `
     : "";
@@ -3869,6 +3736,80 @@ function renderWorkflowModeNav() {
           .join("")}
       </div>
     </nav>
+  `;
+}
+
+function renderProjectCreateModal() {
+  const open = state.projectModalOpen;
+  const selectedColor = state.projectModalColor || PROJECT_COLOR_OPTIONS[0];
+
+  return `
+    <div class="project-create-modal-overlay ${open ? "is-open" : ""}" aria-hidden="${open ? "false" : "true"}">
+      <button type="button" class="project-create-modal-backdrop" data-action="close-project-modal" aria-label="Close project dialog"></button>
+      <div class="project-create-modal-panel">
+        <section
+          class="project-create-modal-surface"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="project-create-modal-title"
+        >
+          <div class="project-create-modal-head">
+            <h2 id="project-create-modal-title" class="project-create-modal-title">New project</h2>
+            <button type="button" class="project-create-modal-close" data-action="close-project-modal" aria-label="Close project dialog">
+              ${icon("x", { size: 14, color: "currentColor" })}
+            </button>
+          </div>
+
+          <form class="project-create-form" data-action="submit-project-modal">
+            <label class="project-create-field">
+              <span>Name</span>
+              <input name="projectName" type="text" autocomplete="off" required />
+            </label>
+            <label class="project-create-field">
+              <span>Focus</span>
+              <textarea name="projectFocus" rows="3"></textarea>
+            </label>
+            <label class="project-create-field">
+              <span>Default query</span>
+              <input name="projectDefaultQuery" type="text" autocomplete="off" />
+            </label>
+            <label class="project-create-field">
+              <span>Keywords</span>
+              <input name="projectKeywords" type="text" autocomplete="off" />
+            </label>
+
+            <div class="project-create-color-group" role="radiogroup" aria-label="Project color">
+              ${PROJECT_COLOR_OPTIONS.map((color) => {
+                const active = color === selectedColor;
+                return `
+                  <button
+                    type="button"
+                    class="project-create-color ${active ? "is-active" : ""}"
+                    data-action="select-project-color"
+                    data-project-color="${escapeHtml(color)}"
+                    role="radio"
+                    aria-checked="${active ? "true" : "false"}"
+                    aria-label="${escapeHtml(color)}"
+                    style="--project-create-color:${escapeHtml(color)}"
+                  ></button>
+                `;
+              }).join("")}
+            </div>
+            <input type="hidden" name="projectColor" value="${escapeHtml(selectedColor)}" />
+
+            ${open && state.error ? `<div class="project-create-error" role="alert">${escapeHtml(state.error)}</div>` : ""}
+
+            <div class="project-create-actions">
+              <button type="button" class="btn-s" data-action="close-project-modal" ${state.projectSaving ? "disabled" : ""}>Cancel</button>
+              <button type="submit" class="btn-p" ${state.projectSaving ? "disabled" : ""}>
+                ${icon("plus", { size: 13, color: "currentColor" })}
+                <span>${state.projectSaving ? "Creating..." : "Create project"}</span>
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
   `;
 }
 
@@ -4101,7 +4042,7 @@ function renderLabStage(project) {
                               <span>Status</span>
                               <select name="labRunStatus">
                                 ${["queue", "running", "done", "error"]
-                                  .map((option) => `<option value="${option}" ${run.status === option ? "selected" : ""}>${option}</option>`)
+                                  .map((option) => `<option value="${option}" ${run.status === option ? "selected" : ""}>${statusLabel(option)}</option>`)
                                   .join("")}
                               </select>
                             </label>
@@ -4190,26 +4131,14 @@ function renderInsightStage(project) {
   const insightClusters = buildInsightClusters(evaluatedInsightCards);
   const evidenceItems = graphEvidence.length ? graphEvidence : [...notes, ...highlights].slice(0, 4);
   const hasEvidence = evidenceItems.length > 0;
-  const fallbackEvidence = [
-    {
-      cat: session ? "Reading Packet" : "Project",
-      text: session?.summary || project?.focus || "No linked evidence",
-    },
-    {
-      cat: "Result Dossier",
-      text: "No result attached",
-    },
-  ];
-  const evidence = evidenceItems.length
-    ? evidenceItems.map((entry) => ({
-        cat: entry.cat || entry.type || entry.kind || "Evidence",
-        evidenceLinkIds: Array.isArray(entry.evidenceLinkIds)
-          ? entry.evidenceLinkIds
-          : [entry.evidenceLinkId].filter(Boolean),
-        page: entry.page || "",
-        text: entry.quote || entry.text || entry.body || entry.memo || "No evidence text",
-      }))
-    : fallbackEvidence;
+  const evidence = evidenceItems.map((entry) => ({
+    cat: entry.cat || entry.type || entry.kind || "Evidence",
+    evidenceLinkIds: Array.isArray(entry.evidenceLinkIds)
+      ? entry.evidenceLinkIds
+      : [entry.evidenceLinkId].filter(Boolean),
+    page: entry.page || "",
+    text: entry.quote || entry.text || entry.body || entry.memo || "No evidence text to show",
+  }));
   const primaryCard = evaluatedInsightCards[0] || null;
   const primaryClaim = primaryCard?.claim || (hasEvidence ? evidence[0]?.text : project?.focus || "Select evidence to draft a claim");
   const focus = project?.focus || session?.title || "current research direction";
@@ -4364,7 +4293,7 @@ function renderInsightStage(project) {
                                   <span>Confidence</span>
                                   <select name="insightConfidence">
                                     ${["unrated", "low", "medium", "high"]
-                                      .map((option) => `<option value="${option}" ${card.confidence === option ? "selected" : ""}>${option}</option>`)
+                                      .map((option) => `<option value="${option}" ${card.confidence === option ? "selected" : ""}>${confidenceLabel(option)}</option>`)
                                       .join("")}
                                   </select>
                                 </label>
@@ -4376,7 +4305,7 @@ function renderInsightStage(project) {
                                     ${["unrated", "weak", "partial", "strong"]
                                       .map(
                                         (option) =>
-                                          `<option value="${option}" ${qualityCriteria.evidenceCoverage === option ? "selected" : ""}>${option}</option>`,
+                                          `<option value="${option}" ${qualityCriteria.evidenceCoverage === option ? "selected" : ""}>${evidenceCoverageLabel(option)}</option>`,
                                       )
                                       .join("")}
                                   </select>
@@ -4387,7 +4316,7 @@ function renderInsightStage(project) {
                                     ${["unchecked", "none", "possible", "conflict"]
                                       .map(
                                         (option) =>
-                                          `<option value="${option}" ${qualityCriteria.contradictionFlag === option ? "selected" : ""}>${option}</option>`,
+                                          `<option value="${option}" ${qualityCriteria.contradictionFlag === option ? "selected" : ""}>${contradictionLabel(option)}</option>`,
                                       )
                                       .join("")}
                                   </select>
@@ -4576,7 +4505,7 @@ function renderWritingStage(project) {
                         ${["draft", "review", "done"]
                           .map(
                             (status) =>
-                              `<option value="${status}" ${status === (activeSection.status || "draft") ? "selected" : ""}>${status}</option>`,
+                              `<option value="${status}" ${status === (activeSection.status || "draft") ? "selected" : ""}>${statusLabel(status)}</option>`,
                           )
                           .join("")}
                       </select>
@@ -4871,14 +4800,16 @@ function renderShell(message) {
   clearAgenticSearchBodyState();
   app.innerHTML = `
     <div class="app-shell">
+      ${renderSidebar()}
       <main class="workspace">
         <header class="main-topbar">
           <div class="topbar-stage">
             <span class="topbar-stage-label">ARES</span>
           </div>
         </header>
-        <div class="empty-state">${escapeHtml(message)}</div>
+          <div class="empty-state">${escapeHtml(message)}</div>
       </main>
+      ${renderProjectCreateModal()}
     </div>
   `;
 }
@@ -4933,6 +4864,7 @@ function render() {
         </div>
       </main>
       ${renderBottomNav()}
+      ${renderProjectCreateModal()}
     </div>
   `;
   syncAgenticSearchStageDom();
@@ -5359,6 +5291,40 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  if (action === "open-project-modal") {
+    state.projectModalOpen = true;
+    state.error = "";
+    render();
+    focusProjectModalInput();
+    return;
+  }
+
+  if (action === "close-project-modal") {
+    closeProjectModal();
+    state.error = "";
+    render();
+    return;
+  }
+
+  if (action === "select-project-color") {
+    state.projectModalColor = trigger.dataset.projectColor || PROJECT_COLOR_OPTIONS[0];
+    const modal = trigger.closest(".project-create-modal-overlay");
+    modal?.querySelectorAll(".project-create-color").forEach((button) => {
+      const active = button.dataset.projectColor === state.projectModalColor;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-checked", active ? "true" : "false");
+    });
+    const colorInput = modal?.querySelector('[name="projectColor"]');
+    if (colorInput) {
+      colorInput.value = state.projectModalColor;
+    }
+    return;
+  }
+
+  if (action === "submit-project-modal") {
+    return;
+  }
+
   if (action === "select-project") {
     clearActiveRunPoll();
     state.activeProjectId = trigger.dataset.projectId;
@@ -5454,7 +5420,7 @@ document.addEventListener("click", async (event) => {
 
   if (action === "submit-reading-upload-modal") {
     if (!readingUploadModalFile) {
-      state.error = "업로드할 PDF 파일을 선택하세요.";
+      state.error = "Choose a PDF file to upload.";
       state.readingUploadModalOpen = true;
       render();
       focusReadingUploadModalInput();
@@ -6794,6 +6760,13 @@ document.addEventListener("submit", async (event) => {
     return;
   }
 
+  const projectForm = event.target.closest('[data-action="submit-project-modal"]');
+  if (projectForm) {
+    event.preventDefault();
+    await createProjectFromForm(projectForm);
+    return;
+  }
+
   const form = event.target.closest('[data-action="submit-search"]');
   if (!form) {
     return;
@@ -6960,7 +6933,7 @@ document.addEventListener("drop", (event) => {
     return;
   }
 
-  state.error = "PDF 파일만 업로드할 수 있습니다.";
+  state.error = "Upload a PDF file.";
   refreshReadingStageUI();
 });
 
@@ -7005,6 +6978,11 @@ document.addEventListener("keydown", async (event) => {
 
     if (state.readingUploadModalOpen) {
       closeReadingUploadModal();
+      needsRender = true;
+    }
+
+    if (state.projectModalOpen) {
+      closeProjectModal();
       needsRender = true;
     }
 

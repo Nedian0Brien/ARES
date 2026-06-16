@@ -16,11 +16,24 @@ function buildAnnotationText(entry) {
     .join(" — ");
 }
 
+function isGeneratedReadingNote(note) {
+  const origin = readingText(note?.origin).toLowerCase();
+  if (origin !== "highlight") {
+    return false;
+  }
+
+  return Boolean(
+    readingText(note?.seedMethod) ||
+      readingText(note?.sourceHighlightId) ||
+      /^note-seed-\d+$/i.test(readingText(note?.id)),
+  );
+}
+
 function buildReadingPdfAnnotations(session) {
   const notes = Array.isArray(session?.notes) ? session.notes : [];
   const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
   return [
-    ...notes.map((note, index) => ({
+    ...notes.filter((note) => !isGeneratedReadingNote(note)).map((note, index) => ({
       id: readingText(note.id) || `note-${index + 1}`,
       label: readingText(note.cat || note.section) || `Note ${index + 1}`,
       page: annotationPage(note, index + 1),

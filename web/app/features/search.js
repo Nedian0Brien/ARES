@@ -387,7 +387,7 @@ export function createSearchFeature({
     }
 
     return `
-      <div class="agent-trace" aria-label="Agentic Search live trace">
+      <div class="agent-trace" aria-label="Search progress">
         ${events.map((event) => {
           const type = String(event.type || "status").toLowerCase();
           const status = String(event.status || "running").toLowerCase();
@@ -420,7 +420,7 @@ export function createSearchFeature({
 
   function renderAgenticRunStage(project) {
     const run = activeSearchAgentRun();
-    const query = agenticRunQuery(run) || project?.defaultQuery || "Agentic Search query";
+    const query = agenticRunQuery(run) || project?.defaultQuery || "Search query";
     const scopes = agenticRunScopes(run);
     const scopeLabel = scopes.length ? scopes.map((scope) => scope.label || scope.id).filter(Boolean).join(" · ") : "Project-wide";
     const failed = agenticRunFailed(run);
@@ -439,34 +439,34 @@ export function createSearchFeature({
         <div class="run-inline-badge">${renderAgenticRunBadge(run)}</div>
         <div class="q-block">
           <div class="q-run-line">
-            <span class="badge">Agentic Search</span>
-            <span>${escapeHtml(agenticRunIdLabel(run))} · 4단계 계획 (Reader → Reproduction → Experiment → Analyst)</span>
-            <span class="live-mark"><span class="dot"></span>${failed ? "오류" : run?.status === "done" ? "완료" : "진행 중"}</span>
+            <span class="badge">Agent Search</span>
+            <span>${escapeHtml(agenticRunIdLabel(run))} · Find papers, prepare reading, and summarize progress</span>
+            <span class="live-mark"><span class="dot"></span>${failed ? "Failed" : run?.status === "done" ? "Done" : "Running"}</span>
           </div>
           <h1 class="q-text" tabindex="-1">${escapeHtml(query)}</h1>
           <div class="q-pills">
-            <span class="q-pill">${icon("clock", { size: 11, color: "currentColor" })}<span>예상 4분</span></span>
+            <span class="q-pill">${icon("clock", { size: 11, color: "currentColor" })}<span>About 4 min</span></span>
             <span class="q-pill">${icon("globe", { size: 11, color: "currentColor" })}<span>${escapeHtml(scopeLabel)}</span></span>
-            <span class="q-pill">${icon("book", { size: 11, color: "currentColor" })}<span>${failed ? "결과 저장 안 됨" : "Reading 큐에 자동 저장"}</span></span>
-            <span class="q-pill">${icon("history", { size: 11, color: "currentColor" })}<span>${failed ? "실패 상태 체크포인트" : "중간 결과 자동 체크포인트"}</span></span>
+            <span class="q-pill">${icon("book", { size: 11, color: "currentColor" })}<span>${failed ? "No papers saved" : "Saved to Reading"}</span></span>
+            <span class="q-pill">${icon("history", { size: 11, color: "currentColor" })}<span>${failed ? "Ready to retry" : "Progress saved"}</span></span>
           </div>
         </div>
 
         <div class="phase-divider">
-          <div class="pd-inner"><span class="pd-tag">${failed || run?.status !== "done" ? "SCOUT" : "READER"}</span> 정의·지표 정렬 · ${escapeHtml(stageLine)}</div>
+          <div class="pd-inner"><span class="pd-tag">${failed || run?.status !== "done" ? "Search" : "Reading"}</span> ${escapeHtml(stageLine)}</div>
         </div>
 
         <div class="phase-card">
           <div class="pc-h">
             ${icon("search", { size: 12, color: "currentColor" })}
-            ${failed ? "Agentic search failed" : "핵심 정의 추출"}
+            ${failed ? "Search did not finish" : "Collecting paper candidates"}
             <span class="step-cur">${escapeHtml(agenticRunStatusLabel(run))} sources</span>
           </div>
           <ul class="pc-bullets">
             <li><b>Query intent</b> — ${escapeHtml(query)}</li>
             <li><b>Scope</b> — ${escapeHtml(scopeLabel)}</li>
-            <li>${summary ? escapeHtml(summary) : 'OpenAlex와 프로젝트 라이브러리를 기준으로 후보 논문을 수집하고 있습니다.'}<span class="pc-stream-cursor"></span></li>
-            ${warning ? `<li><b>Runtime note</b> — ${escapeHtml(warning)}</li>` : ""}
+            <li>${summary ? escapeHtml(summary) : 'Collecting candidates from OpenAlex and your project library.'}<span class="pc-stream-cursor"></span></li>
+            ${warning ? `<li><b>Status</b> — Search did not finish. Try again.</li>` : ""}
           </ul>
           ${renderAgenticProgressTimeline(run)}
         </div>
@@ -480,7 +480,7 @@ export function createSearchFeature({
     }
 
     const latest = agenticProgressEvents(run).at(-1);
-    return `<div class="search-agentic-live sr-only" aria-live="polite">${escapeHtml(agenticRunFailed(run) ? `${agenticRunIdLabel(run)} 실패. ${run.error || run.outputSummary || "Agentic Search 오류"}` : latest ? `${agenticRunIdLabel(run)} ${latest.label || "진행 중"}. ${latest.detail || ""}` : `${agenticRunIdLabel(run)} 시작. Scout 단계 진행 중`)}</div>`;
+    return `<div class="search-agentic-live sr-only" aria-live="polite">${escapeHtml(agenticRunFailed(run) ? `${agenticRunIdLabel(run)} failed. You can retry.` : latest ? `${agenticRunIdLabel(run)} ${latest.label || "running"}. ${latest.detail || ""}` : `${agenticRunIdLabel(run)} started. Searching.`)}</div>`;
   }
   
   function renderSearchDashboard(project) {
@@ -1042,7 +1042,7 @@ export function createSearchFeature({
   function renderSearchResultsList(visible) {
     if (state.loading) {
       return state.searchMode === "scout"
-        ? '<div class="loading-state search-results-empty">Scout agent가 논문 후보를 수집 중입니다...</div>'
+        ? '<div class="loading-state search-results-empty">Collecting paper candidates...</div>'
         : '<div class="loading-state search-results-empty">OpenAlex에서 논문 후보를 불러오는 중입니다...</div>';
     }
   

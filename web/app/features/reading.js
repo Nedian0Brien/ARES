@@ -126,6 +126,19 @@ export function createReadingFeature({
       .slice(0, 8);
   }
 
+  function isGeneratedReadingNote(note) {
+    const origin = readingText(note?.origin).toLowerCase();
+    if (origin !== "highlight") {
+      return false;
+    }
+
+    return Boolean(
+      readingText(note?.seedMethod) ||
+        readingText(note?.sourceHighlightId) ||
+        /^note-seed-\d+$/i.test(readingText(note?.id)),
+    );
+  }
+
   function renderReadingMessageSelectionContext(message) {
     if (message?.role !== "user" || !message?.selection?.quote) {
       return "";
@@ -171,14 +184,36 @@ export function createReadingFeature({
       return "";
     }
 
-    const fallbackReason = source?.fallbackReason || source?.summaryFallbackReason || "";
     const kindClass = kind === "section" ? "is-section" : kind === "chat" ? "is-chat" : "is-summary";
+    const label =
+      generatedBy === "fallback"
+        ? "Needs review"
+        : generatedBy === "external-ocr"
+          ? "Imported text"
+          : generatedBy === "built-in-ocr"
+            ? "PDF text"
+            : kind === "chat"
+              ? "Paper-based answer"
+              : "Generated summary";
     return `
       <div class="reading-provenance-pill ${escapeHtml(kindClass)}">
-        <span>${escapeHtml(generatedBy === "fallback" ? "Local fallback" : generatedBy === "external-ocr" ? "Imported text" : "Agent generated")}</span>
-        ${fallbackReason ? `<span class="mono">${escapeHtml(readingExcerpt(fallbackReason, "", 64))}</span>` : ""}
+        <span>${escapeHtml(label)}</span>
       </div>
     `;
+  }
+
+  function readingConfidenceLabel(value) {
+    const confidence = readingText(value, "none").toLowerCase();
+    if (confidence === "high") {
+      return "Strong evidence";
+    }
+    if (confidence === "medium") {
+      return "Some evidence";
+    }
+    if (confidence === "low") {
+      return "Weak evidence";
+    }
+    return "No evidence";
   }
 
   function renderReadingRetrievalPill(message) {
@@ -187,16 +222,11 @@ export function createReadingFeature({
       return "";
     }
 
-    const confidence = readingText(retrieval.confidence, "none");
-    const minEvidenceScore = Number(retrieval.minEvidenceScore) || 0;
-    const score = Number(retrieval.topScore) || 0;
-    const label = retrieval.lowConfidence ? "Low confidence retrieval" : "Hybrid retrieval";
+    const label = retrieval.lowConfidence ? "Weak evidence" : "Evidence checked";
     return `
       <div class="reading-retrieval-pill ${retrieval.lowConfidence ? "is-low" : ""}">
         <span>${escapeHtml(label)}</span>
-        <span class="mono">${escapeHtml(confidence)} · ${escapeHtml(String(score))}</span>
-        ${minEvidenceScore ? `<span class="mono">min ${escapeHtml(String(minEvidenceScore))}</span>` : ""}
-        ${retrieval.scorer ? `<span class="mono">${escapeHtml(readingExcerpt(retrieval.scorer, "", 32))}</span>` : ""}
+        <span>${escapeHtml(readingConfidenceLabel(retrieval.confidence))}</span>
       </div>
     `;
   }
@@ -208,20 +238,20 @@ export function createReadingFeature({
     }
 
     const rows = [
-      ["Retrieval ready", coverage.retrievalReady ? "yes" : "no"],
-      ["Chunks", coverage.chunkCount || 0],
+      ["Evidence search", coverage.retrievalReady ? "Ready" : "Not ready"],
+      ["Text passages", coverage.chunkCount || 0],
       ["Sections", coverage.sectionCount || 0],
-      ["Assets", coverage.assetCount || 0],
-      ["Source-bounded assets", coverage.sourceBoundedAssetCount || 0],
-      ["Last retrieval", coverage.lastRetrievalConfidence || "none"],
-      ["Cited chat turns", coverage.citedChatCount || 0],
+      ["Figures and tables", coverage.assetCount || 0],
+      ["Located in source", coverage.sourceBoundedAssetCount || 0],
+      ["Latest answer", readingConfidenceLabel(coverage.lastRetrievalConfidence)],
+      ["Cited answers", coverage.citedChatCount || 0],
       ["OCR pages", coverage.ocrPageCount || 0],
-      ["OCR latency", Number.isFinite(Number(coverage.ocrDurationMs)) ? `${coverage.ocrDurationMs}ms` : "not recorded"],
+      ["OCR time", Number.isFinite(Number(coverage.ocrDurationMs)) ? `${coverage.ocrDurationMs}ms` : "Not recorded"],
     ];
 
     return `
       <section class="reading-summary-block reading-evidence-coverage">
-        <div class="reading-summary-label">${icon("quote", { size: 11, color: TOKENS.read })}<span>Evidence coverage</span></div>
+        <div class="reading-summary-label">${icon("quote", { size: 11, color: TOKENS.read })}<span>Evidence status</span></div>
         <div class="reading-evidence-coverage-grid">
           ${rows
             .map(
@@ -242,28 +272,28 @@ export function createReadingFeature({
     const error = String(session?.parseError || "").trim();
     if (!session?.pdfUrl) {
       return {
-        copy: "v1은 pdfUrl 기반 논문만 완전 지원합니다. Search에서 PDF가 있는 버전을 저장하거나 원문 링크를 열어 확인하세요.",
-        title: "PDF URL이 없는 논문입니다",
+        copy: "Attach a PDF or open the source link to keep reading.",
+        title: "PDF needed",
       };
     }
 
     if (/text layer|ocr|scanned/i.test(error)) {
       return {
-        copy: "내장 OCR이 충분한 텍스트를 만들지 못했습니다. OCR 텍스트를 직접 붙여넣어 Reader artifact를 복구할 수 있습니다.",
-        title: "OCR 텍스트가 더 필요합니다",
+        copy: "The paper text is not readable yet. Paste extracted text to continue.",
+        title: "More text needed",
       };
     }
 
     if (/download|failed to download|load failed|status/i.test(error)) {
       return {
-        copy: "PDF 다운로드 또는 로딩에 실패했습니다. 원문 링크를 확인하거나 잠시 뒤 다시 Parse를 실행하세요.",
-        title: "PDF를 불러오지 못했습니다",
+        copy: "The PDF could not be loaded. Check the source link or try again.",
+        title: "PDF could not load",
       };
     }
 
     return {
-      copy: error || "Parse 중 문제가 발생했습니다. 원문을 확인하거나 다시 시도하세요.",
-      title: "Parse가 완료되지 않았습니다",
+      copy: "The paper text is not ready. Check the source or try again.",
+      title: "Paper text is not ready",
     };
   }
   
@@ -320,7 +350,7 @@ export function createReadingFeature({
     const sections = Array.isArray(session?.sections) ? session.sections : [];
     const cards = [];
   
-    notes.forEach((note, index) => {
+    notes.filter((note) => !isGeneratedReadingNote(note)).forEach((note, index) => {
       const quote = readingExcerpt(note.quote, "", 190);
       const memo = readingExcerpt(note.body, "", 220);
       const meta = readingCategoryMeta(note.kind);
@@ -336,26 +366,8 @@ export function createReadingFeature({
         memo: memo || "메모를 입력해 저장하세요.",
       });
     });
-  
-    if (cards.length) {
-      return cards;
-    }
 
-    const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
-    return highlights.slice(0, 6).map((highlight, index) => {
-      const meta = readingCategoryMeta(highlight.type);
-      const sectionIndex = readingMatchSectionIndex(sections, highlight.sectionId || highlight.section);
-      return {
-        color: meta.color,
-        cat: meta.label,
-        id: highlight.id || `${session?.id || "reading"}-highlight-${index}`,
-        memo: "Parse 단계에서 추출된 하이라이트입니다. Notes 탭에서 편집 가능한 메모로 저장할 수 있습니다.",
-        page: highlight.page || (sectionIndex >= 0 ? readingSectionPage(sectionIndex + 1) : 1),
-        quote: readingExcerpt(highlight.quote || highlight.text, "Highlight pending", 190),
-        sectionId: highlight.sectionId || highlight.section || "",
-        text: readingExcerpt(highlight.quote || highlight.text, "Highlight pending", 190),
-      };
-    });
+    return cards;
   }
   
   function deriveReadingMessages(session) {
@@ -386,15 +398,20 @@ export function createReadingFeature({
       rows: Array.isArray(asset.rows) ? asset.rows : [],
     }));
   }
+
+  function readingAssetKindLabel(asset) {
+    return asset?.kind === "Table" ? "Table" : "Figure";
+  }
   
   function renderReadingAssetThumb(asset, session = null) {
+    const kindLabel = readingAssetKindLabel(asset);
     if (asset.thumbPath && session?.id && asset.id) {
       const src = `api/reading-sessions/${encodeURIComponent(session.id)}/assets/${encodeURIComponent(asset.id)}/file?kind=thumb`;
       return `
         <img
           class="reading-asset-thumb-image"
           src="${escapeHtml(src)}"
-          alt="${escapeHtml(asset.caption || `${asset.kind || "Asset"} ${asset.number || ""}`)}"
+          alt="${escapeHtml(asset.caption || `${kindLabel} ${asset.number || ""}`)}"
           loading="lazy"
         />
       `;
@@ -459,10 +476,12 @@ export function createReadingFeature({
       return "";
     }
 
-    const label = String(quality.status)
-      .split("-")
-      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-      .join(" ");
+    const qualityLabels = {
+      partial: "Partially checked",
+      "source-backed": "Source checked",
+      synthetic: "Preview",
+    };
+    const label = qualityLabels[String(quality.status)] || "Needs review";
     const score = Number(quality.score);
     const scoreLabel = Number.isFinite(score) && score > 0 ? `${Math.round(score * 100)}%` : "";
 
@@ -1162,6 +1181,9 @@ export function createReadingFeature({
         .join("");
     };
 
+    const readingOutlinePage = (entry, index) =>
+      Math.max(1, Number(entry?.pageStart || entry?.page || readingSectionPage(index)) || 1);
+
     const renderOutlineItems = (items, { compact = false } = {}) => {
       if (!items.length) {
         return '<div class="reading-compact-empty">No parsed sections.</div>';
@@ -1170,11 +1192,17 @@ export function createReadingFeature({
       return items
         .map((entry, index) => {
           const active = index === activeSectionIndex;
+          const page = readingOutlinePage(entry, index);
           return `
-            <button type="button" class="reading-outline-item ${active ? "is-active" : ""}">
+            <button
+              type="button"
+              class="reading-outline-item ${active ? "is-active" : ""}"
+              data-action="jump-reading-page"
+              data-reading-page="${escapeHtml(String(page))}"
+            >
               <span class="reading-outline-icon">${statusIcon(entry.status || "done")}</span>
               <span>${escapeHtml(entry.label || `Section ${index + 1}`)}</span>
-              ${compact ? "" : `<span class="reading-outline-progress mono">${escapeHtml(String(entry.pageStart || readingSectionPage(index + 1)).padStart(2, "0"))}</span>`}
+              ${compact ? "" : `<span class="reading-outline-progress mono">${escapeHtml(String(page).padStart(2, "0"))}</span>`}
             </button>
           `;
         })
@@ -1396,28 +1424,28 @@ export function createReadingFeature({
         ? `
           <div class="reading-empty-view">
             <div class="reading-empty-icon">${icon("sparkles", { size: 24, color: TOKENS.result })}</div>
-            <div class="reading-empty-title">AI 요약을 생성하지 못했습니다</div>
+            <div class="reading-empty-title">Summary unavailable</div>
             <div class="reading-empty-copy">
               ${
                 session?.summaryGeneratedBy === "fallback"
-                  ? "이전에 저장된 본문 기반 fallback 요약은 AI 요약으로 표시하지 않습니다."
-                  : escapeHtml(session?.summaryError || session?.summaryFallbackReason || "Codex runtime이 응답하지 않았거나 유효한 JSON 요약을 반환하지 않았습니다.")
+                  ? "The saved summary was not reliable enough to show. Generate a new summary to continue."
+                  : "The paper text was parsed, but the summary did not finish. Try again."
               }
             </div>
             <button type="button" class="btn-p" data-action="reading-summarize-session" ${!parsed || summarizeBusy ? "disabled" : ""}>
               ${icon("sparkles", { size: 13, color: "#fff" })}
-              <span>${summarizeBusy ? "Summarizing..." : "Retry AI summary"}</span>
+              <span>${summarizeBusy ? "Summarizing..." : "Retry summary"}</span>
             </button>
           </div>
         `
       : `
-          <div class="reading-empty-view">
-            <div class="reading-empty-icon">${icon("sparkles", { size: 24, color: TOKENS.read })}</div>
-            <div class="reading-empty-title">No summary</div>
-            <div class="reading-empty-copy">Parse paper 후 <strong>Summarize</strong>를 실행하면 TL;DR, Key Points, Method, Result, Limit 카드가 저장됩니다.</div>
-            <button type="button" class="btn-p" data-action="reading-summarize-session" ${!parsed || summarizeBusy ? "disabled" : ""}>
-              ${icon("sparkles", { size: 13, color: "#fff" })}
-              <span>${summarizeBusy ? "Summarizing..." : "Generate summary"}</span>
+            <div class="reading-empty-view">
+              <div class="reading-empty-icon">${icon("sparkles", { size: 24, color: TOKENS.read })}</div>
+              <div class="reading-empty-title">No summary</div>
+            <div class="reading-empty-copy">Analyze the paper first, then generate a summary.</div>
+              <button type="button" class="btn-p" data-action="reading-summarize-session" ${!parsed || summarizeBusy ? "disabled" : ""}>
+                ${icon("sparkles", { size: 13, color: "#fff" })}
+                <span>${summarizeBusy ? "Summarizing..." : "Generate summary"}</span>
             </button>
           </div>
         `;
@@ -1662,7 +1690,7 @@ export function createReadingFeature({
           </label>
         </div>
         <label>
-          <span>Built-in OCR fallback</span>
+          <span>Import extracted text</span>
           <textarea name="readingTextImport" rows="5" placeholder="Paste extracted text" ${textImportBusy ? "disabled" : ""}></textarea>
         </label>
         <button type="submit" class="btn-p" ${textImportBusy ? "disabled" : ""}>
@@ -1734,6 +1762,12 @@ export function createReadingFeature({
                 <button type="button" class="${state.readingAssetsFilter === "all" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="all">All ${assets.length}</button>
                 <button type="button" class="${state.readingAssetsFilter === "figure" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="figure">${icon("image", { size: 11, color: "currentColor" })}<span>Figures ${figureCount}</span></button>
                 <button type="button" class="${state.readingAssetsFilter === "table" ? "btn-p" : "btn-s"}" style="padding:3px 9px;font-size:11.5px" data-action="set-reading-assets-filter" data-reading-assets-filter="table">${icon("table", { size: 11, color: "currentColor" })}<span>Tables ${tableCount}</span></button>
+                <div class="reading-assets-actions">
+                  <button type="button" class="btn-s" data-action="reading-extract-assets" ${!parsed || extractBusy ? "disabled" : ""}>
+                    ${icon("grid", { size: 12, color: "currentColor" })}
+                    <span>${extractBusy ? "Extracting..." : "Extract again"}</span>
+                  </button>
+                </div>
               </div>
               <div class="reading-asset-grid">
                 ${visibleAssets
@@ -1747,7 +1781,7 @@ export function createReadingFeature({
                       >
                         <div class="reading-asset-thumb">${renderReadingAssetThumb(asset, session)}</div>
                         <div class="reading-asset-meta">
-                          <div class="reading-asset-kind" style="color:${asset.kind === "Figure" ? TOKENS.research : TOKENS.writing}">${escapeHtml(asset.kind)} ${asset.number}</div>
+                          <div class="reading-asset-kind" style="color:${asset.kind === "Figure" ? TOKENS.research : TOKENS.writing}">${escapeHtml(readingAssetKindLabel(asset))} ${asset.number}</div>
                           <div class="reading-asset-caption">${escapeHtml(asset.caption)}</div>
                           <div class="reading-asset-card-foot">
                             <span class="reading-asset-page mono">${asset.page ? `p.${escapeHtml(String(asset.page))}` : "page --"}</span>
@@ -1882,7 +1916,7 @@ export function createReadingFeature({
         : `
             <div class="reading-empty-view">
               <div class="reading-empty-icon">${icon("grid", { size: 24, color: TOKENS.read })}</div>
-              <div class="reading-empty-title">${parsed ? "No extracted assets" : "Parse first"}</div>
+              <div class="reading-empty-title">${parsed ? "No figures or tables found" : "Analyze the paper first"}</div>
               <div class="reading-empty-copy">${parsed ? "No figures or tables detected." : "Assets unlock after parsing."}</div>
               <button type="button" class="btn-p" data-action="reading-extract-assets" ${!parsed || extractBusy ? "disabled" : ""}>
                 ${icon("grid", { size: 13, color: "#fff" })}
@@ -1914,7 +1948,7 @@ export function createReadingFeature({
               ? `
                   <div class="reading-chat-warning">
                     ${icon("info", { size: 13, color: TOKENS.result })}
-                      <div><strong>Parse paper</strong> to enable chat.</div>
+                      <div><strong>Analyze the paper</strong> to enable chat.</div>
                   </div>
                 `
               : ""
@@ -1988,8 +2022,7 @@ export function createReadingFeature({
               : `
                   <div class="reading-empty-view" style="height:auto;min-height:100%">
                     <div class="reading-empty-icon">${icon("chat", { size: 24, color: TOKENS.read })}</div>
-                    <div class="reading-empty-title">No chat yet</div>
-                    <div class="reading-empty-copy">질문을 보내면 본문 청크와 인용이 함께 저장됩니다.</div>
+                    <div class="reading-empty-title">No questions yet</div>
                   </div>
                 `
           }
@@ -1998,11 +2031,11 @@ export function createReadingFeature({
         <form class="reading-chat-input" data-action="submit-reading-chat-form">
           ${chatContextChips}
           <div class="reading-chat-input-box">
-            <textarea name="readingChatMessage" rows="2" placeholder="${parsed ? "논문에게 질문하기…" : "Parse paper 후 질문할 수 있습니다"}" ${!parsed || chatBusy ? "disabled" : ""}></textarea>
+            <textarea name="readingChatMessage" rows="2" placeholder="${parsed ? "Ask about this paper..." : "Analyze the paper before asking"}" ${!parsed || chatBusy ? "disabled" : ""}></textarea>
             <button type="submit" class="reading-chat-send" aria-label="Send reading question" ${!parsed || chatBusy ? "disabled" : ""}>${icon("send", { size: 13, color: "#fff" })}</button>
           </div>
           <div class="reading-chat-footer">
-            <span>${parsed ? "Context: hybrid retrieval chunks" : "Context unavailable until parse completes"}</span>
+            <span>${parsed ? "Answers include paper evidence" : "Waiting for paper text"}</span>
             <span class="mono">${chatBusy ? "running" : "reader-agent"}</span>
           </div>
         </form>
@@ -2048,7 +2081,7 @@ export function createReadingFeature({
                 <div class="reading-empty-view" style="height:auto;min-height:100%">
                   <div class="reading-empty-icon">${icon("note", { size: 24, color: TOKENS.read })}</div>
                   <div class="reading-empty-title">No notes</div>
-                  <div class="reading-empty-copy">${parsed ? "하이라이트 seed가 비어 있습니다. New note로 수동 메모를 추가할 수 있습니다." : "Parse paper 후 하이라이트 기반 노트 seed가 생성됩니다."}</div>
+                  <div class="reading-empty-copy">${parsed ? "Save a passage as a note to see it here." : "Analyze the paper before adding notes."}</div>
                 </div>
               `
         }
@@ -2060,6 +2093,7 @@ export function createReadingFeature({
         class="reading-stage"
         data-ares-surface="reading-stage"
         data-ares-stage="reading"
+        data-reading-view="detail"
         data-reading-orientation="${escapeHtml(state.readingOrientation)}"
       >
         <div class="reading-metabar">
@@ -2078,7 +2112,7 @@ export function createReadingFeature({
           <div class="reading-metabar-actions">
             <button type="button" class="${parsed ? "btn-s" : "btn-p"}" data-action="reading-parse-session" ${parseBusy ? "disabled" : ""}>
               ${icon(parsed ? "check" : "sparkles", { size: 13, color: parsed ? "currentColor" : "#fff" })}
-              <span>${parseBusy ? "Parsing..." : parsed ? "Re-parse" : "Parse paper"}</span>
+              <span>${parseBusy ? "Analyzing..." : parsed ? "Analyze again" : "Analyze paper"}</span>
             </button>
             <button type="button" class="btn-s" data-action="reading-summarize-session" ${!parsed || summarizeBusy ? "disabled" : ""}>
               ${icon("sparkles", { size: 13, color: TOKENS.read })}
@@ -2116,7 +2150,7 @@ export function createReadingFeature({
                       <div class="reading-context-menu-divider"></div>
                       <button type="button" class="reading-context-menu-item" data-action="reading-parse-session" role="menuitem">
                         ${icon("sparkles", { size: 13, color: "currentColor" })}
-                        <span>${parsed ? "Re-parse paper" : "Parse paper"}</span>
+                        <span>${parsed ? "Analyze again" : "Analyze paper"}</span>
                       </button>
                     </div>
                   `
@@ -2188,7 +2222,7 @@ export function createReadingFeature({
                   data-reading-document-tab="pdf"
                 >
                   ${icon("pdf", { size: 13, color: state.readingDocumentTab === "pdf" ? TOKENS.tx : TOKENS.t3 })}
-                  <span>PDF Document</span>
+                  <span>PDF</span>
                   <span class="reading-pane-meta mono">${escapeHtml(String(session?.pageCount || "PDF"))}</span>
                 </button>
                 <button

@@ -196,7 +196,7 @@ test('reading routes deliver binary PDF, enforce summarize prerequisite, and par
   });
   const summarizePayload = await summarizeResponse.json();
   assert.equal(summarizeResponse.status, 409);
-  assert.match(summarizePayload.error, /Parse paper/i);
+  assert.match(summarizePayload.error, /Analyze the paper/i);
 
   const pdfResponse = await fetch(new URL(`/api/reading-sessions/${sessionId}/pdf`, server.url));
   const pdfBytes = new Uint8Array(await pdfResponse.arrayBuffer());

@@ -179,7 +179,7 @@ async function waitForEvent(events, predicate, timeoutMs = 1000) {
   throw new Error('Timed out waiting for agent run event.');
 }
 
-test('reading agent run falls back locally and creates a reading session', async () => {
+test('reading agent run reports runtime failure without creating fallback output', async () => {
   const store = await createDemoStore();
   const service = createAgentRunService({
     rootDir: '/workspace',
@@ -217,13 +217,16 @@ test('reading agent run falls back locally and creates a reading session', async
   const finalRun = await waitForRun(store, run.id);
   const sessions = store.getReadingSessions('demo');
 
-  assert.equal(finalRun.status, 'done');
+  assert.equal(finalRun.status, 'error');
+  assert.match(finalRun.error, /runtime unavailable/);
+  assert.equal(finalRun.outputPayload, undefined);
+  assert.deepEqual(finalRun.outputRef, []);
+  assert.deepEqual(finalRun.createdAssetIds, []);
   assert.equal(sessions.length, 1);
   assert.equal(sessions[0].paperId, 'paper-42');
-  assert.equal(sessions[0].status, 'done');
-  assert.ok(sessions[0].sections.length > 0);
+  assert.equal(sessions[0].status, 'queue');
+  assert.deepEqual(sessions[0].sections, []);
   assert.deepEqual(finalRun.sourceAssetIds, ['paper-42']);
-  assert.deepEqual(finalRun.createdAssetIds, [sessions[0].id]);
 });
 
 test('agent run service notifies subscribers when run state changes', async () => {
@@ -249,11 +252,11 @@ test('agent run service notifies subscribers when run state changes', async () =
   });
 
   await waitForRun(store, run.id);
-  await waitForEvent(events, (status) => status === 'done');
+  await waitForEvent(events, (status) => status === 'error');
   unsubscribe();
 
   assert.ok(events.includes('running'));
-  assert.ok(events.includes('done'));
+  assert.ok(events.includes('error'));
 });
 
 test('agent run service marks persisted active runs as interrupted on startup', async () => {
@@ -388,7 +391,7 @@ test('agent run service recovers stale running leases without touching fresh or 
   assert.equal(store.getAgentRun(queued.id).status, 'queue');
 });
 
-test('agent run retry reuses idempotent stage output assets', async () => {
+test('agent run runtime failure does not persist stage fallback assets', async () => {
   const store = await createDemoStore();
   const service = createAgentRunService({
     rootDir: '/workspace',
@@ -402,19 +405,14 @@ test('agent run retry reuses idempotent stage output assets', async () => {
     projectId: 'demo',
     stage: 'research',
   });
-  await waitForRun(store, run.id);
+  const finalRun = await waitForRun(store, run.id);
 
-  const firstExperimentIds = store.listProjectAssets('demo', 'experimentRuns').map((asset) => asset.id);
-  const firstChecklistIds = store.listProjectAssets('demo', 'reproChecklistItems').map((asset) => asset.id);
-  const retry = await service.retryRun(run.id);
-  await waitForRun(store, retry.run.id);
-  const secondExperimentAssets = store.listProjectAssets('demo', 'experimentRuns');
-  const secondChecklistAssets = store.listProjectAssets('demo', 'reproChecklistItems');
-
-  assert.deepEqual(secondExperimentAssets.map((asset) => asset.id), firstExperimentIds);
-  assert.deepEqual(secondChecklistAssets.map((asset) => asset.id), firstChecklistIds);
-  assert.ok(secondExperimentAssets.every((asset) => asset.idempotencyKey));
-  assert.ok(secondChecklistAssets.every((asset) => asset.idempotencyKey));
+  assert.equal(finalRun.status, 'error');
+  assert.match(finalRun.error, /runtime unavailable/);
+  assert.deepEqual(finalRun.outputRef, []);
+  assert.deepEqual(finalRun.createdAssetIds, []);
+  assert.deepEqual(store.listProjectAssets('demo', 'experimentRuns'), []);
+  assert.deepEqual(store.listProjectAssets('demo', 'reproChecklistItems'), []);
 });
 
 test('agent run service keeps canceled search runs from queueing late results', async () => {
@@ -563,7 +561,7 @@ test('search agent run reports an error when Scout service is unavailable', asyn
   assert.equal(finalRun.stage, 'search');
   assert.equal(finalRun.status, 'error');
   assert.match(finalRun.error, /Search service is not configured/);
-  assert.match(finalRun.outputSummary, /Agentic search failed/);
+  assert.match(finalRun.outputSummary, /Search did not finish/);
   assert.equal(finalRun.outputPayload, undefined);
   assert.equal(store.getProject('demo').queueCount, 0);
   assert.equal(store.getReadingSessions('demo').length, 0);
@@ -600,7 +598,7 @@ test('search agent run reports Scout failure without queueing fallback results',
   assert.equal(finalRun.stage, 'search');
   assert.equal(finalRun.status, 'error');
   assert.match(finalRun.error, /runtime timeout/);
-  assert.match(finalRun.outputSummary, /Agentic search failed/);
+  assert.match(finalRun.outputSummary, /Search did not finish/);
   assert.equal(finalRun.outputPayload, undefined);
   assert.equal(store.getProject('demo').queueCount, 0);
 });
@@ -657,7 +655,7 @@ test('search agent run executes scout search and checkpoints results into readin
   assert.equal(finalRun.outputPayload.results[0].queued, true);
   assert.equal(finalRun.outputPayload.totalQueued, 2);
   assert.equal(store.getProject('demo').queueCount, 2);
-  assert.match(finalRun.outputSummary, /2 result/);
+  assert.match(finalRun.outputSummary, /Found 2 papers/);
   assert.match(finalRun.warning, /seed checkpoint/);
 });
 
