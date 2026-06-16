@@ -4,6 +4,8 @@ let activePageObserver = null;
 let activeAnnotations = [];
 let activeSourceHighlight = null;
 const PDF_VIEWER_STATE_KEY = '__aresReadingPdfViewerState';
+const PDF_BASE_SCALE = 1.28;
+const PDF_MAX_FIT_SCALE = 2.2;
 
 function setMessage(host, message, className = '') {
   if (!host) {
@@ -37,6 +39,29 @@ function applyPdfPageMetrics(element, viewport) {
   element.style.setProperty('--user-unit', '1');
   element.style.setProperty('--scale-round-x', '1px');
   element.style.setProperty('--scale-round-y', '1px');
+}
+
+function pdfHostAvailableWidth(host) {
+  if (!host) {
+    return 0;
+  }
+
+  const styles = window.getComputedStyle(host);
+  const paddingLeft = Number.parseFloat(styles.paddingLeft) || 0;
+  const paddingRight = Number.parseFloat(styles.paddingRight) || 0;
+  return Math.max(0, host.clientWidth - paddingLeft - paddingRight);
+}
+
+function pdfHostFitWidthKey(host) {
+  return String(Math.round(pdfHostAvailableWidth(host)));
+}
+
+function resolvePdfViewport(page, host, zoom) {
+  const baseViewport = page.getViewport({ scale: 1 });
+  const availableWidth = pdfHostAvailableWidth(host);
+  const fitScale = availableWidth > 0 ? availableWidth / baseViewport.width : PDF_BASE_SCALE;
+  const baseScale = Math.min(PDF_MAX_FIT_SCALE, Math.max(PDF_BASE_SCALE, fitScale));
+  return page.getViewport({ scale: baseScale * (zoom / 100) });
 }
 
 function scheduleIdleTask(callback) {
@@ -380,9 +405,9 @@ async function renderPdfPage({ force = false, pageRecord, pdfjsLib, renderToken 
   await pageRecord.renderPromise;
 }
 
-function updatePdfPageRecordZoom(pageRecord, zoom) {
+function updatePdfPageRecordZoom(pageRecord, host, zoom) {
   const pageNumber = Number(pageRecord.wrapper.dataset.readingPdfPage) || 1;
-  const viewport = pageRecord.page.getViewport({ scale: 1.28 * (zoom / 100) });
+  const viewport = resolvePdfViewport(pageRecord.page, host, zoom);
   pageRecord.viewport = viewport;
   applyPdfPageMetrics(pageRecord.surface, viewport);
   pageRecord.renderTask?.cancel?.();
@@ -406,13 +431,15 @@ function rescaleHydratedPdfPages({ host, pageRecords, pdfjsLib, targetPage, zoom
 
   const previousZoom = Number(host.dataset.pdfZoom || 100) || 100;
   const previousScrollTop = host.scrollTop;
+  const previousPageWidth = Number.parseFloat(pageRecords[0]?.surface?.style?.width || '') || 0;
   const renderToken = ++activeRenderToken;
   disconnectActivePageObserver();
   host.dataset.pdfZoom = String(zoom);
+  host.dataset.pdfFitWidth = pdfHostFitWidthKey(host);
   host.dataset.renderState = 'ready';
 
   pageRecords.forEach((pageRecord) => {
-    updatePdfPageRecordZoom(pageRecord, zoom);
+    updatePdfPageRecordZoom(pageRecord, host, zoom);
     if (
       Number(pageRecord.wrapper.dataset.readingPdfPage) <= 2 ||
       Number(pageRecord.wrapper.dataset.readingPdfPage) === Number(targetPage) ||
@@ -422,7 +449,9 @@ function rescaleHydratedPdfPages({ host, pageRecords, pdfjsLib, targetPage, zoom
     }
   });
 
-  host.scrollTop = Math.round(previousScrollTop * (zoom / previousZoom));
+  const nextPageWidth = Number.parseFloat(pageRecords[0]?.surface?.style?.width || '') || 0;
+  const scrollRatio = previousPageWidth > 0 && nextPageWidth > 0 ? nextPageWidth / previousPageWidth : zoom / previousZoom;
+  host.scrollTop = Math.round(previousScrollTop * scrollRatio);
   observePdfPages({ host, pageRecords, pdfjsLib, renderToken });
   syncReadingPdfAnnotations(host, activeAnnotations);
   syncReadingPdfSourceHighlight(host, activeSourceHighlight);
@@ -484,9 +513,14 @@ export async function hydrateReadingPdfSurface({ annotations = [], baseUrl, host
   const nextPdfUrl = String(pdfUrl);
   const nextZoom = Number.isFinite(Number(zoom)) ? Math.min(200, Math.max(50, Number(zoom))) : 100;
   const nextZoomKey = String(nextZoom);
+  const nextFitWidthKey = pdfHostFitWidthKey(host);
   activeAnnotations = normalizePdfAnnotations(annotations);
   activeSourceHighlight = normalizeSourceHighlight(sourceHighlight);
-  if (host.dataset.renderState === 'ready' && host.dataset.pdfUrl === nextPdfUrl && host.dataset.pdfZoom !== nextZoomKey) {
+  if (
+    host.dataset.renderState === 'ready' &&
+    host.dataset.pdfUrl === nextPdfUrl &&
+    (host.dataset.pdfZoom !== nextZoomKey || host.dataset.pdfFitWidth !== nextFitWidthKey)
+  ) {
     const viewerState = getPdfViewerState(host);
     if (
       viewerState?.pdfUrl === nextPdfUrl &&
@@ -519,6 +553,7 @@ export async function hydrateReadingPdfSurface({ annotations = [], baseUrl, host
   host.dataset.renderState = 'loading';
   host.dataset.pdfUrl = nextPdfUrl;
   host.dataset.pdfZoom = nextZoomKey;
+  host.dataset.pdfFitWidth = nextFitWidthKey;
   setMessage(host, 'PDF를 불러오는 중입니다…');
 
   try {
@@ -539,7 +574,7 @@ export async function hydrateReadingPdfSurface({ annotations = [], baseUrl, host
         return;
       }
 
-      const viewport = page.getViewport({ scale: 1.28 * (nextZoom / 100) });
+      const viewport = resolvePdfViewport(page, host, nextZoom);
       const { surface, wrapper } = createPdfPageShell(viewport, pageNumber);
       const pageRecord = { page, surface, viewport, wrapper };
       pageRecords.push(pageRecord);

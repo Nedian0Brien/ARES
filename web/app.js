@@ -5755,6 +5755,7 @@ document.addEventListener("click", async (event) => {
       if (!patchedSelection || !patchedWorkbench) {
         refreshReadingStageUI();
       }
+      scheduleReadingHydration();
     }
     return;
   }
@@ -5767,6 +5768,7 @@ document.addEventListener("click", async (event) => {
     if (!patchedDock || !patchedWorkbench) {
       refreshReadingStageUI();
     }
+    scheduleReadingHydration();
     return;
   }
 
@@ -5781,6 +5783,7 @@ document.addEventListener("click", async (event) => {
     if (!patchReadingWorkbenchPaneOnly()) {
       refreshReadingStageUI();
     }
+    scheduleReadingHydration();
     return;
   }
 
@@ -5788,12 +5791,14 @@ document.addEventListener("click", async (event) => {
     state.readingWorkbenchTab = trigger.dataset.readingWorkbenchTab || state.readingWorkbenchTab;
     state.readingWorkbenchCollapsed = false;
     refreshReadingStageUI();
+    scheduleReadingHydration();
     return;
   }
 
   if (action === "toggle-reading-workbench-collapse") {
     state.readingWorkbenchCollapsed = !state.readingWorkbenchCollapsed;
     refreshReadingStageUI();
+    scheduleReadingHydration();
     return;
   }
 
@@ -7031,6 +7036,8 @@ window.addEventListener("resize", () => {
     const readingRailChanged = searchLayoutChanged ? syncResponsiveReadingRail(state.searchLayout) : false;
     if (searchLayoutChanged || readingHomeLayoutChanged || readingRailChanged) {
       render();
+    } else if (state.activeStage === "reading" && state.readingView === "detail" && state.readingDocumentTab === "pdf") {
+      scheduleReadingHydration();
     }
   });
 });

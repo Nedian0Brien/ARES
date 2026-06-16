@@ -470,9 +470,12 @@ test('PDF viewer renders long documents progressively instead of blocking on eve
 test('PDF viewer zoom rescales hydrated pages without reloading the document', async () => {
   const viewerJs = await readProjectFile('web/app/lib/pdf-viewer.js');
 
+  assert.match(viewerJs, /function resolvePdfViewport\(page, host, zoom\)/);
+  assert.match(viewerJs, /pdfHostAvailableWidth\(host\)/);
+  assert.match(viewerJs, /Math\.max\(PDF_BASE_SCALE, fitScale\)/);
   assert.match(viewerJs, /function rescaleHydratedPdfPages/);
   assert.match(viewerJs, /getPdfViewerState\(host\)/);
-  assert.match(viewerJs, /host\.dataset\.pdfUrl === nextPdfUrl && host\.dataset\.pdfZoom !== nextZoomKey/);
+  assert.match(viewerJs, /host\.dataset\.pdfFitWidth !== nextFitWidthKey/);
   assert.match(viewerJs, /rescaleHydratedPdfPages\(\{/);
   assert.match(viewerJs, /pdfjsLib\.getDocument\(\{ url: pdfUrl \}\)/);
 });
