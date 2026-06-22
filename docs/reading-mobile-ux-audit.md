@@ -12,6 +12,8 @@
 
 처음에는 PDF page surface가 783px 폭으로 렌더되어 화면 밖으로 잘렸다. 다만 후속 확인 결과, A4 한 페이지를 모바일 pane 안에 그대로 맞추는 기준도 독서에는 맞지 않았다. 모바일에서는 페이지 전체 미리보기보다 본문을 읽을 수 있는 기본 배율과 왼쪽 시작 위치가 더 중요하다.
 
+추가 확인에서 `pane-body`를 작은 `dvh` 값으로 고정하면 PDF 아래쪽이 화면 중간에서 잘려 보이고, 반대로 높이 제한만 제거하면 Reader stage가 PDF 전체 높이까지 커져 dock가 화면 밖으로 밀리는 문제가 확인됐다. 모바일 Reader detail은 stage를 viewport 높이로 고정하고, PDF pane 내부만 스크롤해야 한다. 도크는 pane 아래 flex 영역으로 두지 않고 PDF pane 위에 떠 있어야 중간 클리핑 경계가 보이지 않는다.
+
 ## 조사 기준
 
 - 디자인 기준: `design/ARES Design System.html`
@@ -58,6 +60,14 @@
   - 원인 후보: 모바일 CSS에서 `.reading-pdf-dock-layer`가 `position: fixed`와 `bottom: calc(var(--mobile-bottom-nav-height) + 4px)`를 사용한다.
   - 해결 방안: 기본 상태는 작은 floating 버튼 또는 접힌 toolbar로 두고, 조작할 때만 bottom sheet를 연다. 읽기 중에는 자동 숨김 또는 semi-collapsed 상태를 둔다.
   - 검증 기준: PDF 도크가 닫힌 상태에서 본문을 덮지 않는다. 열린 상태에서도 선택한 패널의 높이와 위치가 bottom nav 위로 안전하게 clamp된다.
+
+- [x] Reader detail의 세로 스크롤 경계를 viewport 안에 고정한다.
+
+  - 문제: 모바일에서 `pane-body`를 `52dvh`로 제한하면 PDF 아래쪽이 중간에서 잘리고, 제한을 완전히 풀면 dock가 PDF 전체 문서 아래로 밀린다.
+  - UX 영향: 사용자는 화면 아래가 잘린 것처럼 느끼거나, 도구 막대를 찾을 수 없다. iOS Safari에서는 내부 스크롤과 문서 스크롤이 섞여 더 불안정하게 보인다.
+  - 원인 후보: 모바일 공통 CSS가 `.reading-stage`의 `min-height`를 `auto`로 풀고, Reader detail 전용 height boundary가 없었다.
+  - 해결 방안: Reader detail에서 stage와 split은 viewport 높이로 고정한다. `.pane-body`는 viewport 아래까지 이어지는 내부 스크롤 영역으로 두고, dock layer는 그 위에 absolute overlay로 띄운다.
+  - 검증 기준: `pane-body`의 bottom은 viewport bottom과 맞고, dock layer는 viewport 안쪽에서 끝난다. PDF가 도크 위에서 별도 경계로 잘려 보이면 실패다.
 
 - [x] PDF 도크의 가로 스크롤을 없앤다.
 
@@ -148,6 +158,9 @@
 - [x] 모바일 e2e에 PDF 읽기 배율과 좌측 클립 방지 assertion을 추가한다.
   - 예: `pageSurface.width >= paneBody.width * 1.25`, `pageSurface.x >= paneBody.x - 1`
 
+- [x] 모바일 e2e에 Reader detail 세로 클리핑 assertion을 추가한다.
+  - 예: pane body가 viewport bottom까지 이어지고, dock layer가 pane body 안쪽에 떠 있다.
+
 - [x] 모바일 e2e에 도크 가로 스크롤 방지 assertion을 추가한다.
   - 예: `.pdf-dock.scrollWidth <= .pdf-dock.clientWidth + 1`
 
@@ -193,6 +206,7 @@
 
 - 320px 화면에서 PDF 본문이 읽을 수 있는 배율로 시작하고, 왼쪽이 잘리지 않는다.
 - Reader 진입 첫 화면에서 PDF가 주 시각 요소로 보인다.
+- Reader detail은 viewport 안에서 닫히고, PDF pane 내부만 스크롤된다.
 - PDF 도크는 가로 스크롤 없이 핵심 액션을 제공하며, 본문과 하단 nav를 덮지 않는다.
 - 검색/목차/페이지 패널이 viewport와 bottom nav를 침범하지 않는다.
 - 주요 모바일 조작 요소는 44x44 이상이다.

@@ -152,12 +152,29 @@ async function expectMobilePdfDockFitsAndHasTouchTargets(page) {
   expect(smallDockButtons).toEqual([]);
 }
 
-async function expectMobilePdfDockStaysOutsideDocumentBody(page) {
+async function expectMobilePdfDockFloatsInsideDocumentBody(page) {
   const paneBodyBox = await page.locator('.reading-doc-pane .pane-body').boundingBox();
   const dockBox = await page.locator('.reading-pdf-dock-layer .pdf-dock').boundingBox();
+  const viewport = page.viewportSize();
   expect(paneBodyBox).not.toBeNull();
   expect(dockBox).not.toBeNull();
-  expect(dockBox.y).toBeGreaterThanOrEqual(paneBodyBox.y + paneBodyBox.height - 1);
+  expect(viewport).not.toBeNull();
+  expect(paneBodyBox.y + paneBodyBox.height).toBeGreaterThanOrEqual(viewport.height - 1);
+  expect(dockBox.y + dockBox.height).toBeLessThanOrEqual(viewport.height - 12);
+  expect(dockBox.y).toBeGreaterThan(paneBodyBox.y);
+}
+
+async function expectMobilePdfUsesAvailableViewportHeight(page) {
+  const paneBodyBox = await page.locator('.reading-doc-pane .pane-body').boundingBox();
+  const dockLayerBox = await page.locator('.reading-pdf-dock-layer').boundingBox();
+  const viewport = page.viewportSize();
+  expect(paneBodyBox).not.toBeNull();
+  expect(dockLayerBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+
+  expect(paneBodyBox.height).toBeGreaterThanOrEqual(viewport.height - paneBodyBox.y - 1);
+  expect(paneBodyBox.height).toBeLessThanOrEqual(viewport.height - paneBodyBox.y + 1);
+  expect(dockLayerBox.y + dockLayerBox.height).toBeLessThanOrEqual(viewport.height - 8);
 }
 
 async function expectVisibleControlsHaveMobileTouchTargets(page) {
@@ -404,7 +421,8 @@ test('Mobile direct Reader route opens a focused readable PDF view', async ({ pa
   await expectMobilePdfStartsWithoutLeftClip(page);
   await expectPdfReaderStartsNearTop(page);
   await expectMobilePdfDockFitsAndHasTouchTargets(page);
-  await expectMobilePdfDockStaysOutsideDocumentBody(page);
+  await expectMobilePdfDockFloatsInsideDocumentBody(page);
+  await expectMobilePdfUsesAvailableViewportHeight(page);
   await expectMobileWorkbenchIsSeparateFromDefaultReader(page);
   await expect(page.locator('[data-ares-surface="bottom-nav"]')).toBeHidden();
   await expectVisibleControlsHaveMobileTouchTargets(page);
@@ -435,7 +453,8 @@ test('Mobile bottom nav can drive Read and Reader PDF dock flows', async ({ page
   await expectMobilePdfStartsWithoutLeftClip(page);
   await expectPdfReaderStartsNearTop(page);
   await expectMobilePdfDockFitsAndHasTouchTargets(page);
-  await expectMobilePdfDockStaysOutsideDocumentBody(page);
+  await expectMobilePdfDockFloatsInsideDocumentBody(page);
+  await expectMobilePdfUsesAvailableViewportHeight(page);
   await expectMobileWorkbenchIsSeparateFromDefaultReader(page);
   await expect(bottomNav).toBeHidden();
   await expectVisibleControlsHaveMobileTouchTargets(page);
@@ -452,7 +471,8 @@ test('Mobile bottom nav can drive Read and Reader PDF dock flows', async ({ page
     await expectMobilePdfStartsWithoutLeftClip(page);
     await expectPdfReaderStartsNearTop(page);
     await expectMobilePdfDockFitsAndHasTouchTargets(page);
-    await expectMobilePdfDockStaysOutsideDocumentBody(page);
+    await expectMobilePdfDockFloatsInsideDocumentBody(page);
+    await expectMobilePdfUsesAvailableViewportHeight(page);
     await expectMobileWorkbenchIsSeparateFromDefaultReader(page);
     await expect(bottomNav).toBeHidden();
     await expectVisibleControlsHaveMobileTouchTargets(page);

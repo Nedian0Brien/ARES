@@ -4138,33 +4138,61 @@ body.reading-home-resize-active {
     display: none;
   }
 
+  .stage-wrap:has(.reading-stage[data-reading-view="detail"]) {
+    height: calc(var(--mobile-viewport-height) - var(--viewport-safe-top));
+    overflow: hidden;
+  }
+
+  .reading-stage[data-reading-view="detail"] {
+    height: calc(var(--mobile-viewport-height) - var(--viewport-safe-top));
+    max-height: calc(var(--mobile-viewport-height) - var(--viewport-safe-top));
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .reading-stage[data-reading-view="detail"] .reading-shell-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .reading-stage[data-reading-view="detail"] .reading-split {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
   .reading-pdf-dock-layer {
-    bottom: auto;
-    flex-shrink: 0;
-    left: auto;
-    padding: 0 10px 8px;
-    position: relative;
-    right: auto;
+    bottom: 12px;
+    gap: 4px;
+    left: 0;
+    padding: 0 10px;
+    position: absolute;
+    right: 0;
   }
 
   .reading-stage[data-reading-view="detail"] .reading-doc-pane {
+    flex: 1 1 auto !important;
+    height: 100%;
     min-height: 0;
   }
 
   .reading-stage[data-reading-view="detail"] .reading-doc-pane .pane-body {
-    max-height: min(52dvh, 440px);
-    min-height: min(38dvh, 360px);
+    max-height: none;
+    min-height: 0;
   }
 
   .reading-stage[data-reading-view="detail"] .reading-pdf-canvas-root {
     align-items: flex-start;
+    padding-bottom: 220px;
     padding-left: 12px;
     padding-right: 12px;
   }
 
   .reading-stage[data-reading-view="detail"] .reading-doc-pane:has(.reading-pdf-dock-layer.has-selection) .pane-body {
-    max-height: min(38dvh, 300px);
-    min-height: min(30dvh, 260px);
+    max-height: none;
+    min-height: 0;
   }
 
   .reading-pdf-dock-layer .pdf-dock {
@@ -4197,7 +4225,14 @@ body.reading-home-resize-active {
   }
 
   .reading-pdf-dock-layer.has-selection .dock-sel-group {
-    display: contents;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+  }
+
+  .reading-pdf-dock-layer.has-selection .pdf-dock > :not(.dock-sel-group) {
+    display: none;
   }
 
   .reading-pdf-dock-layer .sel-chip-dismiss {

@@ -158,9 +158,9 @@ test('mobile bottom nav CSS uses ARIS liquid-glass shell adapted to ARES tokens'
   assert.match(styles, /width:\s*min\(400px,\s*calc\(100vw - 1rem\)\)/);
   assert.match(styles, /bottom:\s*calc\(var\(--bottom-nav-offset\) \+ var\(--viewport-bottom-occlusion\)\)/);
   assert.match(styles, /\.app-shell:has\(\.reading-stage\[data-reading-view="detail"\]\) \.bottom-nav[\s\S]*display:\s*none/);
-  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*bottom:\s*auto/);
-  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*position:\s*relative/);
-  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*padding:\s*0 10px 8px/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*bottom:\s*12px/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*position:\s*absolute/);
+  assert.match(styles, /\.reading-pdf-dock-layer[\s\S]*padding:\s*0 10px/);
   assert.match(styles, /\.search-preview-focal:not\(\.is-empty\)[\s\S]*bottom:\s*var\(--viewport-bottom-occlusion\)/);
   assert.match(styles, /\.bottom-nav[\s\S]*overflow:\s*visible/);
   assert.match(styles, /\.nav-item[\s\S]*min-height:\s*54px/);
