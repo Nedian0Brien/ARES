@@ -5,6 +5,7 @@ let activeAnnotations = [];
 let activeSourceHighlight = null;
 const PDF_VIEWER_STATE_KEY = '__aresReadingPdfViewerState';
 const PDF_BASE_SCALE = 1.28;
+const PDF_MOBILE_READING_SCALE = 1.52;
 const PDF_MAX_FIT_SCALE = 2.2;
 
 function setMessage(host, message, className = '') {
@@ -60,7 +61,10 @@ function resolvePdfViewport(page, host, zoom) {
   const baseViewport = page.getViewport({ scale: 1 });
   const availableWidth = pdfHostAvailableWidth(host);
   const fitScale = availableWidth > 0 ? availableWidth / baseViewport.width : PDF_BASE_SCALE;
-  const baseScale = Math.min(PDF_MAX_FIT_SCALE, Math.max(PDF_BASE_SCALE, fitScale));
+  const isMobileViewport = window.innerWidth <= 900;
+  const baseScale = isMobileViewport
+    ? Math.min(PDF_MAX_FIT_SCALE, fitScale * PDF_MOBILE_READING_SCALE)
+    : Math.min(PDF_MAX_FIT_SCALE, Math.max(PDF_BASE_SCALE, fitScale));
   return page.getViewport({ scale: baseScale * (zoom / 100) });
 }
 

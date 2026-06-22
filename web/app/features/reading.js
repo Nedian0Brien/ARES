@@ -2266,6 +2266,26 @@ export function createReadingFeature({
                 </button>
 
                 <div class="pane-actions">
+                  <div class="reading-mobile-workbench-actions" aria-label="Reading workbench">
+                    <button
+                      type="button"
+                      class="reading-mobile-workbench-btn ${!state.readingWorkbenchCollapsed && state.readingWorkbenchTab === "chat" ? "is-on" : ""}"
+                      data-action="open-reading-workbench"
+                      data-reading-workbench-tab="chat"
+                    >
+                      ${icon("chat", { size: 14, color: "currentColor" })}
+                      <span>Chat</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="reading-mobile-workbench-btn ${!state.readingWorkbenchCollapsed && state.readingWorkbenchTab === "notes" ? "is-on" : ""}"
+                      data-action="open-reading-workbench"
+                      data-reading-workbench-tab="notes"
+                    >
+                      ${icon("note", { size: 14, color: "currentColor" })}
+                      <span>Notes</span>
+                    </button>
+                  </div>
                   <div class="reading-orient-group" title="Pane orientation">
                     <button
                       type="button"

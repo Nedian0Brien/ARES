@@ -101,6 +101,139 @@ async function createOcrRecoveryReadingSession(request) {
   return parsedPayload.session;
 }
 
+async function openMobileReaderPdf(page, session, viewport) {
+  await page.setViewportSize(viewport);
+  await page.goto(`/#/projects/rag-reranker/reading/sessions/${encodeURIComponent(session.id)}/pdf`);
+  await expect(page.locator('[data-reading-pdf-host="true"]')).toBeVisible();
+  await expect(page.locator('.reading-pdf-text-layer span').first()).toBeVisible();
+}
+
+async function expectMobilePdfStartsAtReadableScale(page) {
+  const paneBodyBox = await page.locator('.reading-doc-pane .pane-body').boundingBox();
+  const pageSurfaceBox = await page.locator('[data-reading-pdf-page="1"] .reading-pdf-page-surface').boundingBox();
+
+  expect(paneBodyBox).not.toBeNull();
+  expect(pageSurfaceBox).not.toBeNull();
+  expect(pageSurfaceBox.width).toBeGreaterThanOrEqual(paneBodyBox.width * 1.25);
+}
+
+async function expectMobilePdfStartsWithoutLeftClip(page) {
+  const paneBodyBox = await page.locator('.reading-doc-pane .pane-body').boundingBox();
+  const pageSurfaceBox = await page.locator('[data-reading-pdf-page="1"] .reading-pdf-page-surface').boundingBox();
+
+  expect(paneBodyBox).not.toBeNull();
+  expect(pageSurfaceBox).not.toBeNull();
+  expect(pageSurfaceBox.x).toBeGreaterThanOrEqual(paneBodyBox.x - 1);
+}
+
+async function expectMobilePdfDockFitsAndHasTouchTargets(page) {
+  const dockMetrics = await page.locator('.reading-pdf-dock-layer .pdf-dock').evaluate((node) => ({
+    clientWidth: node.clientWidth,
+    scrollWidth: node.scrollWidth,
+  }));
+  expect(dockMetrics.scrollWidth).toBeLessThanOrEqual(dockMetrics.clientWidth + 1);
+
+  const smallDockButtons = await page.locator('.reading-pdf-dock-layer .dock-btn').evaluateAll((buttons) =>
+    buttons
+      .filter((button) => {
+        const rect = button.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })
+      .map((button) => {
+        const rect = button.getBoundingClientRect();
+        return {
+          label: button.getAttribute('aria-label') || button.getAttribute('title') || button.textContent.trim(),
+          height: Math.round(rect.height),
+          width: Math.round(rect.width),
+        };
+      })
+      .filter((rect) => rect.width < 44 || rect.height < 44),
+  );
+  expect(smallDockButtons).toEqual([]);
+}
+
+async function expectMobilePdfDockStaysOutsideDocumentBody(page) {
+  const paneBodyBox = await page.locator('.reading-doc-pane .pane-body').boundingBox();
+  const dockBox = await page.locator('.reading-pdf-dock-layer .pdf-dock').boundingBox();
+  expect(paneBodyBox).not.toBeNull();
+  expect(dockBox).not.toBeNull();
+  expect(dockBox.y).toBeGreaterThanOrEqual(paneBodyBox.y + paneBodyBox.height - 1);
+}
+
+async function expectVisibleControlsHaveMobileTouchTargets(page) {
+  const smallControls = await page
+    .locator('button, input, textarea, select, a[href], [role="button"]')
+    .evaluateAll((controls) => {
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      return controls
+        .filter((control) => {
+          const style = window.getComputedStyle(control);
+          const rect = control.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            Number(style.opacity) !== 0 &&
+            style.pointerEvents !== 'none' &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.bottom > 0 &&
+            rect.right > 0 &&
+            rect.top < viewportHeight &&
+            rect.left < viewportWidth
+          );
+        })
+        .map((control) => {
+          const rect = control.getBoundingClientRect();
+          return {
+            label:
+              control.getAttribute('aria-label') ||
+              control.getAttribute('title') ||
+              control.getAttribute('data-action') ||
+              control.textContent.trim(),
+            tag: control.tagName.toLowerCase(),
+            height: Math.round(rect.height),
+            width: Math.round(rect.width),
+          };
+        })
+        .filter((rect) => rect.width < 44 || rect.height < 44);
+    });
+  expect(smallControls).toEqual([]);
+}
+
+async function expectPdfReaderStartsNearTop(page) {
+  const pageSurfaceBox = await page.locator('[data-reading-pdf-page="1"] .reading-pdf-page-surface').boundingBox();
+  const viewport = page.viewportSize();
+  expect(pageSurfaceBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(pageSurfaceBox.y).toBeLessThanOrEqual(viewport.height * 0.35);
+}
+
+async function expectMobileWorkbenchIsSeparateFromDefaultReader(page) {
+  await expect(page.locator('.reading-workbench-pane')).toHaveCount(0);
+  await expect(page.locator('.reading-mobile-workbench-actions [data-reading-workbench-tab="chat"]')).toBeVisible();
+  await expect(page.locator('.reading-mobile-workbench-actions [data-reading-workbench-tab="notes"]')).toBeVisible();
+  await expect(page.locator('.reading-wb-strip')).toBeHidden();
+}
+
+async function expectPdfPopupFitsViewport(page, selector) {
+  const popupBox = await page.locator(selector).boundingBox();
+  const bottomNavBox = await page.locator('[data-ares-surface="bottom-nav"]').boundingBox();
+  const viewport = page.viewportSize();
+  expect(popupBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(popupBox.y).toBeGreaterThanOrEqual(0);
+  const safeBottom = bottomNavBox ? bottomNavBox.y - 8 : viewport.height - 8;
+  expect(popupBox.y + popupBox.height).toBeLessThanOrEqual(safeBottom);
+}
+
+async function expectMobilePageGridUsesReadableColumns(page) {
+  const metrics = await page.locator('.page-grid-panel.visible .page-grid').evaluate((node) => ({
+    columnCount: window.getComputedStyle(node).gridTemplateColumns.split(' ').filter(Boolean).length,
+  }));
+  expect(metrics.columnCount).toBeLessThanOrEqual(3);
+}
+
 test('ARES workspace loads core tabs without browser errors', async ({ page }) => {
   const diagnostics = collectBrowserDiagnostics(page);
 
@@ -262,6 +395,23 @@ test('Reader PDF navigation, selection note, and Lab handoff work together', asy
   diagnostics.assertClean();
 });
 
+test('Mobile direct Reader route opens a focused readable PDF view', async ({ page, request }) => {
+  const diagnostics = collectBrowserDiagnostics(page);
+  const session = await createParsedReadingSession(request);
+
+  await openMobileReaderPdf(page, session, { width: 390, height: 844 });
+  await expectMobilePdfStartsAtReadableScale(page);
+  await expectMobilePdfStartsWithoutLeftClip(page);
+  await expectPdfReaderStartsNearTop(page);
+  await expectMobilePdfDockFitsAndHasTouchTargets(page);
+  await expectMobilePdfDockStaysOutsideDocumentBody(page);
+  await expectMobileWorkbenchIsSeparateFromDefaultReader(page);
+  await expect(page.locator('[data-ares-surface="bottom-nav"]')).toBeHidden();
+  await expectVisibleControlsHaveMobileTouchTargets(page);
+
+  diagnostics.assertClean();
+});
+
 test('Mobile bottom nav can drive Read and Reader PDF dock flows', async ({ page, request }) => {
   const diagnostics = collectBrowserDiagnostics(page);
   const session = await createParsedReadingSession(request);
@@ -280,14 +430,45 @@ test('Mobile bottom nav can drive Read and Reader PDF dock flows', async ({ page
   await page.locator('[data-action="select-stage"][data-stage-id="reading"]').click();
   await expect(page.getByRole('heading', { name: 'Reading Library' })).toBeVisible();
 
-  await page.goto(`/#/projects/rag-reranker/reading/sessions/${encodeURIComponent(session.id)}/pdf?workbench=notes`);
-  await expect(page.locator('[data-reading-pdf-host="true"]')).toBeVisible();
-  await expect(page.locator('.reading-pdf-text-layer span').first()).toBeVisible();
+  await openMobileReaderPdf(page, session, { width: 390, height: 844 });
+  await expectMobilePdfStartsAtReadableScale(page);
+  await expectMobilePdfStartsWithoutLeftClip(page);
+  await expectPdfReaderStartsNearTop(page);
+  await expectMobilePdfDockFitsAndHasTouchTargets(page);
+  await expectMobilePdfDockStaysOutsideDocumentBody(page);
+  await expectMobileWorkbenchIsSeparateFromDefaultReader(page);
+  await expect(bottomNav).toBeHidden();
+  await expectVisibleControlsHaveMobileTouchTargets(page);
+
+  await page.locator('.reading-mobile-workbench-actions [data-reading-workbench-tab="notes"]').click();
+  await expect(page.locator('.reading-workbench-pane')).toBeVisible();
+
+  for (const viewport of [
+    { width: 375, height: 667 },
+    { width: 320, height: 568 },
+  ]) {
+    await openMobileReaderPdf(page, session, viewport);
+    await expectMobilePdfStartsAtReadableScale(page);
+    await expectMobilePdfStartsWithoutLeftClip(page);
+    await expectPdfReaderStartsNearTop(page);
+    await expectMobilePdfDockFitsAndHasTouchTargets(page);
+    await expectMobilePdfDockStaysOutsideDocumentBody(page);
+    await expectMobileWorkbenchIsSeparateFromDefaultReader(page);
+    await expect(bottomNav).toBeHidden();
+    await expectVisibleControlsHaveMobileTouchTargets(page);
+  }
+
+  await page.locator('[data-action="toggle-reading-pdf-dock-panel"][data-reading-pdf-dock-panel="toc"]').click();
+  await expect(page.locator('.toc-panel.visible')).toBeVisible();
+  await expectPdfPopupFitsViewport(page, '.toc-panel.visible');
+  await expectVisibleControlsHaveMobileTouchTargets(page);
 
   await page.locator('[data-action="toggle-reading-pdf-dock-panel"][data-reading-pdf-dock-panel="search"]').click();
   await expect(page.locator('.pdf-search-panel.visible')).toBeVisible();
+  await expectPdfPopupFitsViewport(page, '.pdf-search-panel.visible');
   await page.locator('[name="readingPdfSearchQuery"]').fill('reader');
   await expect(page.locator('.pdf-search-result').first()).toBeVisible();
+  await expectVisibleControlsHaveMobileTouchTargets(page);
 
   await page.locator('[data-action="set-reading-pdf-zoom"][data-reading-pdf-zoom-delta="10"]').click();
   await expect(page.locator('.zoom-val')).toContainText('110%');
@@ -297,6 +478,11 @@ test('Mobile bottom nav can drive Read and Reader PDF dock flows', async ({ page
   await page.locator('[data-action="toggle-reading-pdf-dock-panel"][data-reading-pdf-dock-panel="pageGrid"]').click();
   await expect(page.locator('.page-grid-panel.visible')).toBeVisible();
   await expect(page.locator('.page-grid-item').first()).toBeVisible();
+  await expectMobilePageGridUsesReadableColumns(page);
+  await expectVisibleControlsHaveMobileTouchTargets(page);
+  await expect(
+    page.locator('.reading-pdf-dock-layer:not(.has-selection) [data-action="create-reading-note-from-selection"]'),
+  ).toBeHidden();
   await expect(page.locator('.reading-pdf-text-layer span').first()).toBeVisible();
 
   await page.evaluate(() => {
@@ -314,11 +500,14 @@ test('Mobile bottom nav can drive Read and Reader PDF dock flows', async ({ page
   });
   await expect(page.locator('.reading-pdf-dock-layer.has-selection')).toBeVisible();
   await expect(page.locator('[data-action="create-reading-note-from-selection"]')).toBeVisible();
+  await expectVisibleControlsHaveMobileTouchTargets(page);
 
   const navBox = await bottomNav.boundingBox();
   const dockBox = await page.locator('.reading-pdf-dock-layer.has-selection').boundingBox();
-  expect(navBox).not.toBeNull();
   expect(dockBox).not.toBeNull();
-  expect(dockBox.y + dockBox.height).toBeLessThanOrEqual(navBox.y + 1);
+  const viewport = page.viewportSize();
+  expect(viewport).not.toBeNull();
+  expect(navBox).toBeNull();
+  expect(dockBox.y + dockBox.height).toBeLessThanOrEqual(viewport.height + 1);
   diagnostics.assertClean();
 });

@@ -321,6 +321,8 @@ const INITIAL_SEARCH_LAYOUT = detectSearchLayout();
 const INITIAL_FILTER_PANEL_OPEN = INITIAL_SEARCH_LAYOUT === "desktop";
 const INITIAL_PREVIEW_PANEL_OPEN = false;
 const INITIAL_READING_HOME_LAYOUT = detectReadingHomeLayout();
+const INITIAL_READING_WORKBENCH_COLLAPSED =
+  INITIAL_ROUTE_STATE.readingView === "detail" && INITIAL_SEARCH_LAYOUT === "mobile" && !INITIAL_ROUTE_STATE.readingWorkbenchRequested;
 const MAX_READING_PDF_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MAX_READING_PDF_UPLOAD_LABEL = "100MB";
 
@@ -374,7 +376,7 @@ const state = {
   readingContextMenuOpen: false,
   readingWorkbenchTab: normalizeReadingWorkbenchTab(INITIAL_ROUTE_STATE.readingWorkbenchTab || "chat"),
   readingRailOpen: defaultReadingRailOpen(INITIAL_SEARCH_LAYOUT),
-  readingWorkbenchCollapsed: false,
+  readingWorkbenchCollapsed: INITIAL_READING_WORKBENCH_COLLAPSED,
   readingOrientation: defaultReadingOrientation(),
   readingSplitHorizontal: 62,
   readingSplitVertical: 62,
@@ -584,6 +586,7 @@ function parseAresRoute(locationLike = window.location) {
     route.readingDocumentTab = normalizeReadingDocumentTab(params.get("doc") || "pdf");
   }
 
+  route.readingWorkbenchRequested = params.has("workbench");
   route.readingWorkbenchTab = normalizeReadingWorkbenchTab(params.get("workbench") || "chat");
   route.readingAssetsFilter = params.get("assets") || "all";
   route.readingAssetDetailId = params.get("asset") || "";
@@ -2043,6 +2046,9 @@ async function applyBrowserRouteFromUrl() {
       state.activeReadingSessionId = route.activeReadingSessionId || state.activeReadingSessionId;
       state.readingDocumentTab = normalizeReadingDocumentTab(route.readingDocumentTab || state.readingDocumentTab);
       state.readingWorkbenchTab = normalizeReadingWorkbenchTab(route.readingWorkbenchTab || state.readingWorkbenchTab);
+      if (state.readingView === "detail" && isBottomNavMobile() && !route.readingWorkbenchRequested) {
+        state.readingWorkbenchCollapsed = true;
+      }
       state.readingAssetsFilter = route.readingAssetsFilter || "all";
       state.readingAssetDetailId = route.readingAssetDetailId || "";
       state.readingHomePreviewOpen = false;
@@ -3325,6 +3331,7 @@ async function startReadingSession(paper) {
     state.results = state.results.map((entry) => (entry.paperId === paper.paperId ? { ...entry, queued: true } : entry));
     state.activeStage = "reading";
     state.readingView = "detail";
+    collapseReadingWorkbenchForMobileDefault();
     state.readingRailOpen = defaultReadingRailOpen(state.searchLayout);
     saveStorage(STORAGE_KEYS.stage, state.activeStage);
     await loadProjects();
@@ -3392,6 +3399,7 @@ async function uploadReadingPdf(file) {
     state.activeStage = "reading";
     state.readingView = "detail";
     state.readingDocumentTab = "pdf";
+    collapseReadingWorkbenchForMobileDefault();
     closeReadingUploadModal();
     state.readingHomePreviewOpen = false;
     state.readingRailOpen = defaultReadingRailOpen(state.searchLayout);
@@ -3428,6 +3436,7 @@ async function openReadingDetailForPaper(paperId, { createIfMissing = true } = {
     state.activeStage = "reading";
     state.readingView = "detail";
     state.activeReadingSessionId = session.id;
+    collapseReadingWorkbenchForMobileDefault();
     state.readingHomeSelectedPaperId = paperId;
     state.readingHomePreviewOpen = false;
     state.readingRailOpen = defaultReadingRailOpen(state.searchLayout);
@@ -4644,6 +4653,12 @@ function isBottomNavMobile() {
   return window.innerWidth <= SEARCH_LAYOUT_BREAKPOINTS.mobileMax;
 }
 
+function collapseReadingWorkbenchForMobileDefault() {
+  if (isBottomNavMobile()) {
+    state.readingWorkbenchCollapsed = true;
+  }
+}
+
 function isIosViewportBrowserChromeFallbackTarget() {
   const platform = navigator.platform || "";
   const userAgent = navigator.userAgent || "";
@@ -5552,6 +5567,7 @@ document.addEventListener("click", async (event) => {
   if (action === "select-reading-session") {
     const nextSessionId = trigger.dataset.readingSessionId || "";
     state.readingView = "detail";
+    collapseReadingWorkbenchForMobileDefault();
     if (nextSessionId !== state.activeReadingSessionId) {
       state.readingPdfSourceHighlight = null;
       state.readingPdfTargetPage = null;
