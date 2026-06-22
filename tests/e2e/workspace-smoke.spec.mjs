@@ -315,6 +315,44 @@ test('Mobile Discover keeps dashboard content scrollable above the bottom nav', 
   diagnostics.assertClean();
 });
 
+test('Mobile topbar action menu restores workspace actions', async ({ page }) => {
+  const diagnostics = collectBrowserDiagnostics(page);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Research Queue' })).toBeVisible();
+
+  const menuButton = page.locator('[data-action="toggle-mobile-action-menu"]');
+  await expect(menuButton).toBeVisible();
+  const menuButtonBox = await menuButton.boundingBox();
+  expect(menuButtonBox?.width || 0).toBeGreaterThanOrEqual(44);
+  expect(menuButtonBox?.height || 0).toBeGreaterThanOrEqual(44);
+
+  await menuButton.click();
+  const menu = page.locator('.mobile-action-menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Search' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'New project' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Copy link' })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Show filters' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'RAG Reranker Study' })).toBeVisible();
+  await expect(menu.locator('[data-action="set-theme-mode"][data-theme-mode="system"]')).toBeVisible();
+
+  const menuBox = await menu.boundingBox();
+  expect(menuBox?.bottom || 0).toBeLessThanOrEqual(844 - 96);
+
+  await menu.getByRole('menuitem', { name: 'Search' }).click();
+  await expect(menu).toBeHidden();
+  await expect(page.locator('#search-input')).toBeFocused();
+
+  await menuButton.click();
+  await menu.getByRole('menuitem', { name: 'New project' }).click();
+  await expect(page.getByRole('heading', { name: 'New project' })).toBeVisible();
+  await page.locator('.project-create-modal-close').click();
+
+  diagnostics.assertClean();
+});
+
 test('Reader imports external OCR text to recover an unparsed paper', async ({ page, request }) => {
   const diagnostics = collectBrowserDiagnostics(page, {
     allowedBrowserErrors: [/Failed to load resource: the server responded with a status of 409 \(Conflict\)/],

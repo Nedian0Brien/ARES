@@ -412,6 +412,7 @@ const state = {
   sidebarCollapsed: loadStorage(STORAGE_KEYS.sidebarCollapsed, "false") === "true",
   themeMode: normalizeThemeMode(loadStorage(STORAGE_KEYS.themeMode, "system")),
   openWorkflowMenu: "",
+  mobileActionMenuOpen: false,
   searchMeta: {
     provider: "seed",
     live: false,
@@ -3648,6 +3649,107 @@ function renderThemeSwitcher() {
   `;
 }
 
+function renderMobileTopbarMenu(stage, tab) {
+  const open = Boolean(state.mobileActionMenuOpen);
+  const projects = Array.isArray(state.projects) ? state.projects : [];
+  return `
+    <div class="mobile-action-menu-wrap">
+      <button
+        type="button"
+        class="mobile-action-menu-btn"
+        data-action="toggle-mobile-action-menu"
+        aria-haspopup="menu"
+        aria-expanded="${open ? "true" : "false"}"
+        aria-label="Open actions"
+      >
+        ${icon("moreH", { size: 16, color: "currentColor" })}
+      </button>
+      ${
+        open
+          ? `
+            <div class="mobile-action-menu" role="menu" aria-label="Mobile actions">
+              <section class="mobile-action-menu-section">
+                <div class="mobile-action-menu-label">Actions</div>
+                <button type="button" class="mobile-action-menu-item" data-action="focus-search" role="menuitem">
+                  ${icon("search", { size: 14, color: "currentColor" })}
+                  <span>Search</span>
+                </button>
+                <button type="button" class="mobile-action-menu-item" data-action="open-project-modal" role="menuitem">
+                  ${icon("plus", { size: 14, color: "currentColor" })}
+                  <span>New project</span>
+                </button>
+                <button type="button" class="mobile-action-menu-item" data-action="copy-stage-link" data-stage-id="${escapeHtml(stage.id)}" role="menuitem">
+                  ${icon("share", { size: 14, color: "currentColor" })}
+                  <span>Copy link</span>
+                </button>
+                ${
+                  stage.id === "search"
+                    ? `
+                      <button type="button" class="mobile-action-menu-item" data-action="toggle-filter-panel" role="menuitem">
+                        ${icon("filter", { size: 14, color: "currentColor" })}
+                        <span>${state.filterPanelOpen ? "Hide filters" : "Show filters"}</span>
+                      </button>
+                    `
+                    : ""
+                }
+              </section>
+
+              <section class="mobile-action-menu-section">
+                <div class="mobile-action-menu-label">Project</div>
+                ${projects
+                  .map((project) => {
+                    const active = project.id === state.activeProjectId;
+                    return `
+                      <button
+                        type="button"
+                        class="mobile-action-menu-item ${active ? "is-active" : ""}"
+                        data-action="select-project"
+                        data-project-id="${escapeHtml(project.id)}"
+                        role="menuitemradio"
+                        aria-checked="${active ? "true" : "false"}"
+                      >
+                        <span class="mobile-action-menu-swatch" style="background:${escapeHtml(project.color || tab.color)}"></span>
+                        <span>${escapeHtml(project.name || "Untitled project")}</span>
+                      </button>
+                    `;
+                  })
+                  .join("")}
+              </section>
+
+              <section class="mobile-action-menu-section">
+                <div class="mobile-action-menu-label">Theme</div>
+                <div class="mobile-action-theme-row" role="group" aria-label="Color theme">
+                  ${[
+                    ["light", "Light", "sun"],
+                    ["dark", "Dark", "moon"],
+                    ["system", "System", "monitor"],
+                  ]
+                    .map(([mode, label, iconName]) => {
+                      const active = state.themeMode === mode;
+                      return `
+                        <button
+                          type="button"
+                          class="mobile-action-theme-btn ${active ? "is-active" : ""}"
+                          data-action="set-theme-mode"
+                          data-theme-mode="${mode}"
+                          aria-pressed="${active ? "true" : "false"}"
+                        >
+                          ${icon(iconName, { size: 13, color: "currentColor" })}
+                          <span>${label}</span>
+                        </button>
+                      `;
+                    })
+                    .join("")}
+                </div>
+              </section>
+            </div>
+          `
+          : ""
+      }
+    </div>
+  `;
+}
+
 function renderTopbar() {
   const stage = stageById(state.activeStage);
   const tab = activeWorkflowTab();
@@ -3699,6 +3801,7 @@ function renderTopbar() {
         ${renderThemeSwitcher()}
         <button type="button" class="btn-s" data-action="copy-stage-link" data-stage-id="${escapeHtml(stage.id)}">${icon("share", { size: 12 })} Share</button>
         <button type="button" class="btn-s" ${stage.id === "search" ? 'data-action="toggle-filter-panel"' : "disabled"}>${icon("filter", { size: 12 })} Filter</button>
+        ${renderMobileTopbarMenu(stage, tab)}
       </div>
     </header>
   `;
@@ -5310,6 +5413,10 @@ document.addEventListener("click", async (event) => {
       state.openWorkflowMenu = "";
       needsRender = true;
     }
+    if (state.mobileActionMenuOpen && !event.target.closest(".mobile-action-menu-wrap")) {
+      state.mobileActionMenuOpen = false;
+      needsRender = true;
+    }
     if (state.scopePicker && !event.target.closest(".scope-picker-popover")) {
       state.scopePicker = null;
       state.scopePickerQuery = "";
@@ -5327,6 +5434,10 @@ document.addEventListener("click", async (event) => {
     state.openWorkflowMenu = "";
   }
 
+  if (action !== "toggle-mobile-action-menu") {
+    state.mobileActionMenuOpen = false;
+  }
+
   if (
     state.scopePicker &&
     !trigger.closest(".scope-picker-popover") &&
@@ -5337,16 +5448,25 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "select-stage") {
+    state.mobileActionMenuOpen = false;
     await selectStage(trigger.dataset.stageId);
     return;
   }
 
   if (action === "select-workflow-tab") {
+    state.mobileActionMenuOpen = false;
     await selectWorkflowTab(trigger.dataset.tabId);
     return;
   }
 
+  if (action === "toggle-mobile-action-menu") {
+    state.mobileActionMenuOpen = !state.mobileActionMenuOpen;
+    render();
+    return;
+  }
+
   if (action === "open-project-modal") {
+    state.mobileActionMenuOpen = false;
     state.projectModalOpen = true;
     state.error = "";
     render();
@@ -5381,6 +5501,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "select-project") {
+    state.mobileActionMenuOpen = false;
     clearActiveRunPoll();
     state.activeProjectId = trigger.dataset.projectId;
     state.projectLibrary = [];
@@ -6236,7 +6357,11 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "focus-search") {
+    state.mobileActionMenuOpen = false;
     state.scopePicker = null;
+    if (state.activeStage === "search") {
+      render();
+    }
     focusSearchInput({ forceSearchStage: true, select: true });
     return;
   }
@@ -6290,6 +6415,7 @@ document.addEventListener("click", async (event) => {
 
   if (action === "toggle-filter-panel") {
     const nextOpen = !state.filterPanelOpen;
+    state.mobileActionMenuOpen = false;
     state.filterPanelOpen = nextOpen;
     if (isTabletSearchLayout() && nextOpen) {
       state.previewPanelOpen = false;
@@ -6389,6 +6515,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "set-theme-mode") {
+    state.mobileActionMenuOpen = false;
     if (setThemeMode(trigger.dataset.themeMode)) {
       render();
     }
@@ -6408,6 +6535,7 @@ document.addEventListener("click", async (event) => {
   }
 
   if (action === "copy-stage-link") {
+    state.mobileActionMenuOpen = false;
     const stageId = normalizeStage(trigger.dataset.stageId);
     const url = browserUrlForRouteHash(buildBrowserRouteHash({ stageId }));
     try {

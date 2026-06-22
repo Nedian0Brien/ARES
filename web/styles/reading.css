@@ -3740,6 +3740,7 @@ body.reading-home-resize-active {
   }
 
   .main-topbar {
+    min-height: 44px;
     gap: 10px;
     padding: 0 14px;
     position: sticky;
@@ -3775,21 +3776,23 @@ body.reading-home-resize-active {
   }
 
   .topbar-actions .btn-s,
+  .topbar-actions .theme-switcher,
   .topbar-actions .run-badge {
     display: none;
   }
 
-  .theme-switcher {
-    gap: 1px;
+  .mobile-action-menu-wrap {
+    display: block;
+    position: relative;
   }
 
-  .theme-switcher-btn {
-    height: 26px;
-    padding: 0 7px;
+  .mobile-action-menu-btn {
+    height: 44px;
+    min-width: 44px;
   }
 
-  .theme-switcher-btn span:not(.icon) {
-    display: none;
+  .mobile-action-menu {
+    right: -2px;
   }
 
   .stage-wrap {
