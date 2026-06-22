@@ -270,6 +270,51 @@ test('ARES workspace loads core tabs without browser errors', async ({ page }) =
   diagnostics.assertClean();
 });
 
+test('Mobile Discover keeps dashboard content scrollable above the bottom nav', async ({ page }) => {
+  const diagnostics = collectBrowserDiagnostics(page);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Research Queue' })).toBeVisible();
+  await expect(page.locator('[data-ares-surface="bottom-nav"]')).toBeVisible();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        clientHeight: document.documentElement.clientHeight,
+        dashboardBottom: document.querySelector('.search-dashboard')?.getBoundingClientRect().bottom || 0,
+        scrollHeight: document.documentElement.scrollHeight,
+      })),
+    )
+    .toMatchObject({
+      clientHeight: 844,
+      scrollHeight: expect.any(Number),
+    });
+
+  const initialMetrics = await page.evaluate(() => ({
+    clientHeight: document.documentElement.clientHeight,
+    dashboardBottom: document.querySelector('.search-dashboard')?.getBoundingClientRect().bottom || 0,
+    scrollHeight: document.documentElement.scrollHeight,
+  }));
+  expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.clientHeight + 600);
+  expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.dashboardBottom);
+
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForTimeout(100);
+
+  const bottomMetrics = await page.evaluate(() => {
+    const dashboard = document.querySelector('.search-dashboard')?.getBoundingClientRect();
+    const bottomNav = document.querySelector('[data-ares-surface="bottom-nav"]')?.getBoundingClientRect();
+    return {
+      dashboardBottom: dashboard?.bottom || 0,
+      navTop: bottomNav?.top || window.innerHeight,
+    };
+  });
+  expect(bottomMetrics.dashboardBottom).toBeLessThanOrEqual(bottomMetrics.navTop - 12);
+
+  diagnostics.assertClean();
+});
+
 test('Reader imports external OCR text to recover an unparsed paper', async ({ page, request }) => {
   const diagnostics = collectBrowserDiagnostics(page, {
     allowedBrowserErrors: [/Failed to load resource: the server responded with a status of 409 \(Conflict\)/],

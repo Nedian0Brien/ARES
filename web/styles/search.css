@@ -1935,6 +1935,16 @@ body.is-run .stage-run .phase-card {
     }
   }
 
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+  }
+
+  #app {
+    min-height: var(--mobile-viewport-height);
+  }
+
   body {
     overflow-x: clip;
     overflow-y: auto;
@@ -1954,6 +1964,16 @@ body.is-run .stage-run .phase-card {
 
   .stage-wrap {
     overflow: visible;
+  }
+
+  .workspace:has(.search-stage) {
+    display: block;
+  }
+
+  .stage-wrap:has(.search-stage) {
+    display: block;
+    flex: none;
+    min-height: 0;
   }
 
   .search-stage,
@@ -2103,12 +2123,29 @@ body.is-run .stage-run .phase-card {
   }
 
   .search-stage {
+    display: block;
     flex-direction: column;
     min-height: auto;
   }
 
   .search-stage-dashboard {
     overflow: visible;
+  }
+
+  .search-agentic-entry .stage-home,
+  .search-agentic-entry .stage-run {
+    inset: auto;
+    overflow: visible;
+    position: relative;
+  }
+
+  .search-agentic-entry .stage-run,
+  body.is-run .search-agentic-entry .stage-home {
+    display: none;
+  }
+
+  body.is-run .search-agentic-entry .stage-run {
+    display: block;
   }
 
   /* Lift results-pane children (hero, results-list) into search-stage flow
