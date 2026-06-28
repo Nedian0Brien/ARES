@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARES Papers Direction Board</title>
+    <style>
+      :root {
+        --bg: #fbfbfa;
+        --s1: #ffffff;
+        --s2: #f5f5f3;
+        --s3: #ecebe7;
+        --b1: #e1e0dc;
+        --b2: #c9c7c1;
+        --tx: #101012;
+        --t2: #48484d;
+        --t3: #78787f;
+        --read: #5e6ad2;
+        --lab: #7a5fb4;
+        --wiki: #32816b;
+        --agent: #b35f3d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--tx);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: 28px;
+      }
+
+      .header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .eyebrow {
+        margin: 0 0 6px;
+        color: var(--t3);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 26px;
+        line-height: 1.16;
+        letter-spacing: -0.01em;
+      }
+
+      .header p {
+        max-width: 720px;
+        margin: 8px 0 0;
+        color: var(--t2);
+      }
+
+      .stamp {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 10px;
+        border: 1px solid var(--b1);
+        border-radius: 6px;
+        background: var(--s1);
+        color: var(--t2);
+        white-space: nowrap;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        min-height: calc(100vh - 132px);
+        margin-top: 18px;
+        border: 1px solid var(--b1);
+        background: var(--s1);
+      }
+
+      .rail {
+        border-right: 1px solid var(--b1);
+        background: var(--s2);
+      }
+
+      .rail-block {
+        padding: 18px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .rail h2,
+      .workspace h2 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .rail ol,
+      .rail ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--t2);
+      }
+
+      .rail li + li {
+        margin-top: 7px;
+      }
+
+      .workspace {
+        min-width: 0;
+        padding: 18px;
+      }
+
+      .tabs {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        border: 1px solid var(--b1);
+        background: var(--s1);
+      }
+
+      .tab {
+        min-height: 92px;
+        padding: 14px;
+        border-right: 1px solid var(--b1);
+      }
+
+      .tab:last-child {
+        border-right: 0;
+      }
+
+      .tab b {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 15px;
+      }
+
+      .tab p {
+        margin: 0;
+        color: var(--t2);
+        font-size: 12.5px;
+      }
+
+      .tab.library {
+        border-top: 3px solid var(--read);
+      }
+
+      .tab.lab {
+        border-top: 3px solid var(--lab);
+      }
+
+      .tab.wiki {
+        border-top: 3px solid var(--wiki);
+      }
+
+      .tab.agent {
+        border-top: 3px solid var(--agent);
+      }
+
+      .split {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .panel {
+        border: 1px solid var(--b1);
+        background: var(--s1);
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 42px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .panel-body {
+        padding: 14px;
+      }
+
+      .reader-layout {
+        display: grid;
+        grid-template-columns: 210px minmax(0, 1fr) 260px;
+        min-height: 430px;
+        border: 1px solid var(--b1);
+      }
+
+      .mini-library,
+      .mini-agent {
+        background: var(--s2);
+      }
+
+      .mini-library {
+        border-right: 1px solid var(--b1);
+      }
+
+      .mini-agent {
+        border-left: 1px solid var(--b1);
+      }
+
+      .mini-col-head {
+        height: 38px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--b1);
+        color: var(--t3);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .paper-row {
+        padding: 12px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .paper-row.active {
+        background: #ffffff;
+        box-shadow: inset 3px 0 0 var(--read);
+      }
+
+      .paper-row b {
+        display: block;
+        font-size: 12.5px;
+      }
+
+      .paper-row span,
+      .source-row span {
+        display: block;
+        margin-top: 4px;
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+
+      .paper {
+        min-width: 0;
+        padding: 18px 22px;
+        background: #fff;
+      }
+
+      .paper-title {
+        margin: 0 0 8px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .paper-meta {
+        margin: 0 0 18px;
+        color: var(--t3);
+        font-size: 12px;
+      }
+
+      .paper-section {
+        max-width: 680px;
+        color: #242426;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      .paper-section h3 {
+        margin: 20px 0 8px;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 13px;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      .mark {
+        background: #fff2b8;
+        box-shadow: 0 0 0 2px #fff2b8;
+      }
+
+      .source-row {
+        padding: 12px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .agent-answer {
+        margin-top: 12px;
+        padding: 12px;
+        border: 1px solid var(--b1);
+        background: #fff;
+      }
+
+      .agent-answer p {
+        margin: 0;
+        color: var(--t2);
+        font-size: 12.5px;
+      }
+
+      .approaches {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .approach {
+        min-height: 210px;
+        padding: 14px;
+        border: 1px solid var(--b1);
+        background: var(--s1);
+      }
+
+      .approach.recommended {
+        border-color: #a9addf;
+        box-shadow: inset 0 3px 0 var(--read);
+      }
+
+      .approach h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+
+      .approach p {
+        margin: 0 0 12px;
+        color: var(--t2);
+        font-size: 12.5px;
+      }
+
+      .approach ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--t2);
+        font-size: 12.5px;
+      }
+
+      .approach li + li {
+        margin-top: 6px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 8px;
+        border: 1px solid var(--b1);
+        border-radius: 5px;
+        background: var(--s2);
+        color: var(--t2);
+        font-size: 11.5px;
+      }
+
+      @media (max-width: 980px) {
+        .page {
+          padding: 16px;
+        }
+
+        .header {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .board,
+        .split {
+          grid-template-columns: 1fr;
+        }
+
+        .rail {
+          border-right: 0;
+          border-bottom: 1px solid var(--b1);
+        }
+
+        .tabs,
+        .approaches {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .reader-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .mini-library,
+        .mini-agent {
+          border: 0;
+          border-bottom: 1px solid var(--b1);
+        }
+      }
+
+      @media (max-width: 640px) {
+        h1 {
+          font-size: 22px;
+        }
+
+        .tabs,
+        .approaches {
+          grid-template-columns: 1fr;
+        }
+
+        .paper {
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <div>
+          <p class="eyebrow">Brainstorm board</p>
+          <h1>ARES를 Papers 중심의 리딩 워크스페이스로 재편하기</h1>
+          <p>
+            목표는 논문 읽기를 화면의 중심에 두고, Lab, Wiki, Agent가 읽기 경험을 밀어내지 않도록
+            구조를 다시 잡는 것입니다.
+          </p>
+        </div>
+        <span class="stamp">배포 확인 경로: ares.lawdigest.kr</span>
+      </header>
+
+      <section class="board">
+        <aside class="rail">
+          <div class="rail-block">
+            <h2>제품 판단 기준</h2>
+            <ol>
+              <li>사용자가 첫 화면에서 논문을 읽을 수 있는가</li>
+              <li>근거 source가 PDF, wiki, note까지 이어지는가</li>
+              <li>저장 버튼이 실제 저장 상태와 연결되는가</li>
+              <li>모바일에서도 읽기, 질문, 저장이 가능한가</li>
+            </ol>
+          </div>
+          <div class="rail-block">
+            <h2>핵심 데이터 단위</h2>
+            <ul>
+              <li>Paper</li>
+              <li>Wiki document</li>
+              <li>Saved work</li>
+              <li>Agent response</li>
+            </ul>
+          </div>
+        </aside>
+
+        <section class="workspace">
+          <div class="tabs" aria-label="Proposed tabs">
+            <div class="tab library">
+              <b>Library</b>
+              <p>논문 목록, PDF, 텍스트, 요약, 하이라이트의 출발점</p>
+            </div>
+            <div class="tab lab">
+              <b>Lab</b>
+              <p>읽기에서 나온 재현 계획, 비교 읽기, 후속 실험</p>
+            </div>
+            <div class="tab wiki">
+              <b>Wiki</b>
+              <p>논문 사이의 개념, 시스템, 벤치마크 관계 지도</p>
+            </div>
+            <div class="tab agent">
+              <b>Agent</b>
+              <p>현재 paper와 source를 근거로 답하고 저장 가능한 카드 생성</p>
+            </div>
+          </div>
+
+          <div class="split">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>권장 화면 구조</h2>
+                <span class="pill">3-pane 유지</span>
+              </div>
+              <div class="panel-body">
+                <div class="reader-layout">
+                  <aside class="mini-library">
+                    <div class="mini-col-head">Library</div>
+                    <div class="paper-row active">
+                      <b>Search-augmented LLM Survey</b>
+                      <span>PDF · notes 8 · wiki links 6</span>
+                    </div>
+                    <div class="paper-row">
+                      <b>Agentic Verification</b>
+                      <span>HTML summary · ideas 3</span>
+                    </div>
+                    <div class="paper-row">
+                      <b>ContextBench</b>
+                      <span>text extracted · compare ready</span>
+                    </div>
+                  </aside>
+                  <article class="paper">
+                    <h2 class="paper-title">Search-Augmented Language Models</h2>
+                    <p class="paper-meta">Reader / PDF view · page 4 · Method section</p>
+                    <div class="paper-section">
+                      <h3>3. Retrieval and Evidence Use</h3>
+                      <p>
+                        The model retrieves passages before generation and uses them as a working memory for answer
+                        construction. The important assumption is that the retrieved evidence is both relevant and
+                        sufficiently grounded for the final response.
+                      </p>
+                      <p>
+                        A failure appears when retrieval confidence is high but the evidence only supports part of the
+                        claim. <span class="mark">The answer must expose which source supports which sentence.</span>
+                      </p>
+                    </div>
+                  </article>
+                  <aside class="mini-agent">
+                    <div class="mini-col-head">Agent</div>
+                    <div class="source-row">
+                      <b>Sources in view</b>
+                      <span>PDF p.4 · wiki: Evidence grounding · note: partial support</span>
+                    </div>
+                    <div class="agent-answer">
+                      <p>
+                        이 section의 핵심 가정은 retrieval 결과가 답변 문장별 근거로 충분히 대응된다는 점입니다.
+                        저장하면 Summary card 또는 Note로 남깁니다.
+                      </p>
+                    </div>
+                  </aside>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>접근안 비교</h2>
+                <span class="pill">선택 필요</span>
+              </div>
+              <div class="panel-body">
+                <div class="approaches">
+                  <article class="approach recommended">
+                    <h3>A. Papers 중심으로 ARES 재정렬</h3>
+                    <p>제품명은 ARES로 두고, 첫 경험과 탭 구조를 논문 리딩 중심으로 바꿉니다.</p>
+                    <ul>
+                      <li>기존 Lab 자산을 살림</li>
+                      <li>배포 리스크가 가장 낮음</li>
+                      <li>추천 방향</li>
+                    </ul>
+                  </article>
+                  <article class="approach">
+                    <h3>B. Papers를 독립 제품처럼 전면화</h3>
+                    <p>ARES의 실험/작성 축을 뒤로 미루고 Papers 브랜드와 구조를 우선합니다.</p>
+                    <ul>
+                      <li>정체성이 가장 선명함</li>
+                      <li>기존 문서와 라벨 변경 범위 큼</li>
+                    </ul>
+                  </article>
+                  <article class="approach">
+                    <h3>C. 기존 ARES에 Wiki/Agent만 추가</h3>
+                    <p>현 Read/Lab/Insight/Write를 유지하고 Wiki와 Agent를 하위 패널로 넣습니다.</p>
+                    <ul>
+                      <li>가장 작은 변경</li>
+                      <li>논문 읽기 중심성이 약해질 수 있음</li>
+                    </ul>
+                  </article>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>
