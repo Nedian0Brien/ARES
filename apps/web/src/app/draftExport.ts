@@ -76,6 +76,13 @@ function uniqueEvidenceIds(sections: Record<string, unknown>[], evidenceById: Ma
   return { missingEvidenceLinkIds, usedEvidenceIds };
 }
 
+function evidenceEntryPairs(evidenceLinks: Record<string, unknown>[]): Array<[string, Record<string, unknown>]> {
+  return evidenceLinks.flatMap((entry) => {
+    const id = text(entry.id);
+    return id ? [[id, entry]] : [];
+  });
+}
+
 export function validateDraftExportSources({
   evidenceLinks = [],
   sections = [],
@@ -83,7 +90,7 @@ export function validateDraftExportSources({
   evidenceLinks?: Record<string, unknown>[];
   sections?: Record<string, unknown>[];
 } = {}) {
-  const evidenceById = new Map(evidenceLinks.map((entry) => [text(entry.id), entry]).filter(([id]) => id));
+  const evidenceById = new Map(evidenceEntryPairs(evidenceLinks));
   const { missingEvidenceLinkIds, usedEvidenceIds } = uniqueEvidenceIds(sections, evidenceById);
   const warnings = missingEvidenceLinkIds.map((id) => `Missing evidence link: ${id}`);
   const blockers = sections.length ? [] : ['Create a draft section before export.'];
@@ -106,7 +113,7 @@ export function buildDraftExportBundle({
   evidenceLinks?: Record<string, unknown>[];
   sections?: Record<string, unknown>[];
 } = {}) {
-  const evidenceById = new Map(evidenceLinks.map((entry) => [text(entry.id), entry]).filter(([id]) => id));
+  const evidenceById = new Map(evidenceEntryPairs(evidenceLinks));
   const sourceValidation = validateDraftExportSources({ evidenceLinks, sections });
   const { missingEvidenceLinkIds, usedEvidenceIds } = sourceValidation;
 
@@ -123,8 +130,9 @@ export function buildDraftExportBundle({
       return [`## ${text(section.title, 'Untitled section')}`, '', `${text(section.body)}${suffix}`].join('\n');
     })
     .join('\n\n');
+  const emptyEvidence: Record<string, unknown> = {};
   const appendix = usedEvidenceIds.length
-    ? ['## Source appendix', '', ...usedEvidenceIds.map((id, index) => evidenceCitationLine(evidenceById.get(id) || {}, index))]
+    ? ['## Source appendix', '', ...usedEvidenceIds.map((id, index) => evidenceCitationLine(evidenceById.get(id) || emptyEvidence, index))]
     : ['## Source appendix', '', '_No linked sources._'];
   const warnings = missingEvidenceLinkIds.length
     ? ['', '## Broken source warnings', '', ...missingEvidenceLinkIds.map((id) => `- Missing evidence link: ${id}`)]
@@ -143,7 +151,7 @@ export function buildDraftExportBundle({
     })
     .join('\n');
   const htmlSources = usedEvidenceIds
-    .map((id, index) => `<li id="src-${index + 1}">${escapeHtml(evidenceCitationLine(evidenceById.get(id) || {}, index))}</li>`)
+    .map((id, index) => `<li id="src-${index + 1}">${escapeHtml(evidenceCitationLine(evidenceById.get(id) || emptyEvidence, index))}</li>`)
     .join('');
   const htmlWarnings = missingEvidenceLinkIds.length
     ? `<section><h2>Broken source warnings</h2><ul>${missingEvidenceLinkIds

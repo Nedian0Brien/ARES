@@ -1,4 +1,5 @@
-import { BookmarkIcon, BookOpenIcon, CheckIcon, ChevronRightIcon, ClockIcon, FileTextIcon, SearchIcon, SparklesIcon } from 'lucide-react';
+import { useState } from 'react';
+import { BookmarkIcon, BookOpenIcon, CheckIcon, ChevronRightIcon, ClockIcon, ExternalLinkIcon, FileTextIcon, SearchIcon, Share2Icon, SparklesIcon } from 'lucide-react';
 
 import type { ApiPaper, ApiProject, ApiReadingSession } from '@/app/api';
 
@@ -9,22 +10,30 @@ type ReadingHomeStageProps = {
   onBackToDiscover: () => void;
   onOpenPaper: (paperId: string) => void;
   onSelectPaper: (paperId: string) => void;
+  onStartReading: (paper: ApiPaper) => void;
   project: ApiProject | null;
   readingSessions: ApiReadingSession[];
   selectedPaperId: string;
 };
 
 type ReadingHomeItem = ApiPaper & {
+  authorsLabel: string;
   hasPdf: boolean;
   lastActivityLabel: string;
+  noteCount: number;
   progress: number;
   savedLabel: string;
+  sectionCount: number;
+  session?: ApiReadingSession;
   status: {
     bucket: 'done' | 'ready' | 'running';
     color: string;
     label: string;
   };
+  tags: string[];
 };
+
+type ReadingHomeFilter = 'all' | 'done' | 'noPdf' | 'ready' | 'running';
 
 function formatAuthors(authors: string[] = []) {
   if (!authors.length) {
@@ -81,13 +90,20 @@ function buildItems(library: ApiPaper[], readingSessions: ApiReadingSession[]): 
   return library.map((paper) => {
     const session = sessionsByPaper.get(paper.paperId);
     const progress = progressForSession(session);
+    const sections = Array.isArray(session?.sections) ? session.sections : [];
+    const notes = Array.isArray(session?.notes) ? session.notes : [];
     return {
       ...paper,
+      authorsLabel: formatAuthors(paper.authors || session?.authors || []),
       hasPdf: Boolean(paper.pdfUrl || session?.pdfUrl),
       lastActivityLabel: dateLabel(session?.updatedAt || paper.updatedAt || paper.savedAt),
+      noteCount: notes.length,
       progress,
       savedLabel: dateLabel(paper.savedAt || paper.updatedAt),
+      sectionCount: sections.length,
+      session,
       status: statusForSession(session, progress),
+      tags: [...(paper.keywords || []), ...(paper.matchedKeywords || [])].filter(Boolean).slice(0, 6),
     };
   });
 }
@@ -102,12 +118,75 @@ function StatusPill({ item }: { item: ReadingHomeItem }) {
         color: item.status.color,
       }}
     >
+      <span className="dot" />
       {item.status.label}
     </span>
   );
 }
 
-function MetricCard({ icon: Icon, label, value }: { icon: typeof BookmarkIcon; label: string; value: number }) {
+function clampValue(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function MetricDiagram({ counts, diagram }: { counts: Record<'done' | 'ready' | 'running' | 'saved', number>; diagram: 'done' | 'ready' | 'running' | 'saved' }) {
+  const dataset = [counts.saved, counts.ready, counts.running, counts.done];
+  const maxValue = Math.max(...dataset, 1);
+  const pct = (value: number, min = 0) => `${Math.round(clampValue((value / maxValue) * 100, min, 100))}%`;
+
+  if (diagram === 'saved') {
+    const points = dataset.map((value, index) => {
+      const x = 2 + index * 28;
+      const y = 34 - clampValue((value / maxValue) * 25, 1, 25);
+      return `${x} ${Math.round(y)}`;
+    });
+    const line = `M${points.join('L')}`;
+    const fill = `${line}L86 34L2 34Z`;
+    return (
+      <svg className="reading-home-metric-svg" viewBox="0 0 88 42" preserveAspectRatio="none" aria-hidden="true">
+        <path className="reading-home-metric-axis" d="M2 34H86" />
+        <path className="reading-home-metric-fill" d={fill} />
+        <path className="reading-home-metric-line" d={line} />
+      </svg>
+    );
+  }
+
+  if (diagram === 'ready') {
+    return (
+      <div className="reading-home-band-stack" aria-hidden="true">
+        <span className="reading-home-band"><i style={{ width: pct(counts.ready, 8) }} /></span>
+        <span className="reading-home-band"><i style={{ opacity: 0.82, width: pct(counts.running, 8) }} /></span>
+        <span className="reading-home-band"><i style={{ opacity: 0.68, width: pct(counts.done, 8) }} /></span>
+      </div>
+    );
+  }
+
+  if (diagram === 'running') {
+    const bars = [
+      counts.ready,
+      counts.running,
+      counts.done,
+      counts.saved,
+      counts.running + counts.done,
+      counts.ready + counts.running,
+    ].map((value) => Math.round(clampValue((value / maxValue) * 30, 6, 30)));
+    return (
+      <div className="reading-home-bars" aria-hidden="true">
+        {bars.map((height, index) => (
+          <span key={`${height}-${index}`} className={`reading-home-bar ${index >= 2 ? 'is-active' : ''}`} style={{ height }} />
+        ))}
+      </div>
+    );
+  }
+
+  const activeDots = Math.round(clampValue((counts.done / maxValue) * 12, counts.done ? 1 : 0, 12));
+  return (
+    <div className="reading-home-dot-grid" aria-hidden="true">
+      {Array.from({ length: 12 }, (_, index) => <span key={index} className={`reading-home-dot ${index < activeDots ? 'is-active' : ''}`} />)}
+    </div>
+  );
+}
+
+function MetricCard({ counts, diagram, icon: Icon, label, value }: { counts: Record<'done' | 'ready' | 'running' | 'saved', number>; diagram: 'done' | 'ready' | 'running' | 'saved'; icon: typeof BookmarkIcon; label: string; value: number }) {
   return (
     <article className="reading-home-metric">
       <div className="reading-home-metric-main">
@@ -118,12 +197,43 @@ function MetricCard({ icon: Icon, label, value }: { icon: typeof BookmarkIcon; l
         <div className="reading-home-metric-value">{value}</div>
       </div>
       <div className="reading-home-metric-diagram">
-        <div className="reading-home-band-stack" aria-hidden="true">
-          <span className="reading-home-band"><i style={{ width: `${Math.max(8, Math.min(100, value * 24))}%` }} /></span>
-        </div>
+        <MetricDiagram counts={counts} diagram={diagram} />
       </div>
     </article>
   );
+}
+
+function Tag({ color, label, strong = false }: { color?: string; label: string; strong?: boolean }) {
+  return (
+    <span className={`tag ${strong ? 'strong' : ''}`} style={color ? { '--tag-color': color } as React.CSSProperties : undefined}>
+      {label}
+    </span>
+  );
+}
+
+function previewPrimaryLabel(item: ReadingHomeItem) {
+  return item.session ? 'Open Reading' : 'Start Reading';
+}
+
+function copyPaperLink(item: ReadingHomeItem) {
+  const url = new URL(globalThis.location.href);
+  url.hash = `#/reading/${encodeURIComponent(item.paperId)}`;
+  void globalThis.navigator?.clipboard?.writeText(url.href);
+}
+
+function openPaperSource(item: ReadingHomeItem) {
+  const href = item.paperUrl || item.pdfUrl || item.session?.pdfUrl || '';
+  if (href) {
+    globalThis.open?.(href, '_blank', 'noopener,noreferrer');
+  }
+}
+
+function filterReadingItems(items: ReadingHomeItem[], filter: ReadingHomeFilter) {
+  if (filter === 'ready') return items.filter((item) => item.status.bucket === 'ready');
+  if (filter === 'running') return items.filter((item) => item.status.bucket === 'running');
+  if (filter === 'done') return items.filter((item) => item.status.bucket === 'done');
+  if (filter === 'noPdf') return items.filter((item) => !item.hasPdf);
+  return items;
 }
 
 export function ReadingHomeStage({
@@ -133,12 +243,15 @@ export function ReadingHomeStage({
   onBackToDiscover,
   onOpenPaper,
   onSelectPaper,
+  onStartReading,
   project,
   readingSessions,
   selectedPaperId,
 }: ReadingHomeStageProps) {
+  const [filter, setFilter] = useState<ReadingHomeFilter>('all');
   const items = buildItems(library, readingSessions);
-  const selected = items.find((item) => item.paperId === selectedPaperId) || items[0] || null;
+  const visible = filterReadingItems(items, filter);
+  const selected = visible.find((item) => item.paperId === selectedPaperId) || visible[0] || null;
   const counts = {
     done: items.filter((item) => item.status.bucket === 'done').length,
     noPdf: items.filter((item) => !item.hasPdf).length,
@@ -158,10 +271,10 @@ export function ReadingHomeStage({
           </section>
 
           <section className="reading-home-metrics">
-            <MetricCard icon={BookmarkIcon} label="Saved" value={counts.saved} />
-            <MetricCard icon={SparklesIcon} label="Ready" value={counts.ready} />
-            <MetricCard icon={ClockIcon} label="In progress" value={counts.running} />
-            <MetricCard icon={CheckIcon} label="Completed" value={counts.done} />
+            <MetricCard counts={counts} diagram="saved" icon={BookmarkIcon} label="Saved" value={counts.saved} />
+            <MetricCard counts={counts} diagram="ready" icon={SparklesIcon} label="Ready" value={counts.ready} />
+            <MetricCard counts={counts} diagram="running" icon={ClockIcon} label="In progress" value={counts.running} />
+            <MetricCard counts={counts} diagram="done" icon={CheckIcon} label="Completed" value={counts.done} />
           </section>
 
           {!items.length && !loading ? (
@@ -188,22 +301,22 @@ export function ReadingHomeStage({
                 <div className="reading-home-list-tools">
                   <div className="reading-home-filter-row">
                     {[
-                      ['All papers', counts.saved],
-                      ['Ready', counts.ready],
-                      ['In progress', counts.running],
-                      ['Completed', counts.done],
-                      ['No PDF', counts.noPdf],
-                    ].map(([label, count]) => (
-                      <button key={label} type="button" className={`reading-home-filter-chip ${label === 'All papers' ? 'is-on' : ''}`}>
+                      ['all', 'All papers', counts.saved],
+                      ['ready', 'Ready', counts.ready],
+                      ['running', 'In progress', counts.running],
+                      ['done', 'Completed', counts.done],
+                      ['noPdf', 'No PDF', counts.noPdf],
+                    ].map(([id, label, count]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={`reading-home-filter-chip ${filter === id ? 'is-on' : ''}`}
+                        onClick={() => setFilter(id as ReadingHomeFilter)}
+                      >
                         <span>{label}</span>
                         <span className="reading-home-filter-count mono">{count}</span>
                       </button>
                     ))}
-                  </div>
-                  <div className="reading-home-tool-row">
-                    <span className="reading-home-tool-btn">
-                      <span>Sort: Saved newest</span>
-                    </span>
                   </div>
                 </div>
 
@@ -216,7 +329,7 @@ export function ReadingHomeStage({
                     <span>Status</span>
                     <span />
                   </div>
-                  {items.map((item) => {
+                  {visible.length ? visible.map((item) => {
                     const active = item.paperId === selected?.paperId;
                     return (
                       <button
@@ -224,8 +337,15 @@ export function ReadingHomeStage({
                         type="button"
                         className={`reading-home-row ${active ? 'is-selected' : ''}`}
                         onClick={() => {
-                          onSelectPaper(item.paperId);
-                          onOpenPaper(item.paperId);
+                          if (layout === 'desktop') {
+                            onSelectPaper(item.paperId);
+                            return;
+                          }
+                          if (item.session) {
+                            onOpenPaper(item.paperId);
+                            return;
+                          }
+                          onStartReading(item);
                         }}
                         data-reading-paper-id={item.paperId}
                       >
@@ -238,6 +358,7 @@ export function ReadingHomeStage({
                               <span>{item.venue || 'Unknown'}</span>
                               <span className="mono">{item.savedLabel}</span>
                               <span className={`reading-home-pdf-chip ${item.hasPdf ? 'is-on' : 'is-off'}`}>
+                                {item.hasPdf ? <CheckIcon size={11} /> : <span className="mono">--</span>}
                                 <span>{item.hasPdf ? 'PDF' : 'No PDF'}</span>
                               </span>
                               <StatusPill item={item} />
@@ -247,55 +368,111 @@ export function ReadingHomeStage({
                         <span className="reading-home-cell">{item.venue || 'Unknown'}</span>
                         <span className="reading-home-cell mono">{item.savedLabel}</span>
                         <span className={`reading-home-pdf-chip ${item.hasPdf ? 'is-on' : 'is-off'}`}>
+                          {item.hasPdf ? <CheckIcon size={12} /> : <span className="mono">--</span>}
                           <span>{item.hasPdf ? 'PDF' : 'Missing'}</span>
                         </span>
                         <span className="reading-home-status-cell"><StatusPill item={item} /></span>
                         <span className="reading-home-row-menu"><ChevronRightIcon size={13} /></span>
                       </button>
                     );
-                  })}
+                  }) : (
+                    <div className="reading-home-table-empty">
+                      <div className="reading-home-empty-icon"><BookOpenIcon size={28} /></div>
+                      <div className="reading-home-empty-title">No papers in this slice</div>
+                      <div className="reading-home-empty-copy">No papers in this filter.</div>
+                    </div>
+                  )}
                   <div className="reading-home-table-foot">
-                    <span>Showing {items.length} of {items.length}</span>
+                    <span>Showing {visible.length} of {items.length}</span>
                     <span className="mono">{project?.name || 'ARES'}</span>
                   </div>
                 </div>
               </article>
 
               {layout === 'desktop' && selected ? (
-                <aside className="reading-home-preview is-desktop" data-ares-surface="reading-home-preview">
-                  <div className="reading-home-preview-scroll">
-                    <div className="reading-home-preview-header">
-                      <div className="reading-home-preview-meta">
-                        <span className="reading-home-preview-badge">{selected.venue || 'Unknown'}</span>
-                        <span className="reading-home-preview-badge">{selected.year || 'n/a'}</span>
+                  <aside className="reading-home-preview is-desktop" data-ares-surface="reading-home-preview">
+                    <div className="reading-home-preview-scroll">
+                      <div className="reading-home-preview-header">
+                        <div className="reading-home-preview-meta">
+                          <span className="reading-home-preview-badge">{selected.venue || 'Unknown'}</span>
+                          <span className="reading-home-preview-badge">
+                            <span>{selected.hasPdf ? 'PDF' : 'No PDF'}</span>
+                            {selected.hasPdf ? <CheckIcon size={11} /> : <span className="mono">--</span>}
+                          </span>
+                        </div>
+                        <div className="reading-home-preview-icon-row">
+                          <button
+                            type="button"
+                            className="reading-home-preview-icon"
+                            aria-label="Open source"
+                            title="Open source"
+                            disabled={!selected.paperUrl && !selected.pdfUrl && !selected.session?.pdfUrl}
+                            onClick={() => openPaperSource(selected)}
+                          >
+                            <ExternalLinkIcon size={14} />
+                          </button>
+                        </div>
                       </div>
+                      <h2 className="reading-home-preview-title">{selected.title}</h2>
+                      <div className="reading-home-preview-authors">{selected.authorsLabel}</div>
+                      <div className="reading-home-preview-cta">
+                        <button
+                          type="button"
+                          className="btn-p"
+                          onClick={() => {
+                            if (selected.session) {
+                              onOpenPaper(selected.paperId);
+                              return;
+                            }
+                            onStartReading(selected);
+                          }}
+                        >
+                          <BookOpenIcon size={13} />
+                          <span>{previewPrimaryLabel(selected)}</span>
+                        </button>
+                        <button type="button" className="btn-s" onClick={() => copyPaperLink(selected)}>
+                          <Share2Icon size={13} />
+                          <span>Copy link</span>
+                        </button>
+                      </div>
+                      <section className="reading-home-preview-section">
+                        <div className="reading-home-preview-section-title">Abstract</div>
+                        <p className="reading-home-preview-copy">{selected.abstract || selected.summary || 'Abstract metadata is not available yet. Open Reading to generate structured notes.'}</p>
+                      </section>
+                      <section className="reading-home-preview-section">
+                        <div className="reading-home-preview-section-title">Keywords</div>
+                        <div className="tag-row reading-home-preview-terms">
+                          {selected.tags.length ? selected.tags.map((tag) => <Tag key={tag} label={tag} />) : <Tag color="var(--t3)" label="No tags" />}
+                        </div>
+                      </section>
+                      <section className="reading-home-preview-stat-grid">
+                        <article className="reading-home-preview-stat">
+                          <div className="reading-home-preview-stat-label">Status</div>
+                          <div className="reading-home-preview-stat-value"><StatusPill item={selected} /></div>
+                        </article>
+                        <article className="reading-home-preview-stat">
+                          <div className="reading-home-preview-stat-label">Progress</div>
+                          <div className="reading-home-preview-stat-value">{selected.progress}%</div>
+                        </article>
+                        <article className="reading-home-preview-stat">
+                          <div className="reading-home-preview-stat-label">Sections</div>
+                          <div className="reading-home-preview-stat-value">{selected.sectionCount}</div>
+                        </article>
+                        <article className="reading-home-preview-stat">
+                          <div className="reading-home-preview-stat-label">Notes</div>
+                          <div className="reading-home-preview-stat-value">{selected.noteCount}</div>
+                        </article>
+                        <article className="reading-home-preview-stat">
+                          <div className="reading-home-preview-stat-label">Saved</div>
+                          <div className="reading-home-preview-stat-value mono">{selected.savedLabel}</div>
+                        </article>
+                        <article className="reading-home-preview-stat">
+                          <div className="reading-home-preview-stat-label">Last activity</div>
+                          <div className="reading-home-preview-stat-value mono">{selected.lastActivityLabel}</div>
+                        </article>
+                      </section>
                     </div>
-                    <h2 className="reading-home-preview-title">{selected.title}</h2>
-                    <div className="reading-home-preview-authors">{formatAuthors(selected.authors)}</div>
-                    <section className="reading-home-preview-section">
-                      <div className="reading-home-preview-section-title">Abstract</div>
-                      <p className="reading-home-preview-copy">{selected.summary || selected.abstract || 'Abstract is not available.'}</p>
-                    </section>
-                    <section className="reading-home-preview-stat-grid">
-                      <article className="reading-home-preview-stat">
-                        <div className="reading-home-preview-stat-label">Status</div>
-                        <div className="reading-home-preview-stat-value"><StatusPill item={selected} /></div>
-                      </article>
-                      <article className="reading-home-preview-stat">
-                        <div className="reading-home-preview-stat-label">Progress</div>
-                        <div className="reading-home-preview-stat-value">{selected.progress}%</div>
-                      </article>
-                      <article className="reading-home-preview-stat">
-                        <div className="reading-home-preview-stat-label">Saved</div>
-                        <div className="reading-home-preview-stat-value mono">{selected.savedLabel}</div>
-                      </article>
-                      <article className="reading-home-preview-stat">
-                        <div className="reading-home-preview-stat-label">Last activity</div>
-                        <div className="reading-home-preview-stat-value mono">{selected.lastActivityLabel}</div>
-                      </article>
-                    </section>
-                  </div>
-                </aside>
+                  </aside>
               ) : null}
             </section>
           )}

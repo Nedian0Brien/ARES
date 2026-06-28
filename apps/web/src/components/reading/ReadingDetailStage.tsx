@@ -60,22 +60,6 @@ function formatAuthors(authors: string[] = []) {
   return `${authors.slice(0, 2).join(', ')} +${authors.length - 2}`;
 }
 
-function sessionProgress(session: ApiReadingSession | null) {
-  if (!session) {
-    return 0;
-  }
-  if (Number(session.progress) > 0) {
-    return Math.max(0, Math.min(100, Number(session.progress)));
-  }
-  if (session.summaryStatus === 'done') {
-    return 100;
-  }
-  if (session.parseStatus === 'done') {
-    return 62;
-  }
-  return 18;
-}
-
 function normalizedSections(session: ApiReadingSession | null): ReadingSection[] {
   return Array.isArray(session?.sections) ? (session.sections as ReadingSection[]) : [];
 }
@@ -144,7 +128,6 @@ export function ReadingDetailStage({
   const sections = normalizedSections(session);
   const notes = records(session?.notes);
   const chatMessages = records(session?.chatMessages);
-  const progress = sessionProgress(session);
   const pdfApiUrl = session?.id ? appUrl(readingSessionPath(session.id, 'pdf')).href : '';
 
   useEffect(() => {
@@ -209,16 +192,34 @@ export function ReadingDetailStage({
 
       <div className="reading-shell-main">
         <div className="reading-icon-rail">
-          <button type="button" className="reading-rail-btn is-active" title="Overview">
+          <button
+            type="button"
+            className={`reading-rail-btn ${documentTab === 'summary' && workbenchTab === 'chat' ? 'is-active' : ''}`}
+            title="Overview"
+            onClick={() => {
+              onDocumentTabChange('summary');
+              onWorkbenchTabChange('chat');
+            }}
+          >
             <BookOpenIcon size={16} />
             <span className="lbl">Overview</span>
           </button>
           <div className="reading-rail-divider" />
-          <button type="button" className="reading-rail-btn" title="Outline">
+          <button
+            type="button"
+            className={`reading-rail-btn ${documentTab === 'summary' ? 'is-active' : ''}`}
+            title="Outline"
+            onClick={() => onDocumentTabChange('summary')}
+          >
             <FileTextIcon size={16} />
             <span className="lbl">Outline</span>
           </button>
-          <button type="button" className="reading-rail-btn" title="Notes">
+          <button
+            type="button"
+            className={`reading-rail-btn ${workbenchTab === 'notes' ? 'is-active' : ''}`}
+            title="Notes"
+            onClick={() => onWorkbenchTabChange('notes')}
+          >
             <StickyNoteIcon size={16} />
             <span className="lbl">Notes</span>
             {notes.length ? <span className="badge mono">{notes.length}</span> : null}

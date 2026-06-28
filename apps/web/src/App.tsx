@@ -70,6 +70,10 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
+function isReadingSessionRecord(value: unknown): value is ApiReadingSession {
+  return value !== null && typeof value === 'object' && 'id' in value && typeof value.id === 'string';
+}
+
 function firstRecordId(value: unknown): string {
   return text(value);
 }
@@ -336,7 +340,7 @@ export default function App() {
     setState((current) => ({
       ...current,
       readingSessions: current.readingSessions.map((entry) =>
-        Boolean(entry) && typeof entry === 'object' && 'id' in entry && entry.id === nextSession.id ? nextSession : entry,
+        isReadingSessionRecord(entry) && entry.id === nextSession.id ? nextSession : entry,
       ),
     }));
   }
@@ -424,7 +428,7 @@ export default function App() {
     }
   }
 
-  async function startReading(paper: ApiPaper) {
+  async function startReading(paper: ApiPaper, targetView: 'detail' | 'home' = 'home') {
     if (!activeProject?.id) {
       return;
     }
@@ -442,10 +446,17 @@ export default function App() {
         ...current,
         activeReadingSessionId: payload.readingSession.id,
         activeStage: 'reading',
+        readingDocumentTab: targetView === 'detail' ? 'pdf' : current.readingDocumentTab,
         readingStartingPaperId: '',
-        readingView: 'home',
+        readingView: targetView,
       }));
-      globalThis.history?.replaceState(null, '', routeHashForStage(activeProject.id, 'reading'));
+      globalThis.history?.replaceState(
+        null,
+        '',
+        targetView === 'detail'
+          ? `#/projects/${encodeURIComponent(activeProject.id)}/reading/sessions/${encodeURIComponent(payload.readingSession.id)}/pdf`
+          : routeHashForStage(activeProject.id, 'reading'),
+      );
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -491,7 +502,7 @@ export default function App() {
       refresh || session.summaryStatus !== 'done' ? 'summarize' : null,
       refresh || !Array.isArray(session.assets) || session.assets.length === 0 ? 'extract-assets' : null,
     ].filter((step): step is ReadingAnalysisStep => Boolean(step));
-    const analysisSteps = steps.length ? steps : ['analyze'];
+    const analysisSteps: ReadingAnalysisStep[] = steps.length ? steps : ['analyze'];
 
     setState((current) => ({
       ...current,
@@ -865,6 +876,7 @@ export default function App() {
           onBackToDiscover={() => updateStage('search')}
           onOpenPaper={openReadingDetail}
           onSelectPaper={(readingHomeSelectedPaperId) => setState((current) => ({ ...current, readingHomeSelectedPaperId }))}
+          onStartReading={(paper) => startReading(paper, 'detail')}
           project={activeProject}
           readingSessions={readingSessions}
           selectedPaperId={state.readingHomeSelectedPaperId}
