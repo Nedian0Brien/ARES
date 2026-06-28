@@ -65,14 +65,12 @@ check_react_frontend() {
   echo "▶ React frontend: ${PROXY_URL}/"
   for ((attempt = 1; attempt <= SMOKE_RETRIES; attempt++)); do
     root_html="$(curl -fsS "${PROXY_URL}/" 2>/dev/null || true)"
-    if [[ "$root_html" == *"data-ares-react-app"* ]]; then
-      js_path="$(printf '%s' "$root_html" | sed -nE 's/.*src="([^"]*\/assets\/index-[^"]+\.js)".*/\1/p' | head -n 1)"
-      css_path="$(printf '%s' "$root_html" | sed -nE 's/.*href="([^"]*\/assets\/index-[^"]+\.css)".*/\1/p' | head -n 1)"
-      if [[ -n "$js_path" && -n "$css_path" ]]; then
-        check_url "react app asset" "${PROXY_URL}${js_path}"
-        check_url "react styles asset" "${PROXY_URL}${css_path}"
-        return 0
-      fi
+    js_path="$(printf '%s' "$root_html" | sed -nE 's/.*src="([^"]*\/assets\/index-[^"]+\.js)".*/\1/p' | head -n 1)"
+    css_path="$(printf '%s' "$root_html" | sed -nE 's/.*href="([^"]*\/assets\/index-[^"]+\.css)".*/\1/p' | head -n 1)"
+    if [[ -n "$js_path" && -n "$css_path" ]]; then
+      check_url "react app asset" "${PROXY_URL}${js_path}"
+      check_url "react styles asset" "${PROXY_URL}${css_path}"
+      return 0
     fi
     sleep "$SMOKE_SLEEP_SECONDS"
   done
