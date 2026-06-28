@@ -20,7 +20,8 @@ import { createReadingRoutes } from './routes/reading-routes.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
 const DATA_ROOT_DIR = path.resolve(process.env.ARES_DATA_ROOT_DIR || ROOT_DIR);
-const WEB_DIR = path.join(ROOT_DIR, 'web');
+const LEGACY_WEB_DIR = path.join(ROOT_DIR, 'web');
+const WEB_DIST_DIR = path.join(ROOT_DIR, 'web-dist');
 const SEED_FILE = path.join(DATA_ROOT_DIR, 'data', 'store.seed.json');
 const RUNTIME_FILE = path.join(DATA_ROOT_DIR, 'data', 'runtime', 'store.json');
 
@@ -57,6 +58,27 @@ async function ensureEnvLoaded(filePath) {
 }
 
 await ensureEnvLoaded(path.join(ROOT_DIR, '.env'));
+
+async function resolveWebDir() {
+  if (process.env.ARES_WEB_DIR) {
+    return path.resolve(process.env.ARES_WEB_DIR);
+  }
+
+  if (process.env.ARES_USE_LEGACY_WEB === '1' || process.env.ARES_USE_LEGACY_WEB === 'true') {
+    return LEGACY_WEB_DIR;
+  }
+
+  try {
+    await fs.stat(path.join(WEB_DIST_DIR, 'index.html'));
+    return WEB_DIST_DIR;
+  } catch {
+    // Fall back to the source web app in development before the React build exists.
+  }
+
+  return LEGACY_WEB_DIR;
+}
+
+const WEB_DIR = await resolveWebDir();
 
 const PORT = Number(process.env.PORT || 3100);
 const HOST = process.env.HOST || '0.0.0.0';

@@ -23,6 +23,7 @@ NODE_ENV="${NODE_ENV:-development}"
 ARES_LIVE_RELOAD="${ARES_LIVE_RELOAD:-1}"
 SKIP_GIT_FETCH="${SKIP_GIT_FETCH:-0}"
 SKIP_VALIDATION="${SKIP_VALIDATION:-0}"
+SKIP_WEB_BUILD="${SKIP_WEB_BUILD:-0}"
 DEPLOY_HEALTH_TIMEOUT_SECONDS="${DEPLOY_HEALTH_TIMEOUT_SECONDS:-30}"
 DEPLOY_SOURCE_PATH=""
 RESOLVED_REF=""
@@ -60,8 +61,22 @@ run_validation() {
   (
     cd "$DEPLOY_SOURCE_PATH"
     node --check services/backend/index.mjs
-    node --check web/app.js
+    npm run lint
+    npm run typecheck
     npm test
+  )
+}
+
+build_frontend() {
+  if [[ "$SKIP_WEB_BUILD" == "1" ]]; then
+    echo "▶ React 프론트엔드 빌드 생략"
+    return 0
+  fi
+
+  echo "▶ React 프론트엔드 빌드"
+  (
+    cd "$DEPLOY_SOURCE_PATH"
+    npm run web:build
   )
 }
 
@@ -178,6 +193,7 @@ if ! git -C "$DEPLOY_SOURCE_PATH" diff --quiet --ignore-submodules -- 2>/dev/nul
 fi
 
 install_dependencies
+build_frontend
 run_validation
 
 echo "▶ current 심링크 전환"

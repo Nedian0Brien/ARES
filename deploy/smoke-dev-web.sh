@@ -56,13 +56,36 @@ process.exit(1);
   return 1
 }
 
+check_react_frontend() {
+  local attempt
+  local root_html
+  local js_path
+  local css_path
+
+  echo "▶ React frontend: ${PROXY_URL}/"
+  for ((attempt = 1; attempt <= SMOKE_RETRIES; attempt++)); do
+    root_html="$(curl -fsS "${PROXY_URL}/" 2>/dev/null || true)"
+    if [[ "$root_html" == *"data-ares-react-app"* ]]; then
+      js_path="$(printf '%s' "$root_html" | sed -nE 's/.*src="([^"]*\/assets\/index-[^"]+\.js)".*/\1/p' | head -n 1)"
+      css_path="$(printf '%s' "$root_html" | sed -nE 's/.*href="([^"]*\/assets\/index-[^"]+\.css)".*/\1/p' | head -n 1)"
+      if [[ -n "$js_path" && -n "$css_path" ]]; then
+        check_url "react app asset" "${PROXY_URL}${js_path}"
+        check_url "react styles asset" "${PROXY_URL}${css_path}"
+        return 0
+      fi
+    fi
+    sleep "$SMOKE_SLEEP_SECONDS"
+  done
+
+  echo "✗ smoke check failed: React frontend assets" >&2
+  return 1
+}
+
 check_url "health" "${BASE_URL}/api/health"
 check_health_commit
 check_url "root" "${BASE_URL}/"
 check_url "proxy root" "${PROXY_URL}/"
 check_url "projects api" "${PROXY_URL}/api/projects"
-check_url "app asset" "${PROXY_URL}/app.js?v=deploy"
-check_url "styles asset" "${PROXY_URL}/styles.css?v=deploy"
-check_url "grab asset" "${PROXY_URL}/react-grab-dev.js?v=deploy"
+check_react_frontend
 
 echo "✓ 스모크 테스트 통과"

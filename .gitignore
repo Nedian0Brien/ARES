@@ -6,6 +6,7 @@
 .worktrees
 .superpowers/brainstorm/*
 node_modules
+web-dist/
 data/runtime/store.json
 data/runtime/reading/
 npm-debug.log*
