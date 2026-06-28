@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARES Papers Workspace</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #fbfbfa;
+        --sb: #f5f5f4;
+        --s1: #fffefd;
+        --s2: #f7f7f5;
+        --s3: #efeeeb;
+        --b1: #e7e5df;
+        --b2: #d3d0c8;
+        --tx: #101012;
+        --t2: #4d4d54;
+        --t3: #85858d;
+        --t4: #aaaab2;
+        --read: #5e6ad2;
+        --wiki: #2d8069;
+        --agent: #b76443;
+        --lab: #8758c7;
+        --note: #c0983b;
+        --ok: #4d9964;
+        --shadow-page: 0 24px 70px rgba(15, 15, 18, 0.11), 0 2px 9px rgba(15, 15, 18, 0.06);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--tx);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px;
+        letter-spacing: -0.006em;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        cursor: default;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 264px minmax(720px, 1fr) 372px;
+        height: 100vh;
+        max-height: 100vh;
+        min-height: 740px;
+        background:
+          linear-gradient(90deg, rgba(94, 106, 210, 0.05), transparent 21%, transparent 79%, rgba(183, 100, 67, 0.045)),
+          var(--bg);
+      }
+
+      .sidebar,
+      .context {
+        background: rgba(247, 247, 245, 0.78);
+        backdrop-filter: blur(18px);
+      }
+
+      .sidebar {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        height: 100vh;
+        max-height: 100vh;
+        min-height: 0;
+        overflow: hidden;
+        border-right: 1px solid var(--b1);
+        min-width: 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 64px;
+        padding: 0 18px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        color: var(--read);
+      }
+
+      .brand-title {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .brand-title strong {
+        font-size: 13.5px;
+        font-weight: 680;
+      }
+
+      .brand-title span {
+        color: var(--t3);
+        font-size: 11.5px;
+        white-space: nowrap;
+      }
+
+      .main-tabs {
+        display: grid;
+        gap: 2px;
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .tab {
+        display: grid;
+        grid-template-columns: 22px 1fr auto;
+        align-items: center;
+        gap: 9px;
+        min-height: 38px;
+        padding: 0 10px;
+        border-radius: 7px;
+        color: var(--t2);
+      }
+
+      .tab svg {
+        color: var(--t3);
+      }
+
+      .tab strong {
+        font-size: 13px;
+        font-weight: 610;
+      }
+
+      .tab span {
+        color: var(--t3);
+        font-size: 11.5px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tab.active {
+        background: rgba(94, 106, 210, 0.1);
+        color: var(--tx);
+      }
+
+      .tab.active svg {
+        color: var(--read);
+      }
+
+      .library {
+        min-height: 0;
+        overflow: hidden;
+        padding: 14px 12px 16px;
+      }
+
+      .section-kicker {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 0 6px 9px;
+        color: var(--t3);
+        font-size: 10.5px;
+        font-weight: 720;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .search-box {
+        display: grid;
+        grid-template-columns: 16px 1fr;
+        align-items: center;
+        gap: 8px;
+        height: 36px;
+        margin: 0 2px 12px;
+        padding: 0 10px;
+        border: 1px solid var(--b1);
+        border-radius: 8px;
+        background: var(--s1);
+        color: var(--t3);
+      }
+
+      .search-box span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .paper-list {
+        display: grid;
+        gap: 6px;
+        overflow: auto;
+        height: calc(100vh - 286px);
+        padding-right: 2px;
+      }
+
+      .paper-row {
+        display: grid;
+        gap: 7px;
+        padding: 10px 10px 10px 12px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+      }
+
+      .paper-row.active {
+        border-color: rgba(94, 106, 210, 0.3);
+        background: rgba(94, 106, 210, 0.075);
+      }
+
+      .paper-row-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 9px;
+      }
+
+      .paper-row-title {
+        font-size: 12.8px;
+        font-weight: 650;
+        line-height: 1.22;
+      }
+
+      .paper-row-meta {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+
+      .progress {
+        width: 44px;
+        height: 3px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(16, 16, 18, 0.08);
+      }
+
+      .progress i {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--read);
+      }
+
+      .sidebar-foot {
+        display: grid;
+        gap: 10px;
+        padding: 13px 16px 16px;
+        border-top: 1px solid var(--b1);
+      }
+
+      .sync-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+
+      .sync-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--ok);
+        box-shadow: 0 0 0 3px rgba(77, 153, 100, 0.13);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-rows: 64px 46px minmax(0, 1fr);
+        height: 100vh;
+        max-height: 100vh;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .paper-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 18px;
+        padding: 0 20px 0 22px;
+        border-bottom: 1px solid var(--b1);
+        background: rgba(251, 251, 250, 0.78);
+      }
+
+      .crumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        color: var(--t3);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .paper-name {
+        display: flex;
+        align-items: baseline;
+        gap: 9px;
+        min-width: 0;
+        margin-top: 3px;
+      }
+
+      .paper-name h1 {
+        margin: 0;
+        overflow: hidden;
+        color: var(--tx);
+        font-size: 17px;
+        font-weight: 680;
+        letter-spacing: -0.014em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .paper-name span {
+        flex: 0 0 auto;
+        color: var(--t3);
+        font-size: 12px;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .icon-btn,
+      .quiet-btn,
+      .strong-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--b1);
+        border-radius: 7px;
+        background: var(--s1);
+        color: var(--t2);
+      }
+
+      .icon-btn {
+        width: 34px;
+        height: 34px;
+      }
+
+      .quiet-btn,
+      .strong-btn {
+        gap: 7px;
+        height: 34px;
+        padding: 0 12px;
+        font-size: 12.5px;
+        font-weight: 610;
+      }
+
+      .strong-btn {
+        border-color: #18181b;
+        background: #18181b;
+        color: #fffefd;
+      }
+
+      .reader-tabs {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 0 18px 0 22px;
+        border-bottom: 1px solid var(--b1);
+        background: var(--s1);
+      }
+
+      .segmented {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding: 3px;
+        border: 1px solid var(--b1);
+        border-radius: 8px;
+        background: var(--s2);
+      }
+
+      .segmented span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 28px;
+        padding: 0 12px;
+        border-radius: 6px;
+        color: var(--t2);
+        font-size: 12px;
+        font-weight: 620;
+      }
+
+      .segmented span.active {
+        background: var(--s1);
+        box-shadow: 0 1px 4px rgba(16, 16, 18, 0.08);
+        color: var(--tx);
+      }
+
+      .reader-tools {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--t3);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .zoom {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .zoom-line {
+        width: 94px;
+        height: 3px;
+        border-radius: 999px;
+        background: var(--s3);
+      }
+
+      .zoom-line i {
+        display: block;
+        width: 58%;
+        height: 100%;
+        border-radius: inherit;
+        background: #18181b;
+      }
+
+      .reader-stage {
+        display: grid;
+        grid-template-columns: 152px minmax(0, 1fr);
+        min-height: 0;
+        overflow: hidden;
+        background: #efefec;
+      }
+
+      .outline {
+        overflow: auto;
+        border-right: 1px solid var(--b1);
+        background: rgba(251, 251, 250, 0.66);
+        padding: 16px 10px;
+      }
+
+      .outline-title {
+        margin: 0 0 10px 4px;
+        color: var(--t3);
+        font-size: 10.5px;
+        font-weight: 720;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .outline-list {
+        display: grid;
+        gap: 4px;
+      }
+
+      .outline-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 8px;
+        border-radius: 6px;
+        color: var(--t2);
+        font-size: 12px;
+      }
+
+      .outline-item.active {
+        background: rgba(94, 106, 210, 0.1);
+        color: var(--tx);
+        font-weight: 620;
+      }
+
+      .outline-item span:last-child {
+        color: var(--t3);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .outline-note {
+        display: grid;
+        gap: 7px;
+        margin-top: 18px;
+        padding: 10px;
+        border-top: 1px solid var(--b1);
+        color: var(--t2);
+        font-size: 12px;
+        line-height: 1.38;
+      }
+
+      .outline-note strong {
+        color: var(--tx);
+        font-size: 12px;
+      }
+
+      .pdf-wrap {
+        min-height: 0;
+        min-width: 0;
+        overflow: auto;
+        padding: 24px 24px 34px;
+      }
+
+      .pdf-page {
+        position: relative;
+        width: min(650px, calc(100% - 6px));
+        min-height: 880px;
+        margin: 0 auto;
+        padding: 45px 48px 52px;
+        border: 1px solid rgba(16, 16, 18, 0.08);
+        background: #fffefa;
+        box-shadow: var(--shadow-page);
+      }
+
+      .pdf-page::before {
+        content: "";
+        position: absolute;
+        inset: 20px 20px auto;
+        height: 1px;
+        background: rgba(16, 16, 18, 0.08);
+      }
+
+      .pdf-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        color: #777;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 9px;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      .paper-title {
+        max-width: 520px;
+        margin: 0 auto 10px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.04;
+        text-align: center;
+      }
+
+      .authors {
+        max-width: 470px;
+        margin: 0 auto 22px;
+        color: #444;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 11px;
+        line-height: 1.42;
+        text-align: center;
+      }
+
+      .abstract {
+        margin-bottom: 20px;
+        padding: 11px 12px;
+        border: 1px solid rgba(16, 16, 18, 0.1);
+        background: #fbfaf5;
+      }
+
+      .abstract h2,
+      .columns h2 {
+        margin: 0 0 5px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 12px;
+        letter-spacing: 0.01em;
+      }
+
+      .abstract p,
+      .columns p,
+      .figure-caption {
+        margin: 0;
+        color: #252525;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 10.5px;
+        line-height: 1.54;
+      }
+
+      .columns {
+        column-count: 2;
+        column-gap: 25px;
+      }
+
+      .columns h2 {
+        break-after: avoid;
+        margin-top: 12px;
+      }
+
+      .columns p {
+        margin-bottom: 8px;
+        text-align: justify;
+      }
+
+      .hl {
+        background: linear-gradient(transparent 20%, rgba(227, 189, 86, 0.34) 20%, rgba(227, 189, 86, 0.34) 86%, transparent 86%);
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+      }
+
+      .source-pin {
+        position: absolute;
+        right: -14px;
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border: 1px solid rgba(183, 100, 67, 0.34);
+        border-radius: 999px;
+        background: #fff9f3;
+        color: var(--agent);
+        font-size: 11px;
+        font-weight: 750;
+        box-shadow: 0 7px 20px rgba(183, 100, 67, 0.15);
+      }
+
+      .pin-1 {
+        top: 325px;
+      }
+
+      .pin-2 {
+        top: 611px;
+      }
+
+      .diagram {
+        display: grid;
+        gap: 6px;
+        margin: 12px 0 10px;
+        padding: 10px;
+        break-inside: avoid;
+        border: 1px solid rgba(16, 16, 18, 0.1);
+        background: #fbfaf5;
+      }
+
+      .pipe {
+        display: grid;
+        grid-template-columns: 1fr 14px 1fr 14px 1fr;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .pipe span {
+        min-height: 28px;
+        padding: 6px 7px;
+        border: 1px solid rgba(16, 16, 18, 0.14);
+        background: #fffefd;
+        color: #333;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 8.5px;
+        line-height: 1.25;
+        text-align: center;
+      }
+
+      .pipe i {
+        display: block;
+        height: 1px;
+        background: rgba(16, 16, 18, 0.24);
+      }
+
+      .figure-caption {
+        color: #626262;
+        font-size: 9.5px;
+      }
+
+      .context {
+        display: grid;
+        grid-template-rows: 64px minmax(0, 1fr) auto;
+        height: 100vh;
+        max-height: 100vh;
+        min-height: 0;
+        min-width: 0;
+        overflow: hidden;
+        border-left: 1px solid var(--b1);
+      }
+
+      .context-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .context-head-title {
+        display: grid;
+        gap: 2px;
+      }
+
+      .context-head-title strong {
+        font-size: 13.5px;
+        font-weight: 680;
+      }
+
+      .context-head-title span {
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+
+      .context-body {
+        min-height: 0;
+        overflow: auto;
+      }
+
+      .panel-section {
+        border-bottom: 1px solid var(--b1);
+        padding: 15px 16px;
+      }
+
+      .panel-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .panel-title h2 {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 740;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+      }
+
+      .panel-title span {
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+
+      .wiki-map {
+        position: relative;
+        height: 116px;
+        border: 1px solid var(--b1);
+        background:
+          linear-gradient(rgba(16, 16, 18, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(16, 16, 18, 0.035) 1px, transparent 1px),
+          var(--s1);
+        background-size: 28px 28px;
+        overflow: hidden;
+      }
+
+      .wiki-map svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .node {
+        position: absolute;
+        display: grid;
+        place-items: center;
+        min-width: 74px;
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--b2);
+        background: rgba(255, 254, 253, 0.94);
+        color: var(--t2);
+        font-size: 11px;
+        font-weight: 620;
+        box-shadow: 0 4px 18px rgba(16, 16, 18, 0.06);
+      }
+
+      .node.active {
+        border-color: rgba(45, 128, 105, 0.38);
+        color: var(--wiki);
+      }
+
+      .n1 {
+        left: 24px;
+        top: 22px;
+      }
+
+      .n2 {
+        right: 30px;
+        top: 18px;
+      }
+
+      .n3 {
+        left: 112px;
+        top: 54px;
+      }
+
+      .n4 {
+        right: 52px;
+        bottom: 23px;
+      }
+
+      .n5 {
+        left: 32px;
+        bottom: 20px;
+      }
+
+      .context-list {
+        display: grid;
+        gap: 0;
+        border-top: 1px solid var(--b1);
+      }
+
+      .context-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .context-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .row-main {
+        min-width: 0;
+      }
+
+      .row-main strong {
+        display: block;
+        overflow: hidden;
+        font-size: 12.5px;
+        font-weight: 650;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .row-main span {
+        display: block;
+        margin-top: 3px;
+        color: var(--t3);
+        font-size: 11.5px;
+        line-height: 1.35;
+      }
+
+      .row-count {
+        color: var(--t3);
+        font-size: 11.5px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .agent-thread {
+        display: grid;
+        gap: 13px;
+      }
+
+      .question {
+        justify-self: end;
+        max-width: 90%;
+        padding: 9px 11px;
+        border: 1px solid rgba(94, 106, 210, 0.25);
+        background: rgba(94, 106, 210, 0.08);
+        color: var(--tx);
+        font-size: 12.5px;
+        line-height: 1.45;
+      }
+
+      .answer {
+        display: grid;
+        gap: 10px;
+      }
+
+      .answer-text {
+        margin: 0;
+        color: var(--t2);
+        font-size: 12.7px;
+        line-height: 1.55;
+      }
+
+      .answer-text strong {
+        color: var(--tx);
+        font-weight: 670;
+      }
+
+      .sources {
+        display: grid;
+        border: 1px solid var(--b1);
+        background: var(--s1);
+      }
+
+      .source-row {
+        display: grid;
+        grid-template-columns: 48px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        min-height: 40px;
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .source-row:last-child {
+        border-bottom: 0;
+      }
+
+      .source-id {
+        color: var(--agent);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 10.5px;
+        font-weight: 650;
+      }
+
+      .source-text {
+        min-width: 0;
+        color: var(--t2);
+        font-size: 11.5px;
+        line-height: 1.32;
+      }
+
+      .source-text strong {
+        color: var(--tx);
+        font-weight: 650;
+      }
+
+      .action-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .context-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 34px;
+        border: 1px solid var(--b1);
+        background: var(--s1);
+        color: var(--t2);
+        font-size: 12px;
+        font-weight: 630;
+      }
+
+      .work-items {
+        display: grid;
+        gap: 9px;
+      }
+
+      .work-row {
+        display: grid;
+        grid-template-columns: 52px minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: start;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--b1);
+      }
+
+      .work-row:first-child {
+        padding-top: 0;
+      }
+
+      .work-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .work-kind {
+        color: var(--t3);
+        font-size: 10.5px;
+        font-weight: 720;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .work-text {
+        min-width: 0;
+        color: var(--t2);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .work-text strong {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--tx);
+        font-size: 12.2px;
+      }
+
+      .work-ref {
+        color: var(--t3);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 10.5px;
+      }
+
+      .composer {
+        display: grid;
+        gap: 7px;
+        padding: 10px 16px 12px;
+        border-top: 1px solid var(--b1);
+        background: rgba(247, 247, 245, 0.94);
+      }
+
+      .composer-box {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 32px;
+        align-items: center;
+        min-height: 38px;
+        border: 1px solid var(--b2);
+        background: var(--s1);
+      }
+
+      .composer-box span {
+        min-width: 0;
+        padding: 0 12px;
+        color: var(--t3);
+        font-size: 12.5px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .composer-box button {
+        width: 32px;
+        height: 32px;
+        margin-right: 5px;
+        border: 0;
+        background: #18181b;
+        color: #fffefd;
+      }
+
+      .composer-meta {
+        display: flex;
+        justify-content: space-between;
+        color: var(--t3);
+        font-size: 11px;
+      }
+
+      svg {
+        display: block;
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: 0;
+      }
+
+      @media (max-width: 1180px) {
+        body {
+          overflow: auto;
+        }
+
+        .app {
+          grid-template-columns: 232px minmax(0, 1fr);
+          min-height: 100vh;
+          height: auto;
+        }
+
+        .context {
+          grid-column: 1 / -1;
+          border-left: 0;
+          border-top: 1px solid var(--b1);
+        }
+
+        .context-body {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          overflow: visible;
+        }
+
+        .header-actions {
+          display: none;
+        }
+
+        .composer {
+          grid-column: 1 / -1;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .app {
+          display: block;
+          min-height: 0;
+        }
+
+        .sidebar {
+          display: block;
+          height: auto;
+          max-height: none;
+          border-right: 0;
+          border-bottom: 1px solid var(--b1);
+        }
+
+        .workspace,
+        .context {
+          height: auto;
+          max-height: none;
+        }
+
+        .workspace {
+          grid-template-rows: auto auto auto;
+        }
+
+        .main-tabs {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .tab {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          min-height: 58px;
+          gap: 4px;
+          padding: 7px 4px;
+        }
+
+        .tab span {
+          display: none;
+        }
+
+        .library,
+        .sidebar-foot,
+        .outline,
+        .reader-tools,
+        .header-actions .quiet-btn,
+        .header-actions .icon-btn,
+        .reader-tools .zoom {
+          display: none;
+        }
+
+        .paper-header {
+          min-height: 0;
+          padding: 10px 14px 8px;
+        }
+
+        .paper-name {
+          align-items: start;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .paper-name h1 {
+          overflow: visible;
+          white-space: normal;
+          text-overflow: clip;
+          line-height: 1.08;
+        }
+
+        .reader-tabs {
+          overflow: auto;
+          padding: 0 12px;
+        }
+
+        .reader-stage {
+          display: block;
+        }
+
+        .pdf-wrap {
+          padding: 16px 12px 22px;
+        }
+
+        .pdf-page {
+          width: 100%;
+          min-height: 780px;
+          padding: 35px 26px 40px;
+        }
+
+        .columns {
+          column-count: 1;
+        }
+
+        .context-body {
+          display: block;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app" aria-label="ARES Papers workspace mockup">
+      <aside class="sidebar" aria-label="Library">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M12 4L4.8 19.5h4.4l1.2-2.9h6.7l1.1 2.9h4.5L15.4 4h-3.4Z" fill="currentColor" />
+              <path d="M11.8 13.4h4.1l-2-5.1-2.1 5.1Z" fill="#fffefd" opacity=".92" />
+            </svg>
+          </div>
+          <div class="brand-title">
+            <strong>ARES Papers</strong>
+            <span>Research reading workspace</span>
+          </div>
+        </div>
+
+        <nav class="main-tabs" aria-label="Product tabs">
+          <div class="tab active">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M5 5.5h14v13H5zM8 9h8M8 12h8M8 15h5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+            </svg>
+            <strong>Library</strong>
+            <span>312</span>
+          </div>
+          <div class="tab">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M9 3h6M10 3v6l-5.4 9.4A1.8 1.8 0 006.2 21h11.6a1.8 1.8 0 001.6-2.6L14 9V3M7.5 15h9" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <strong>Lab</strong>
+            <span>8</span>
+          </div>
+          <div class="tab">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M6 7.5h5.5M6 12h12M12.5 16.5H18M5 4h14v16H5z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+            </svg>
+            <strong>Wiki</strong>
+            <span>94</span>
+          </div>
+          <div class="tab">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M5 5h14v10H8l-3 4V5Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+              <path d="M8 8.5h8M8 11.5h5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+            </svg>
+            <strong>Agent</strong>
+            <span>live</span>
+          </div>
+        </nav>
+
+        <section class="library">
+          <div class="section-kicker">
+            <span>RAG Reranker Study</span>
+            <span class="mono">14</span>
+          </div>
+          <div class="search-box">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" />
+              <path d="m16.2 16.2 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+            <span>Find a paper or concept</span>
+          </div>
+
+          <div class="paper-list" aria-label="Papers">
+            <article class="paper-row active">
+              <div class="paper-row-head">
+                <div class="paper-row-title">FlashRAG: A Modular Toolkit for Efficient RAG Research</div>
+                <div class="progress" aria-hidden="true"><i style="width: 68%"></i></div>
+              </div>
+              <div class="paper-row-meta"><span>EMNLP 2024</span><span>Reading</span><span>p. 4</span></div>
+            </article>
+            <article class="paper-row">
+              <div class="paper-row-head">
+                <div class="paper-row-title">Adaptive Retrieval and Reranking for Long-Context QA</div>
+                <div class="progress" aria-hidden="true"><i style="width: 38%"></i></div>
+              </div>
+              <div class="paper-row-meta"><span>arXiv 2025</span><span>Needs PDF</span></div>
+            </article>
+            <article class="paper-row">
+              <div class="paper-row-head">
+                <div class="paper-row-title">Benchmarking Faithfulness in Multi-hop RAG</div>
+                <div class="progress" aria-hidden="true"><i style="width: 82%"></i></div>
+              </div>
+              <div class="paper-row-meta"><span>ACL 2024</span><span>Notes 11</span></div>
+            </article>
+            <article class="paper-row">
+              <div class="paper-row-head">
+                <div class="paper-row-title">ColBERTv2: Efficient and Effective Retrieval</div>
+                <div class="progress" aria-hidden="true"><i style="width: 100%"></i></div>
+              </div>
+              <div class="paper-row-meta"><span>NAACL 2022</span><span>Completed</span></div>
+            </article>
+            <article class="paper-row">
+              <div class="paper-row-head">
+                <div class="paper-row-title">RAGAS: Automated Evaluation of Retrieval Augmented Generation</div>
+                <div class="progress" aria-hidden="true"><i style="width: 54%"></i></div>
+              </div>
+              <div class="paper-row-meta"><span>EACL 2024</span><span>2 ideas</span></div>
+            </article>
+            <article class="paper-row">
+              <div class="paper-row-head">
+                <div class="paper-row-title">Self-RAG: Learning to Retrieve, Generate, and Critique</div>
+                <div class="progress" aria-hidden="true"><i style="width: 23%"></i></div>
+              </div>
+              <div class="paper-row-meta"><span>ICLR 2024</span><span>Queue</span></div>
+            </article>
+            <article class="paper-row">
+              <div class="paper-row-head">
+                <div class="paper-row-title">A Survey of Hallucination in Large Language Models</div>
+                <div class="progress" aria-hidden="true"><i style="width: 76%"></i></div>
+              </div>
+              <div class="paper-row-meta"><span>ACM CSUR</span><span>Wiki linked</span></div>
+            </article>
+          </div>
+        </section>
+
+        <div class="sidebar-foot">
+          <div class="sync-row"><span>Local runtime state</span><span class="sync-dot"></span></div>
+          <div class="sync-row"><span>Last saved</span><span>2 min ago</span></div>
+        </div>
+      </aside>
+
+      <section class="workspace" aria-label="Reader workspace">
+        <header class="paper-header">
+          <div>
+            <div class="crumb">
+              <span>Library</span>
+              <span>/</span>
+              <span>Reader</span>
+              <span>/</span>
+              <span>Section 3.2</span>
+            </div>
+            <div class="paper-name">
+              <h1>FlashRAG: A Modular Toolkit for Efficient Retrieval-Augmented Generation Research</h1>
+              <span>J. Jin et al. / EMNLP 2024</span>
+            </div>
+          </div>
+          <div class="header-actions">
+            <button class="quiet-btn" type="button">New note</button>
+            <button class="quiet-btn" type="button">Highlight</button>
+            <button class="strong-btn" type="button">Ask Agent</button>
+          </div>
+        </header>
+
+        <div class="reader-tabs">
+          <div class="segmented" aria-label="Reader views">
+            <span class="active">PDF</span>
+            <span>Text</span>
+            <span>Summary</span>
+            <span>HTML</span>
+            <span>Info</span>
+          </div>
+          <div class="reader-tools">
+            <span>Page 4 / 18</span>
+            <span class="zoom"><span>118%</span><span class="zoom-line"><i></i></span></span>
+            <span>2 highlights</span>
+          </div>
+        </div>
+
+        <div class="reader-stage">
+          <aside class="outline" aria-label="Paper outline">
+            <h2 class="outline-title">Sections</h2>
+            <div class="outline-list">
+              <div class="outline-item"><span>Abstract</span><span>1</span></div>
+              <div class="outline-item"><span>Introduction</span><span>1</span></div>
+              <div class="outline-item"><span>Toolkit</span><span>3</span></div>
+              <div class="outline-item active"><span>Pipeline</span><span>4</span></div>
+              <div class="outline-item"><span>Reranking</span><span>6</span></div>
+              <div class="outline-item"><span>Experiments</span><span>9</span></div>
+              <div class="outline-item"><span>Limitations</span><span>15</span></div>
+            </div>
+            <div class="outline-note">
+              <strong>Reading focus</strong>
+              <span>Check whether modular evaluation isolates retriever effects before comparing with end-to-end reranker studies.</span>
+            </div>
+          </aside>
+
+          <div class="pdf-wrap" aria-label="PDF canvas">
+            <article class="pdf-page">
+              <span class="source-pin pin-1">S1</span>
+              <span class="source-pin pin-2">S2</span>
+              <div class="pdf-meta"><span>ARES reader extraction</span><span>page 4</span></div>
+              <h2 class="paper-title">FlashRAG: A Modular Toolkit for Efficient Retrieval-Augmented Generation Research</h2>
+              <p class="authors">J. Jin, Y. Zhang, Z. Wang, M. Chen, L. Zhao and Q. Wen</p>
+
+              <section class="abstract">
+                <h2>Abstract</h2>
+                <p>
+                  Retrieval-augmented generation systems combine retrievers, rerankers, generators and evaluation modules.
+                  FlashRAG exposes these components through a unified pipeline so that researchers can compare variants under
+                  shared data, prompt and metric contracts.
+                </p>
+              </section>
+
+              <section class="columns">
+                <h2>3.2 Modular RAG Pipeline</h2>
+                <p>
+                  The toolkit decomposes a RAG system into indexing, retrieval, optional reranking, generation and evaluation.
+                  Each module receives a typed artifact and returns a typed artifact, allowing a run to be inspected after every
+                  stage. <span class="hl">This design assumes that component substitution can be evaluated without changing the
+                  surrounding prompt and metric setup.</span>
+                </p>
+                <p>
+                  In practice, this assumption is useful for controlled comparison, but it is also where many reported gains can
+                  become ambiguous. A reranker may improve evidence ordering while the generator prompt absorbs part of the
+                  measured difference. Papers that optimize the whole system end to end therefore need a separate comparison lane.
+                </p>
+
+                <div class="diagram" aria-label="Pipeline diagram">
+                  <div class="pipe">
+                    <span>Corpus<br />Index</span>
+                    <i></i>
+                    <span>Retriever<br />top-k</span>
+                    <i></i>
+                    <span>Reranker<br />top-n</span>
+                  </div>
+                  <div class="pipe">
+                    <span>Prompt<br />builder</span>
+                    <i></i>
+                    <span>Generator<br />answer</span>
+                    <i></i>
+                    <span>Judge<br />metrics</span>
+                  </div>
+                  <p class="figure-caption">Figure 2. A typed pipeline lets the same query trace be reused across modules.</p>
+                </div>
+
+                <h2>4 Reading Implication</h2>
+                <p>
+                  For a reader building a research map, the important claim is not simply that FlashRAG runs many baselines.
+                  The claim is that runs become comparable when the same trace carries corpus, retrieval candidates, prompt
+                  assembly and evaluation metadata.
+                </p>
+                <p>
+                  <span class="hl">The next section should be read as an evidence contract: if the experiment table does not
+                  preserve trace identity, the reported speedup is weaker evidence for a reranker design.</span> This is the
+                  point that links the paper to RAGAS, Self-RAG and ColBERTv2 in the current wiki.
+                </p>
+
+                <h2>5 Failure Modes</h2>
+                <p>
+                  The modular view can hide feedback loops. Better retrieved contexts change generator behavior, generator
+                  errors change judge outcomes and cached prompt templates may favor one family of models. A useful workspace
+                  must therefore keep the original PDF span, extracted text, wiki synthesis and user notes together.
+                </p>
+              </section>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <aside class="context" aria-label="Wiki and agent context">
+        <header class="context-head">
+          <div class="context-head-title">
+            <strong>Context for this section</strong>
+            <span>Wiki, saved work and agent answer share the same sources.</span>
+          </div>
+          <button class="icon-btn" type="button" aria-label="Open context settings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.75" />
+              <path d="M12 4v2M12 18v2M4 12h2M18 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+            </svg>
+          </button>
+        </header>
+
+        <div class="context-body">
+          <section class="panel-section">
+            <div class="panel-title">
+              <h2>Wiki path</h2>
+              <span>5 linked docs</span>
+            </div>
+            <div class="wiki-map" aria-label="Wiki graph">
+              <svg viewBox="0 0 340 132" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M72 35 C126 26, 152 55, 196 34" stroke="rgba(45,128,105,.38)" stroke-width="1.5" fill="none" />
+                <path d="M155 66 C110 82, 88 100, 72 100" stroke="rgba(45,128,105,.28)" stroke-width="1.5" fill="none" />
+                <path d="M190 68 C232 78, 248 90, 269 100" stroke="rgba(45,128,105,.32)" stroke-width="1.5" fill="none" />
+                <path d="M238 32 C221 47, 204 58, 182 64" stroke="rgba(45,128,105,.26)" stroke-width="1.5" fill="none" />
+              </svg>
+              <span class="node n1">RAG eval</span>
+              <span class="node n2">Self-RAG</span>
+              <span class="node active n3">Pipeline trace</span>
+              <span class="node n4">Reranking</span>
+              <span class="node n5">RAGAS</span>
+            </div>
+            <div class="context-list">
+              <div class="context-row">
+                <div class="row-main"><strong>Pipeline trace as evidence contract</strong><span>Connects FlashRAG, RAGAS and ColBERTv2 evaluation notes.</span></div>
+                <span class="row-count">12 src</span>
+              </div>
+              <div class="context-row">
+                <div class="row-main"><strong>Reranker comparison risk</strong><span>Prompt and generator coupling can make component gains unclear.</span></div>
+                <span class="row-count">7 src</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel-section">
+            <div class="panel-title">
+              <h2>Agent</h2>
+              <span>grounded answer</span>
+            </div>
+            <div class="agent-thread">
+              <div class="question">What assumption matters most in this section, and is it enough to compare rerankers?</div>
+              <div class="answer">
+                <p class="answer-text">
+                  <strong>The fragile assumption is component independence.</strong> The paper treats retriever, reranker and generator as replaceable modules, which is useful for controlled runs. It is not enough by itself to claim a stronger reranker unless the experiment preserves query trace identity and prompt conditions.
+                </p>
+                <div class="sources" aria-label="Answer sources">
+                  <div class="source-row">
+                    <span class="source-id">PDF p4</span>
+                    <span class="source-text"><strong>S1</strong> component substitution under shared prompt and metric setup</span>
+                  </div>
+                  <div class="source-row">
+                    <span class="source-id">PDF p4</span>
+                    <span class="source-text"><strong>S2</strong> trace identity needed before treating speedup as reranker evidence</span>
+                  </div>
+                  <div class="source-row">
+                    <span class="source-id">Wiki</span>
+                    <span class="source-text"><strong>RAG evaluation</strong> generator behavior can absorb retrieval differences</span>
+                  </div>
+                </div>
+                <div class="action-row">
+                  <button class="context-button" type="button">Save as note</button>
+                  <button class="context-button" type="button">Create idea</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel-section">
+            <div class="panel-title">
+              <h2>Saved work</h2>
+              <span>this paper</span>
+            </div>
+            <div class="work-items">
+              <div class="work-row">
+                <span class="work-kind">Card</span>
+                <span class="work-text"><strong>Summary card</strong> Modularity helps comparison only when traces, prompts and metrics remain fixed.</span>
+                <span class="work-ref">p4</span>
+              </div>
+              <div class="work-row">
+                <span class="work-kind">Note</span>
+                <span class="work-text"><strong>Compare with RAGAS</strong> Evaluation pipeline is similar, but RAGAS focuses more on metric reliability.</span>
+                <span class="work-ref">W7</span>
+              </div>
+              <div class="work-row">
+                <span class="work-kind">Idea</span>
+                <span class="work-text"><strong>Experiment lane</strong> Re-run reranker ablation with locked prompt templates and saved query traces.</span>
+                <span class="work-ref">L2</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="composer">
+          <div class="composer-box">
+            <span>Ask about the selected span, wiki path, or saved notes</span>
+            <button type="button" aria-label="Send question">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+          <div class="composer-meta">
+            <span>Using PDF text, wiki docs, notes</span>
+            <span>Sources required</span>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </body>
+</html>
