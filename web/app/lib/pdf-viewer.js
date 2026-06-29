@@ -16,6 +16,17 @@ function setMessage(host, message, className = '') {
   host.innerHTML = `<div class="reading-pdf-loading ${className}">${message}</div>`;
 }
 
+function userFacingPdfErrorMessage(error) {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  if (/unexpected server response/i.test(raw) || /\b409\b/.test(raw) || /demo pdf generation/i.test(raw)) {
+    return 'PDF 원문을 불러올 수 없습니다. 원문 파일 연결을 확인한 뒤 다시 열어 주세요.';
+  }
+  if (/invalid pdf|missing pdf|pdf/i.test(raw)) {
+    return 'PDF를 표시할 수 없습니다. 파일 상태를 확인한 뒤 다시 시도해 주세요.';
+  }
+  return '문서를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
 async function loadPdfJs(baseUrl) {
   if (!pdfjsModulePromise) {
     const moduleUrl = new URL('__vendor/pdfjs/pdf.mjs', baseUrl).href;
@@ -101,8 +112,8 @@ function normalizeSourceHighlight(sourceHighlight) {
   }
 
   const page = Math.max(1, Number(sourceHighlight.page) || 1);
-  const width = Math.max(0.04, clampRatio(sourceHighlight.width, 0.84));
-  const height = Math.max(0.04, clampRatio(sourceHighlight.height, 0.12));
+  const width = Math.max(0.01, clampRatio(sourceHighlight.width, 0.84));
+  const height = Math.max(0.01, clampRatio(sourceHighlight.height, 0.12));
   const highlight = {
     height,
     page,
@@ -148,7 +159,10 @@ function normalizePdfAnnotations(annotations) {
   return annotations
     .map((annotation, index) => {
       const page = Math.max(1, Math.floor(Number(annotation?.page) || 1));
-      const type = annotation?.type === 'highlight' ? 'highlight' : 'note';
+      const rawType = String(annotation?.type || annotation?.kind || '').toLowerCase();
+      const type = rawType === 'result' || rawType === 'method' || rawType === 'limit' || rawType === 'note'
+        ? 'note'
+        : 'highlight';
       const label = String(annotation?.label || (type === 'highlight' ? 'Highlight' : 'Note')).trim();
       const text = String(annotation?.text || '').trim();
       const id = String(annotation?.id || `${type}-${page}-${index + 1}`).trim();
@@ -190,14 +204,9 @@ function applyPdfPageAnnotations(surface, pageNumber, annotations = activeAnnota
       return;
     }
 
-    const marker = document.createElement('div');
-    marker.className = `reading-pdf-annotation-marker is-${annotation.type}`;
-    marker.dataset.readingPdfAnnotationId = annotation.id;
-    marker.dataset.readingPdfAnnotationType = annotation.type;
-    marker.style.top = `${Math.min(86, 7 + index * 10)}%`;
-    marker.title = [annotation.label, annotation.text].filter(Boolean).join(': ');
-    marker.textContent = annotation.type === 'highlight' ? 'H' : 'N';
-    layer.appendChild(marker);
+    if (!annotation.sourceBounds) {
+      return;
+    }
   });
 
   if (pageAnnotations.length > 8) {
@@ -603,6 +612,6 @@ export async function hydrateReadingPdfSurface({ annotations = [], baseUrl, host
     }
 
     host.dataset.renderState = 'error';
-    setMessage(host, error instanceof Error ? error.message : String(error), 'is-error');
+    setMessage(host, userFacingPdfErrorMessage(error), 'is-error');
   }
 }

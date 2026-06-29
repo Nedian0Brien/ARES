@@ -86,6 +86,40 @@ function createHangingSpawn(onTaskStart = () => {}) {
   };
 }
 
+function createSuccessfulJsonSpawn(payload, calls = []) {
+  return function spawnImpl(_command, args, options = {}) {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.exitCode = null;
+    child.kill = () => {
+      child.exitCode = 0;
+      child.emit('close', 0, null);
+    };
+    calls.push({ args, options });
+
+    process.nextTick(() => {
+      if (args.includes('--version')) {
+        child.exitCode = 0;
+        child.emit('close', 0, null);
+        return;
+      }
+
+      child.stdout.write(`${JSON.stringify({
+        item: {
+          content: [{ text: JSON.stringify(payload) }],
+          type: 'agent_message',
+        },
+        type: 'item.completed.agent_message',
+      })}\n`);
+      child.exitCode = 0;
+      child.emit('close', 0, null);
+    });
+
+    return child;
+  };
+}
+
 function paperFixture(overrides = {}) {
   return {
     abstract: 'A paper about local inference serving.',
@@ -438,6 +472,182 @@ test('agent run context failures are errors rather than completed runs', async (
   assert.deepEqual(store.listProjectAssets('demo', 'reproChecklistItems'), []);
 });
 
+test('research agent runs create graph lab assets instead of legacy checklist assets', async () => {
+  const store = await createDemoStore();
+  const calls = [];
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createSuccessfulJsonSpawn({
+      experimentRuns: [
+        {
+          config: {
+            command: {
+              args: ['scripts/run_baseline.py'],
+              command: 'python',
+              expectedMetrics: ['accuracy'],
+            },
+          },
+          kind: 'baseline',
+          status: 'draft',
+          title: 'Baseline reproduction',
+        },
+      ],
+      outputSummary: 'Prepared a graph reproduction plan and baseline run.',
+      reproductionPlans: [
+        {
+          checklist: [{ detail: 'Verify dataset split', status: 'todo', title: 'Dataset split' }],
+          commands: ['python scripts/run_baseline.py'],
+          metrics: ['accuracy'],
+          status: 'draft',
+          title: 'Reproduce adaptive skipping',
+        },
+      ],
+      resultDossiers: [
+        {
+          comparisons: [{ metric: 'accuracy', target: 'paper value' }],
+          deltaSummary: 'Awaiting first run.',
+          status: 'draft',
+          title: 'Adaptive skipping result dossier',
+        },
+      ],
+    }, calls),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      handoffSource: 'reading',
+      paper: paperFixture({ paperId: 'paper-research-graph' }),
+    },
+    projectId: 'demo',
+    stage: 'research',
+  });
+  const finalRun = await waitForRun(store, run.id);
+  const runtimeCall = calls.find((call) => call.args.includes('exec'));
+  const plans = store.listProjectAssets('demo', 'reproductionPlans');
+  const runs = store.listProjectAssets('demo', 'experimentRuns');
+  const dossiers = store.listProjectAssets('demo', 'resultDossiers');
+
+  assert.equal(finalRun.status, 'done');
+  assert.deepEqual(finalRun.outputRef.map((entry) => entry.collection), [
+    'reproductionPlans',
+    'experimentRuns',
+    'resultDossiers',
+  ]);
+  assert.equal(plans.length, 1);
+  assert.equal(plans[0].title, 'Reproduce adaptive skipping');
+  assert.deepEqual(plans[0].commands, ['python scripts/run_baseline.py']);
+  assert.deepEqual(plans[0].agentRunIds, [run.id]);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].title, 'Baseline reproduction');
+  assert.equal(runs[0].reproductionPlanId, plans[0].id);
+  assert.equal(dossiers.length, 1);
+  assert.deepEqual(dossiers[0].experimentRunIds, [runs[0].id]);
+  assert.deepEqual(dossiers[0].agentRunIds, [run.id]);
+  assert.deepEqual(store.listProjectAssets('demo', 'reproChecklistItems'), []);
+  assert.match(runtimeCall.args.at(-1), /"reproductionPlans"/);
+  assert.match(runtimeCall.args.at(-1), /"commands"/);
+  assert.match(runtimeCall.args.at(-1), /"resultDossiers"/);
+});
+
+test('chat agent runs use a read-only runtime profile and keep answers derived', async () => {
+  const store = await createDemoStore();
+  const calls = [];
+  const service = createAgentRunService({
+    rootDir: '/workspace',
+    spawnImpl: createSuccessfulJsonSpawn({
+      answer: 'Use adaptive skipping when retriever confidence is high.',
+      citations: [{ evidenceLinkId: 'evidence-1', label: 'Adaptive skipping note', locator: { page: 4 }, quote: 'confidence gate' }],
+      outputSummary: 'Answered with one grounded citation.',
+    }, calls),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      messages: [{ role: 'user', text: 'When should we skip reranking?' }],
+      thread: { id: 'thread-1', title: 'Reranking strategy' },
+    },
+    projectId: 'demo',
+    stage: 'chat',
+  });
+  const finalRun = await waitForRun(store, run.id);
+  const runtimeCall = calls.find((call) => call.args.includes('exec'));
+
+  assert.equal(finalRun.stage, 'chat');
+  assert.equal(finalRun.taskKind, 'answer-agent-chat');
+  assert.equal(finalRun.profileId, 'chat');
+  assert.equal(finalRun.status, 'done');
+  assert.equal(finalRun.outputSummary, 'Answered with one grounded citation.');
+  assert.equal(finalRun.outputPayload.answer, 'Use adaptive skipping when retriever confidence is high.');
+  assert.deepEqual(finalRun.outputPayload.citations, [{ evidenceLinkId: 'evidence-1', label: 'Adaptive skipping note', locator: { page: 4 }, quote: 'confidence gate' }]);
+  assert.deepEqual(finalRun.outputRef, []);
+  assert.deepEqual(finalRun.createdAssetIds, []);
+  assert.deepEqual(store.listProjectAssets('demo', 'agentMessages'), []);
+  assert.ok(runtimeCall.args.includes('-s'));
+  assert.equal(runtimeCall.args[runtimeCall.args.indexOf('-s') + 1], 'read-only');
+  assert.match(runtimeCall.args.at(-1), /Return only JSON/i);
+  assert.match(runtimeCall.args.at(-1), /"citations"/);
+});
+
+test('chat agent runs include selected grounding candidates in the runtime prompt', async () => {
+  const store = await createDemoStore();
+  const calls = [];
+  const groundingCalls = [];
+  const service = createAgentRunService({
+    groundingScorer: {
+      async checkHealth() {
+        return { mode: 'test', ok: true, scorer: 'test-grounding' };
+      },
+      async score(context) {
+        groundingCalls.push(context);
+        return {
+          candidates: [
+            {
+              evidenceLinkId: 'evidence-1',
+              id: 'evidence-1',
+              label: 'Adaptive reranking note',
+              locator: { page: 4 },
+              quote: 'Adaptive reranking reduces latency.',
+              score: 4,
+              type: 'evidenceLink',
+            },
+          ],
+          mode: 'test',
+          ok: true,
+          scorer: 'test-grounding',
+        };
+      },
+    },
+    rootDir: '/workspace',
+    spawnImpl: createSuccessfulJsonSpawn({
+      answer: 'Adaptive reranking is supported by the selected evidence.',
+      citations: [{ evidenceLinkId: 'evidence-1', label: 'Adaptive reranking note', locator: { page: 4 } }],
+      outputSummary: 'Answered with selected grounding evidence.',
+    }, calls),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      messages: [{ role: 'user', text: 'What supports adaptive reranking?' }],
+      thread: { id: 'thread-grounding', title: 'Grounding test' },
+    },
+    projectId: 'demo',
+    stage: 'chat',
+  });
+  const finalRun = await waitForRun(store, run.id);
+  const runtimeCall = calls.find((call) => call.args.includes('exec'));
+
+  assert.equal(finalRun.status, 'done');
+  assert.equal(groundingCalls.length, 1);
+  assert.equal(groundingCalls[0].chatMessages.at(-1).text, 'What supports adaptive reranking?');
+  assert.deepEqual(await service.getGroundingHealth(), { mode: 'test', ok: true, scorer: 'test-grounding' });
+  assert.match(runtimeCall.args.at(-1), /Grounding:/);
+  assert.match(runtimeCall.args.at(-1), /"scorer": "test-grounding"/);
+  assert.match(runtimeCall.args.at(-1), /"evidenceLinkId": "evidence-1"/);
+});
+
 test('agent run service keeps canceled search runs from queueing late results', async () => {
   const store = await createDemoStore();
   let resolveSearch;
@@ -558,6 +768,90 @@ test('agent run worker processing aborts subprocess after durable cancel request
   assert.equal(finalRun.leaseExpiresAt, null);
   assert.equal(finalRun.heartbeatAt, null);
   assert.match(finalRun.error, /canceled by user/i);
+});
+
+test('agent run creation can queue work for durable lease workers without request-time execution', async () => {
+  const store = await createDemoStore();
+  const calls = [];
+  const service = createAgentRunService({
+    autoExecuteRuns: false,
+    rootDir: '/workspace',
+    spawnImpl: createSuccessfulJsonSpawn(
+      {
+        answer: 'Graph reproduction plans should stay linked to their experiment runs.',
+        citations: [],
+        outputSummary: 'Answered from project context.',
+      },
+      calls,
+    ),
+    store,
+  });
+
+  const run = await service.createRun({
+    input: {
+      question: 'How should graph lab assets be linked?',
+    },
+    projectId: 'demo',
+    stage: 'chat',
+  });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  assert.equal(store.getAgentRun(run.id).status, 'queue');
+  assert.equal(calls.length, 0);
+
+  const result = await service.processNextQueuedRun({
+    leaseMs: 30_000,
+    workerId: 'worker-durable',
+  });
+  const finalRun = store.getAgentRun(run.id);
+
+  assert.equal(result.run.status, 'done');
+  assert.equal(finalRun.status, 'done');
+  assert.equal(finalRun.leaseOwner, '');
+  assert.equal(finalRun.leaseExpiresAt, null);
+  assert.equal(finalRun.outputPayload.answer, 'Graph reproduction plans should stay linked to their experiment runs.');
+  assert.equal(calls.length, 1);
+});
+
+test('agent run service worker loop drains queued runs through durable leases', async () => {
+  const store = await createDemoStore();
+  const calls = [];
+  const service = createAgentRunService({
+    autoExecuteRuns: false,
+    rootDir: '/workspace',
+    spawnImpl: createSuccessfulJsonSpawn(
+      {
+        answer: 'Queued agent work is processed by the durable lease worker.',
+        citations: [],
+        outputSummary: 'Answered from project context.',
+      },
+      calls,
+    ),
+    store,
+  });
+  const worker = service.startWorkerLoop({
+    idleMs: 5,
+    leaseMs: 30_000,
+    workerId: 'worker-loop',
+  });
+
+  try {
+    const run = await service.createRun({
+      input: {
+        question: 'Who executes queued agent runs?',
+      },
+      projectId: 'demo',
+      stage: 'chat',
+    });
+    const finalRun = await waitForRun(store, run.id);
+
+    assert.equal(finalRun.status, 'done');
+    assert.equal(finalRun.leaseOwner, '');
+    assert.equal(finalRun.outputPayload.answer, 'Queued agent work is processed by the durable lease worker.');
+    assert.equal(calls.length, 1);
+  } finally {
+    worker.stop();
+  }
 });
 
 test('search agent run reports an error when Scout service is unavailable', async () => {

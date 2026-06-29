@@ -149,6 +149,7 @@ test('GET reading sessions normalizes legacy note and highlight shapes', async (
         notes: [{ label: 'note', value: 'Legacy note body' }],
         paperId: 'legacy-paper',
         projectId: 'demo',
+        sections: [{ active: true, id: 'method', label: '3. Method', status: 'done' }],
         status: 'todo',
         summary: 'Legacy summary',
         title: 'Legacy Reading Session',
@@ -172,6 +173,158 @@ test('GET reading sessions normalizes legacy note and highlight shapes', async (
   assert.equal(session.summaryStatus, 'idle');
   assert.equal(session.notes[0].body, 'Legacy note body');
   assert.equal(session.highlights[0].quote, 'Legacy highlight text');
+  assert.equal(session.sections[0].active, true);
+});
+
+test('project library routes filter and patch shelf metadata without synthetic rows', async (t) => {
+  const dataRootDir = await createDataRoot({
+    library: [
+      {
+        ...buildDemoPaper(),
+        collectionIds: ['c-rerank'],
+        flag: false,
+        readingProgress: 35,
+        tags: ['reranking', 'latency'],
+      },
+      {
+        ...buildDemoPaper(),
+        paperId: 'benchmark-paper',
+        title: 'Benchmark Protocols for RAG',
+        collectionIds: ['c-eval'],
+        readingProgress: 100,
+        tags: ['evaluation'],
+      },
+    ],
+  });
+  const server = await startServer(dataRootDir);
+  t.after(async () => {
+    await server.close();
+  });
+
+  const filteredResponse = await fetch(
+    new URL('/api/projects/demo/library?shelf=reading&collection=c-rerank&tag=reranking&q=adaptive', server.url),
+  );
+  const filtered = await filteredResponse.json();
+  assert.equal(filteredResponse.status, 200);
+  assert.deepEqual(
+    filtered.results.map((paper) => paper.paperId),
+    ['demo-paper'],
+  );
+
+  const patchResponse = await fetch(new URL('/api/projects/demo/library/demo-paper', server.url), {
+    body: JSON.stringify({
+      collectionIds: ['c-eval'],
+      flag: true,
+      shelf: 'done',
+      tags: ['reviewed'],
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'PATCH',
+  });
+  const patched = await patchResponse.json();
+  assert.equal(patchResponse.status, 200);
+  assert.equal(patched.paper.flag, true);
+  assert.equal(patched.paper.shelf, 'done');
+  assert.equal(patched.paper.readingProgress, 100);
+  assert.deepEqual(patched.paper.collectionIds, ['c-eval']);
+  assert.deepEqual(patched.paper.tags, ['reviewed']);
+
+  const flaggedResponse = await fetch(new URL('/api/projects/demo/library?shelf=flag&tag=reviewed', server.url));
+  const flagged = await flaggedResponse.json();
+  assert.equal(flaggedResponse.status, 200);
+  assert.deepEqual(
+    flagged.results.map((paper) => paper.paperId),
+    ['demo-paper'],
+  );
+});
+
+test('project library route preserves caller supplied library timestamps', async (t) => {
+  const dataRootDir = await createDataRoot();
+  const server = await startServer(dataRootDir);
+  t.after(async () => {
+    await server.close();
+  });
+
+  const savedAt = '2026-06-27T00:00:00.000Z';
+  const updatedAt = '2026-06-24T00:00:00.000Z';
+  const saveResponse = await fetch(new URL('/api/projects/demo/library', server.url), {
+    body: JSON.stringify({
+      paper: {
+        ...buildDemoPaper(),
+        savedAt,
+        updatedAt,
+      },
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  const saved = await saveResponse.json();
+
+  assert.equal(saveResponse.status, 200);
+  assert.equal(saved.paper.savedAt, savedAt);
+  assert.equal(saved.paper.updatedAt, updatedAt);
+
+  const libraryResponse = await fetch(new URL('/api/projects/demo/library', server.url));
+  const library = await libraryResponse.json();
+  assert.equal(libraryResponse.status, 200);
+  assert.equal(library.results[0].savedAt, savedAt);
+  assert.equal(library.results[0].updatedAt, updatedAt);
+});
+
+test('project library route includes user note counts from reading sessions', async (t) => {
+  const dataRootDir = await createDataRoot({
+    library: [
+      {
+        ...buildDemoPaper(),
+        collectionIds: ['c-rerank'],
+        readingProgress: 35,
+        tags: ['reranking'],
+      },
+    ],
+    readingSessions: [
+      {
+        id: 'reading-demo-notes',
+        notes: [
+          { body: 'First note', id: 'note-1', kind: 'claim' },
+          { body: 'Second note', id: 'note-2', kind: 'limit' },
+        ],
+        paperId: 'demo-paper',
+        projectId: 'demo',
+        status: 'done',
+        title: 'Adaptive Skipping for Efficient Reranking',
+      },
+      {
+        id: 'reading-other-project',
+        notes: [{ body: 'Should not count', id: 'note-3' }],
+        paperId: 'demo-paper',
+        projectId: 'other-project',
+        status: 'done',
+        title: 'Other Project Paper',
+      },
+      {
+        id: 'reading-other-paper',
+        notes: [{ body: 'Should not count either', id: 'note-4' }],
+        paperId: 'other-paper',
+        projectId: 'demo',
+        status: 'done',
+        title: 'Other Paper',
+      },
+    ],
+  });
+  const server = await startServer(dataRootDir);
+  t.after(async () => {
+    await server.close();
+  });
+
+  const response = await fetch(new URL('/api/projects/demo/library', server.url));
+  const payload = await response.json();
+  const paper = payload.results.find((entry) => entry.paperId === 'demo-paper');
+
+  assert.equal(response.status, 200);
+  assert.ok(paper);
+  assert.equal(paper.noteCount, 2);
+  assert.equal(paper.notes.length, 2);
+  assert.deepEqual(paper.notes.map((note) => note.id), ['note-1', 'note-2']);
 });
 
 test('reading routes deliver binary PDF, enforce summarize prerequisite, and parse successfully', async (t) => {
@@ -182,12 +335,20 @@ test('reading routes deliver binary PDF, enforce summarize prerequisite, and par
   });
 
   const createResponse = await fetch(new URL('/api/projects/demo/reading-sessions', server.url), {
-    body: JSON.stringify({ paper: buildDemoPaper() }),
+    body: JSON.stringify({
+      display: { labMeta: "Kim · ACL '24", labOrder: 1, labTitle: 'Adaptive Skipping' },
+      paper: buildDemoPaper(),
+    }),
     headers: { 'content-type': 'application/json' },
     method: 'POST',
   });
   const created = await createResponse.json();
   const sessionId = created.readingSession.id;
+  assert.deepEqual(created.readingSession.display, {
+    labMeta: "Kim · ACL '24",
+    labOrder: 1,
+    labTitle: 'Adaptive Skipping',
+  });
 
   const summarizeResponse = await fetch(new URL(`/api/reading-sessions/${sessionId}/summarize`, server.url), {
     body: JSON.stringify({}),

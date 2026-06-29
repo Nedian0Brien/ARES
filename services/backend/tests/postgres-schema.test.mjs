@@ -5,6 +5,27 @@ import path from 'node:path';
 
 import { POSTGRES_MIGRATIONS } from '../lib/postgres-store.mjs';
 
+function normalizeSql(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+test('postgres initial schema migration is registered and mirrored by SQL snapshot', async () => {
+  const initialMigration = POSTGRES_MIGRATIONS.find((migration) => migration.id === '001_initial_schema');
+  assert.ok(initialMigration, '001_initial_schema migration must be registered');
+  assert.ok(Array.isArray(initialMigration.statements), '001_initial_schema migration must expose SQL statements');
+
+  const sql = await fs.readFile(path.join(process.cwd(), 'migrations', '001_initial_schema.sql'), 'utf8');
+  const normalizedSql = normalizeSql(sql);
+  const statements = initialMigration.statements.map((statement) => normalizeSql(statement));
+
+  assert.ok(statements.some((statement) => statement.includes('CREATE TABLE IF NOT EXISTS ares_users')));
+  assert.ok(statements.some((statement) => statement.includes('CREATE TABLE IF NOT EXISTS ares_project_assets')));
+  assert.ok(statements.some((statement) => statement.includes('CREATE INDEX IF NOT EXISTS ares_agent_runs_claim_idx')));
+  for (const statement of statements) {
+    assert.ok(normalizedSql.includes(statement), `SQL snapshot is missing: ${statement}`);
+  }
+});
+
 test('postgres lookup index migration is registered and mirrored by SQL snapshot', async () => {
   const lookupMigration = POSTGRES_MIGRATIONS.find((migration) => migration.id === '002_lookup_indexes');
   assert.ok(lookupMigration, '002_lookup_indexes migration must be registered');

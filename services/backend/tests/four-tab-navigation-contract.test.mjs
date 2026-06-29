@@ -71,6 +71,21 @@ test('legacy stage ids and new tab ids normalize to compatible stage routes', as
   assert.match(routerModule, /results:\s*"result"/);
 });
 
+test('React hash router maps legacy six-stage links to the v1 four-tab shell', async () => {
+  const routerModule = await readProjectFile('web/src/router/hashRouter.js');
+
+  assert.match(routerModule, /search:\s*'reading'/);
+  assert.match(routerModule, /reading:\s*'reading'/);
+  assert.match(routerModule, /research:\s*'lab'/);
+  assert.match(routerModule, /result:\s*'lab'/);
+  assert.match(routerModule, /insight:\s*'wiki'/);
+  assert.match(routerModule, /writing:\s*'agent'/);
+  assert.match(routerModule, /DEFAULT_PROJECT_ID\s*=\s*'rag-reranker'/);
+  assert.match(routerModule, /projectId\s*=\s*projectIndex >= 0 \? parts\[projectIndex\] \|\| DEFAULT_PROJECT_ID : DEFAULT_PROJECT_ID/);
+  assert.match(routerModule, /sessionId:\s*isReadingSession/);
+  assert.match(routerModule, /docTab/);
+});
+
 test('desktop and mobile workflow chrome render the four tabs instead of raw stages', async () => {
   const appJs = await readProjectFile('web/app.js');
 

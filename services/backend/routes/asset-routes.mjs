@@ -1,5 +1,7 @@
 const PROJECT_ASSET_PATHS = {
   'activity-events': 'activityEvents',
+  'agent-messages': 'agentMessages',
+  'agent-threads': 'agentThreads',
   'comment-threads': 'commentThreads',
   'draft-sections': 'draftSections',
   drafts: 'drafts',
@@ -16,6 +18,8 @@ const PROJECT_ASSET_PATHS = {
   'result-dossiers': 'resultDossiers',
   'result-comparisons': 'resultComparisons',
   'writing-drafts': 'writingDrafts',
+  'wiki-folders': 'wikiFolders',
+  'wiki-pages': 'wikiPages',
 };
 
 function parseProjectAssetRoute(requestPath) {
@@ -102,6 +106,25 @@ export function createAssetRoutes({ json, parseProjectRoute, requireProjectAcces
         });
 
         json(response, 201, {
+          asset,
+        });
+        return true;
+      }
+    }
+
+    if (request.method === 'GET' && /^\/api\/projects\/[^/]+\/[a-z-]+\/[^/]+$/.test(requestPath)) {
+      const assetRoute = parseProjectAssetItemRoute(requestPath);
+      if (assetRoute && assetRoute.collection !== 'readingSessions') {
+        if (!requireProjectAccess(request, response, assetRoute.projectId, 'read')) {
+          return true;
+        }
+        const asset = store.getProjectAsset(assetRoute.collection, assetRoute.id);
+        if (!asset || asset.projectId !== assetRoute.projectId) {
+          sendError(response, new Error('Asset not found.'), 404);
+          return true;
+        }
+
+        json(response, 200, {
           asset,
         });
         return true;

@@ -266,7 +266,9 @@ export function createReadingRoutes({
         return true;
       }
 
+      const display = body.display && typeof body.display === 'object' && !Array.isArray(body.display) ? body.display : null;
       const session = await readingService.createSession({
+        display,
         paper,
         projectId,
         runId: String(body.runId || '').trim(),

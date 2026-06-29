@@ -319,7 +319,10 @@ export function createLabRunnerAdapter({ rootDir, spawnImpl = spawn } = {}) {
       return new Promise((resolve) => {
         const child = spawnImpl(command.command, command.args, {
           cwd,
-          env: command.env,
+          env: {
+            PATH: process.env.PATH || '',
+            ...command.env,
+          },
           stdio: ['ignore', 'pipe', 'pipe'],
         });
         let stdout = '';

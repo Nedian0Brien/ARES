@@ -196,11 +196,13 @@ function normaliseSection(entry, index = 0) {
   const label = ensureTrimmedString(entry.label, `Section ${index + 1}`);
   const id = ensureTrimmedString(entry.id, label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
   return {
+    active: ensureBoolean(entry.active, false),
     id: id || `section-${index + 1}`,
     label,
     order: ensureNumber(entry.order, index),
     pageEnd: entry.pageEnd === undefined || entry.pageEnd === null ? null : Math.max(1, ensureNumber(entry.pageEnd, index + 1)),
     pageStart: entry.pageStart === undefined || entry.pageStart === null ? null : Math.max(1, ensureNumber(entry.pageStart, index + 1)),
+    selectionWordCount: Math.max(0, ensureNumber(entry.selectionWordCount || entry.wordCount, 0)),
     status: normaliseSessionStatus(entry.status, 'done'),
     summary: ensureTrimmedString(entry.summary, ''),
   };
@@ -224,6 +226,7 @@ function normaliseHighlight(entry, index = 0) {
     quote: clipText(entry.quote || text, 900),
     sectionId: ensureTrimmedString(entry.sectionId || entry.section, ''),
     selectionMethod: ensureTrimmedString(entry.selectionMethod, ''),
+    sourceBounds: normaliseSourceBounds(entry.sourceBounds, page),
     text,
     type: ensureTrimmedString(entry.type || entry.kind, 'claim').toLowerCase(),
   };
@@ -485,12 +488,17 @@ export function deriveReadingSessionStatus(input = {}) {
 
 export function buildReadingSessionSeed(projectId, paper, extras = {}) {
   const timestamp = extras.createdAt || nowIso();
+  const display =
+    extras.display && typeof extras.display === 'object' && !Array.isArray(extras.display)
+      ? extras.display
+      : paper.display || {};
   return normaliseReadingSession(
     {
       abstract: paper.abstract || '',
       authors: paper.authors || [],
       citedByCount: Number(paper.citedByCount) || 0,
       createdAt: timestamp,
+      display,
       keyPoints: paper.keyPoints || [],
       keywords: paper.keywords || [],
       matchedKeywords: paper.matchedKeywords || [],
@@ -552,6 +560,11 @@ export function normaliseReadingSession(input = {}, { existing } = {}) {
     citedByCount:
       input.citedByCount === undefined ? ensureNumber(previous.citedByCount, 0) : ensureNumber(input.citedByCount, 0),
     createdAt,
+    display: input.display && typeof input.display === 'object' && !Array.isArray(input.display)
+      ? clone(input.display)
+      : previous.display && typeof previous.display === 'object' && !Array.isArray(previous.display)
+        ? clone(previous.display)
+        : {},
     error: ensureTrimmedString(input.error, previous.error || ''),
     evidenceCoverage: normaliseEvidenceCoverage(
       input.evidenceCoverage !== undefined ? input.evidenceCoverage : null,

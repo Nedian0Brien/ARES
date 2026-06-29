@@ -71,6 +71,7 @@ test('lab runner executes a low-risk fixture command inside the workspace bounda
     options: {
       cwd: '/workspace/fixtures/repro',
       env: {
+        PATH: process.env.PATH || '',
         PYTHONHASHSEED: '0',
       },
       stdio: ['ignore', 'pipe', 'pipe'],

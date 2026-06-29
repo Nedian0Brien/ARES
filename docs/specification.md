@@ -4,6 +4,8 @@ Agentic Research Experimentation System
 
 프로토타입 기준 정렬 버전
 
+> **⚠️ 디자인 기준 갱신 (2026-06-29)** — 이 문서가 source of truth로 삼는 `design/ARES Prototype.html` 및 4탭 그룹핑(`Search+Reading / Research+Result / Insight / Writing`)은 **확정 디자인으로 대체됐다.** 현행 상위 4탭은 **Reading / Lab / Wiki / Agent**이며, 단일 진실 소스는 [`design/DESIGN.md`](../design/DESIGN.md) (canonical: `design/ARES Papers Workspace.html`)다. 매핑: Search+Reading→**Reading**, Research+Result→**Lab**(프로젝트/실험), Insight→**Wiki**(지식 지도), Writing/Agent 보조→**Agent**(근거 기반 파트너). 본 명세의 기능 항목은 유효하나, 탭 구조·화면 기준은 DESIGN.md를 우선한다.
+
 ## 1. 문서 목적
 
 이 문서는 `design/ARES Prototype.html`에 구현된 현재 프로토타입을 기준으로 ARES의 기능 명세를 정리한 문서다.

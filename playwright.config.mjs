@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const baseURL = process.env.ARES_E2E_BASE_URL || 'http://127.0.0.1:3110';
-const e2eDataRoot = process.env.ARES_E2E_DATA_ROOT || '.runtime/e2e';
+const e2eDataRoot = process.env.ARES_E2E_DATA_ROOT || `.runtime/e2e-${process.pid}`;
 
 export default defineConfig({
   expect: {
@@ -17,7 +17,7 @@ export default defineConfig({
   webServer: process.env.ARES_E2E_BASE_URL
     ? undefined
     : {
-        command: `mkdir -p ${e2eDataRoot}/data && cp data/store.seed.json ${e2eDataRoot}/data/store.seed.json && HOST=127.0.0.1 PORT=3110 ARES_DATA_ROOT_DIR=${e2eDataRoot} ARES_ENABLE_DEMO_PDF=true node services/backend/index.mjs`,
+        command: `mkdir -p ${e2eDataRoot}/data && cp data/store.seed.json ${e2eDataRoot}/data/store.seed.json && HOST=127.0.0.1 PORT=3110 ARES_DATA_ROOT_DIR=${e2eDataRoot} ARES_ENABLE_DEMO_PDF=true ARES_AGENT_CHAT_AUTOGENERATE=false node services/backend/index.mjs`,
         reuseExistingServer: !process.env.CI,
         timeout: 20000,
         url: `${baseURL}/api/health`,

@@ -1,0 +1,166 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, '..', '..', '..');
+
+async function readProjectFile(relativePath) {
+  return readFile(path.join(rootDir, relativePath), 'utf8');
+}
+
+test('React Reading library reads the server project library before rendering library rows', async () => {
+  const source = await readProjectFile('web/src/tabs/reading/ReadingTab.jsx');
+
+  assert.match(source, /api\(`api\/projects\/\$\{encodeURIComponent\(projectId\)\}\/library`\)/);
+  assert.match(source, /normaliseLibraryPaper/);
+  assert.match(source, /function formatLibraryDate\(value, now = Date\.now\(\)\)/);
+  assert.match(source, /Intl\.RelativeTimeFormat\('ko'/);
+  assert.doesNotMatch(source, /return new Date\(time\)\.toLocaleDateString\(\);/);
+  assert.match(source, /paper\?\.collectionIds/);
+  assert.match(source, /paper\?\.flag/);
+  assert.match(source, /paper\?\.tags/);
+  assert.match(source, /paper\?\.readingProgress/);
+  assert.match(source, /type="file"/);
+  assert.match(source, /accept="application\/pdf,\.\pdf"/);
+  assert.match(source, /reading-sessions\/upload/);
+  assert.match(source, /libraryShelfCount/);
+  assert.match(source, /const collectionCount = useMemo/);
+  assert.match(source, /\$\{collectionCount\} 컬렉션/);
+  assert.match(source, /function buildLibraryQuery/);
+  assert.match(source, /new URLSearchParams/);
+  assert.match(source, /api\(`api\/projects\/\$\{encodeURIComponent\(projectId\)\}\/library\$\{libraryQuery\}`\)/);
+  assert.match(source, /data-library-query=\{buildLibraryQuery\(filters\)\}/);
+  assert.match(source, /aria-label="라이브러리 검색"/);
+  assert.match(source, /aria-label="라이브러리 정렬"/);
+  assert.match(source, /<ReadingPanel library=\{panelLibrary\} notes=\{panelNotes\}/);
+  assert.match(source, /buildPanelOutline\(session\)/);
+  assert.match(source, /buildPanelNotes\(session\)/);
+  assert.match(source, /panelOutlineProgress\(panelOutline, paper, session\)/);
+  assert.match(source, /function sessionAsPaper\(session, index = 0\)/);
+  assert.match(source, /const routeSession = readingSessions\.find\(\(entry\) => entry\.id === routeSessionId\) \|\| null/);
+  assert.match(source, /const paper = selectedPaper \|\| sessionPaper \|\| paperSource\[0\]/);
+  assert.match(source, /if \(routeSession\?\.paperId && paperId !== routeSession\.paperId\)/);
+  assert.match(source, /if \(!paperId && !routeSessionId && paperSource\[0\]\)/);
+  assert.match(source, /<DocumentHeader pageCount=\{session\?\.pageCount\} pdfUrl=\{sessionPdfUrl\}/);
+  assert.match(source, /const pageLabel = Number\.isFinite\(Number\(pageCount\)\)/);
+  assert.doesNotMatch(source, />14p</);
+  assert.doesNotMatch(source, /aria-label="Add reading item"/);
+  assert.doesNotMatch(source, /하이라이트가 추가되었습니다/);
+  assert.doesNotMatch(source, /메모 패널을 열었습니다/);
+  assert.doesNotMatch(source, /노트 링크 선택기/);
+  assert.doesNotMatch(source, /컨텍스트 추가/);
+  assert.doesNotMatch(source, /> 현재 섹션</);
+  assert.doesNotMatch(source, />Ask AI</);
+  assert.doesNotMatch(source, />Send to Lab</);
+  assert.doesNotMatch(source, />Category</);
+  assert.doesNotMatch(source, />Sort</);
+  assert.doesNotMatch(source, /server-backed/);
+  assert.doesNotMatch(source, />syncing</);
+  assert.match(source, /\+ 새 컬렉션/);
+  assert.match(source, /onCreateCollection=\{openCollectionModal\}/);
+  assert.match(source, /const createCollection = async \(event\) =>/);
+  assert.match(source, /api\(`api\/projects\/\$\{encodeURIComponent\(projectId\)\}\/library\/\$\{encodeURIComponent\(targetPaper\.id\)\}`/);
+  assert.match(source, /body: \{ collectionIds \}/);
+  assert.match(source, /aria-label="라이브러리 내보내기"/);
+  assert.match(source, /const showLibraryMore = \(\) =>/);
+  assert.match(source, /library-action-menu/);
+  assert.match(source, /resetLibraryFilters/);
+  assert.doesNotMatch(source, /LIBRARY\.map/);
+  assert.doesNotMatch(source, /OUTLINE\.map/);
+  assert.doesNotMatch(source, /NOTES\.map/);
+});
+
+test('React Reading reader hydrates the real session PDF through the existing PDF controller', async () => {
+  const source = await readProjectFile('web/src/tabs/reading/ReadingTab.jsx');
+
+  assert.match(source, /hydrateReadingPdfSurface/);
+  assert.match(source, /resetReadingPdfSurface/);
+  assert.match(source, /appUrl/);
+  assert.match(source, /route\?\.reading\?\.sessionId/);
+  assert.match(source, /api\/projects\/\$\{encodeURIComponent\(projectId\)\}\/reading-sessions/);
+  assert.match(source, /api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/pdf/);
+  assert.match(source, /data-reading-pdf-host="true"/);
+  assert.doesNotMatch(source, /<h1>Reducing Reranker Costs/);
+});
+
+test('React Reading workbench renders session data instead of mock chat, notes, and assets', async () => {
+  const source = await readProjectFile('web/src/tabs/reading/ReadingTab.jsx');
+
+  assert.match(source, /chatMessages: Array\.isArray\(session\?\.chatMessages\)/);
+  assert.match(source, /assets: Array\.isArray\(session\?\.assets\)/);
+  assert.match(source, /summaryCards: session\?\.summaryCards/);
+  assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/summarize`/);
+  assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/chat`/);
+  assert.match(source, /<ChatView actionStatus=\{readingAction\.status\} onSend=\{sendReadingChat\} session=\{session\}\/>/);
+  assert.match(source, /api\(`api\/projects\/\$\{encodeURIComponent\(projectId\)\}\/wiki`/);
+  assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/notes`/);
+  assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/notes\/\$\{encodeURIComponent\(noteId\)\}`/);
+  assert.match(source, /method: 'PATCH'/);
+  assert.match(source, /method: 'DELETE'/);
+  assert.match(source, /sourceType: 'readingNote'/);
+  assert.match(source, /readingSessionId: session\.id/);
+  assert.match(source, /noteId: note\.id/);
+  assert.match(source, /Wiki에 저장했습니다\./);
+  assert.match(source, /<NotesView onRefresh=\{\(\) => setLibraryRefresh/);
+  assert.match(source, /<AssetsView onRefresh=\{\(\) => setLibraryRefresh/);
+  assert.match(source, /onSourceJump=\{jumpToAssetSource\} session=\{session\}\/>/);
+  assert.match(source, /function assetSourceHighlight\(asset\)/);
+  assert.match(source, /sourceHighlight=\{assetSource\}/);
+  assert.match(source, /targetPage=\{assetSource\?\.page \|\| 1\}/);
+  assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/extract-assets`/);
+  assert.match(source, /Refresh assets/);
+  assert.match(source, /Assets updated\./);
+  assert.match(source, /mobileWorkbenchOpen/);
+  assert.match(source, /openMobileWorkbench/);
+  assert.match(source, /className="main reading-main"/);
+  assert.match(source, /metabar reading-reader-metabar/);
+  assert.match(source, /split reading-split/);
+  assert.match(source, /reading-doc-pane/);
+  assert.match(source, /reading-workbench-pane/);
+  assert.match(source, /mobile-wb-actions/);
+  assert.match(source, /Close workbench/);
+  assert.match(source, /aria-pressed=\{tab === 'summary'\}/);
+  assert.match(source, /aria-pressed=\{tab === 'pdf'\}/);
+  assert.match(source, /aria-pressed=\{tab === t\.id\}/);
+  assert.match(source, /aria-label="Download reading document"/);
+  assert.match(source, /aria-label="Collapse workbench"/);
+  assert.doesNotMatch(source, /aria-label="New workbench item"/);
+  assert.doesNotMatch(source, /<Icon name="share" size=\{14\}/);
+  assert.doesNotMatch(source, /reading-reader-metabar[\s\S]*<Icon name="moreH" size=\{14\}/);
+  assert.match(source, /type="button"/);
+  assert.match(source, /assetFileUrl\(selected, 'thumb'\)/);
+  assert.match(source, /assetFileUrl\(selected, 'data'\)/);
+  assert.match(source, /function AssetFileAction\(\{ available, children, href, icon \}\)/);
+  assert.match(source, /<button className="btn-s" disabled type="button">/);
+  assert.match(source, /if \(bounds\?\.unit !== 'page-ratio'\) \{\s*return null;\s*\}/);
+  assert.doesNotMatch(source, /height: 0\.12, page, unit: 'page-ratio', width: 0\.84, x: 0\.08, y: 0\.08/);
+  assert.doesNotMatch(source, /aria-disabled=\{!selected\.thumbPath\}/);
+  assert.doesNotMatch(source, /aria-disabled=\{!selected\.dataPath\}/);
+  assert.match(source, /Copy citation/);
+  assert.match(source, /Go to source page/);
+  assert.match(source, /navigator\.clipboard\?\.writeText/);
+  assert.doesNotMatch(source, /MESSAGES\.map/);
+  assert.doesNotMatch(source, /ASSETS\.filter/);
+});
+
+test('React Reading workbench uses a mobile detail panel instead of the desktop split', async () => {
+  const styles = await readProjectFile('web/src/styles/tokens.css');
+  const e2e = await readProjectFile('tests/e2e/workspace-smoke.spec.mjs');
+
+  assert.match(styles, /@media \(max-width:860px\)[\s\S]*\.reading-main > \.float-panel \{ display:none; \}/);
+  assert.match(styles, /\.pane-tab[\s\S]*border:none/);
+  assert.match(styles, /\.pane-tab[\s\S]*font-family:inherit/);
+  assert.match(styles, /\.reading-workbench-pane \{ display:none; \}/);
+  assert.match(styles, /\.reading-workbench-pane\.mobile-open[\s\S]*position:fixed/);
+  assert.match(styles, /\.mobile-wb-actions[\s\S]*min-height:44px/);
+  assert.match(styles, /\.reading-reader-metabar \.meta-actions[\s\S]*display:none/);
+  assert.match(styles, /\.reading-doc-pane \.orient-group \{ display:none; \}/);
+  assert.match(styles, /\.reading-main \.wb-strip \{ display:none; \}/);
+  assert.match(e2e, /\{ width: 320, height: 568 \}/);
+  assert.match(e2e, /\{ width: 375, height: 667 \}/);
+  assert.match(e2e, /\{ width: 768, height: 1024 \}/);
+  assert.match(e2e, /\{ width: 860, height: 900 \}/);
+});

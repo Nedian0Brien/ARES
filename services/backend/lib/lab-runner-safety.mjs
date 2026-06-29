@@ -3,6 +3,7 @@ const MAX_TIMEOUT_MS = 600_000;
 const ALLOWED_COMMANDS = new Set(['bash', 'node', 'npm', 'python', 'python3', 'uv']);
 const DESTRUCTIVE_COMMANDS = new Set(['dd', 'mkfs', 'rm', 'shred']);
 const SECRET_KEY_PATTERN = /(api[_-]?key|auth|credential|password|secret|token)/i;
+const SHELL_CONTROL_PATTERN = /[;&|<>`]|[$]\(/;
 
 function ensureText(value, fallback = '') {
   if (value === null || value === undefined) {
@@ -42,6 +43,74 @@ function normalizeRunnerEnv(env = {}) {
   }
 
   return next;
+}
+
+function tokenizeCommandString(value) {
+  const text = ensureText(value);
+  const tokens = [];
+  let current = '';
+  let quote = '';
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '\\') {
+      index += 1;
+      current += text[index] || '';
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = '';
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (quote) {
+    throw new Error('Reproduction command has an unterminated quote.');
+  }
+  if (current) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
+export function parseReproductionCommandString(value = '') {
+  const text = ensureText(value);
+  if (!text) {
+    throw new Error('Reproduction command string is required.');
+  }
+  if (SHELL_CONTROL_PATTERN.test(text)) {
+    throw new Error('Reproduction command strings cannot include shell control syntax.');
+  }
+
+  const [command, ...args] = tokenizeCommandString(text);
+  if (!command) {
+    throw new Error('Reproduction command string is required.');
+  }
+  if (command === 'bash' && args.some((arg) => arg === '-c' || arg === '-lc')) {
+    throw new Error('Reproduction command strings cannot require shell execution.');
+  }
+
+  return {
+    args,
+    command,
+    cwd: '.',
+  };
 }
 
 export function normalizeReproductionCommand(input = {}) {

@@ -1,5 +1,15 @@
 # Product Design QA
 
+> **NOTE (2026-06-29)** — 이 QA는 초기 단일 리더 목업(`papers-workspace-high-fidelity.html`, 현재 `web/brainstorm/archive/`)에 대한 기록이다. **현행 디자인 기준은 [`design/DESIGN.md`](design/DESIGN.md)** 이며, canonical 파일은 `design/ARES Papers Workspace.html`, 기준 스크린샷은 `design/screenshots/ref-*.png` 이다.
+
+canonical design reference: `design/ARES Papers Workspace.html` (+ `design/DESIGN.md`)
+
+baseline screenshots: `design/screenshots/ref-{reading-library,reading-reader,lab-projects,lab-board,lab-workspace,wiki,agent}.png`
+
+---
+
+## (이전 패스 기록)
+
 source visual truth path: `design/screenshots/reading-home-v1-desktop.png` plus `design/ARES Design System.html`
 
 implementation screenshot path: `test-results/papers-workspace-high-fidelity-desktop.png`

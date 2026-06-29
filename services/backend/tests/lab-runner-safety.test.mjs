@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   assessRunnerCommandRisk,
   normalizeReproductionCommand,
+  parseReproductionCommandString,
 } from '../lib/lab-runner-safety.mjs';
 
 test('normalizes reproduction command into a typed runner contract', () => {
@@ -70,4 +71,22 @@ test('allows low-risk fixture commands without human approval', () => {
   assert.equal(risk.requiresApproval, false);
   assert.equal(risk.allowedToRun, true);
   assert.deepEqual(risk.categories, []);
+});
+
+test('parses reproduction plan command strings without invoking a shell', () => {
+  assert.deepEqual(parseReproductionCommandString('python scripts/run_baseline.py --dataset fixtures/tiny.jsonl'), {
+    args: ['scripts/run_baseline.py', '--dataset', 'fixtures/tiny.jsonl'],
+    command: 'python',
+    cwd: '.',
+  });
+  assert.deepEqual(parseReproductionCommandString('node -e "console.log(\\"accuracy: 0.95\\")"'), {
+    args: ['-e', 'console.log("accuracy: 0.95")'],
+    command: 'node',
+    cwd: '.',
+  });
+});
+
+test('rejects reproduction plan command strings that require shell interpretation', () => {
+  assert.throws(() => parseReproductionCommandString('python eval.py && rm -rf data'), /shell control/i);
+  assert.throws(() => parseReproductionCommandString('bash -lc "python eval.py"'), /shell execution/i);
 });

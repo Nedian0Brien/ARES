@@ -4,10 +4,12 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs, watch as watchDirectory } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { createAgentGroundingScorer } from './lib/agent-grounding-scorer.mjs';
 import { createAgentRunService } from './lib/agent-runs.mjs';
 import { createAuthService } from './lib/auth.mjs';
 import { contentTypeForPath } from './lib/content-types.mjs';
 import { createLogger } from './lib/logger.mjs';
+import { filterLibraryPapers, normaliseLibraryPatch } from './lib/library-model.mjs';
 import { normalizeRequestPath } from './lib/path-utils.mjs';
 import { createReadingService } from './lib/reading-service.mjs';
 import { createScoutSearchService } from './lib/scout-search.mjs';
@@ -15,12 +17,16 @@ import { parseSearchPayload, parseSearchQuery, sanitisePaperRecord } from './lib
 import { createStore } from './lib/store.mjs';
 import { normaliseVenueLabel } from './lib/search-utils.mjs';
 import { createAssetRoutes } from './routes/asset-routes.mjs';
+import { createAgentChatRoutes } from './routes/agent-chat-routes.mjs';
+import { createLabRoutes } from './routes/lab-routes.mjs';
 import { createReadingRoutes } from './routes/reading-routes.mjs';
+import { createWikiRoutes } from './routes/wiki-routes.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
 const DATA_ROOT_DIR = path.resolve(process.env.ARES_DATA_ROOT_DIR || ROOT_DIR);
 const WEB_DIR = path.join(ROOT_DIR, 'web');
+const WEB_DIST_DIR = path.join(WEB_DIR, 'dist');
 const SEED_FILE = path.join(DATA_ROOT_DIR, 'data', 'store.seed.json');
 const RUNTIME_FILE = path.join(DATA_ROOT_DIR, 'data', 'runtime', 'store.json');
 
@@ -73,6 +79,10 @@ const SCOUT_AGENT_TIMEOUT_MS = Math.max(1000, Number(process.env.SCOUT_AGENT_TIM
 const LIVE_RELOAD_ENABLED = process.env.WATCH_REPORT_DEPENDENCIES === '1' || process.env.ARES_LIVE_RELOAD === '1';
 const DEMO_PDF_ENABLED = process.env.ARES_ENABLE_DEMO_PDF === '1' || process.env.ARES_ENABLE_DEMO_PDF === 'true';
 const OCR_MAX_PAGES = Math.max(1, Number(process.env.ARES_OCR_MAX_PAGES) || 12);
+const AGENT_WORKER_DISABLED =
+  process.env.ARES_AGENT_WORKER_DISABLED === '1' || process.env.ARES_AGENT_WORKER_DISABLED === 'true';
+const AGENT_WORKER_IDLE_MS = Math.max(100, Number(process.env.ARES_AGENT_WORKER_IDLE_MS) || 1000);
+const AGENT_WORKER_LEASE_MS = Math.max(1000, Number(process.env.ARES_AGENT_WORKER_LEASE_MS) || 60_000);
 const AUTO_MIGRATE =
   process.env.ARES_AUTO_MIGRATE === undefined
     ? process.env.NODE_ENV !== 'production'
@@ -125,6 +135,22 @@ const handleAssetRoute = createAssetRoutes({
   sendError,
   store,
 });
+const handleLabRoute = createLabRoutes({
+  json,
+  notFound,
+  readJsonBody,
+  requireProjectAccess,
+  rootDir: ROOT_DIR,
+  sendError,
+  store,
+});
+const handleWikiRoute = createWikiRoutes({
+  json,
+  requireProjectAccess,
+  readJsonBody,
+  sendError,
+  store,
+});
 const scoutSearchService = createScoutSearchService({
   agentRuntime: SCOUT_AGENT_RUNTIME,
   agentTimeoutMs: SCOUT_AGENT_TIMEOUT_MS,
@@ -132,16 +158,46 @@ const scoutSearchService = createScoutSearchService({
   mailto: OPENALEX_MAILTO,
   rootDir: ROOT_DIR,
 });
+const agentGroundingScorer = createAgentGroundingScorer();
 const agentRunService = createAgentRunService({
+  autoExecuteRuns: false,
+  groundingScorer: agentGroundingScorer,
   rootDir: ROOT_DIR,
   runtimeName: ARES_AGENT_RUNTIME,
   searchService: scoutSearchService,
   store,
 });
-const recoveredAgentRuns = await agentRunService.recoverInterruptedRuns();
+const handleAgentChatRoute = createAgentChatRoutes({
+  agentChatAutogenerate: process.env.ARES_AGENT_CHAT_AUTOGENERATE !== 'false',
+  agentRunService,
+  json,
+  requireProjectAccess,
+  readJsonBody,
+  sendError,
+  store,
+});
+const recoveredAgentRuns = await agentRunService.recoverStaleRuns({ staleMs: AGENT_WORKER_LEASE_MS });
 if (recoveredAgentRuns.length) {
-  logger.warn('Recovered interrupted agent runs after startup.', {
+  logger.warn('Recovered stale agent runs after startup.', {
     recoveredAgentRunCount: recoveredAgentRuns.length,
+  });
+}
+const agentRunWorker = AGENT_WORKER_DISABLED
+  ? null
+  : agentRunService.startWorkerLoop({
+      idleMs: AGENT_WORKER_IDLE_MS,
+      leaseMs: AGENT_WORKER_LEASE_MS,
+      onError(error) {
+        logger.warn('Agent run durable worker failed.', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+      workerId: `api-agent-worker-${process.pid}`,
+    });
+if (agentRunWorker) {
+  logger.info('Agent run durable worker started.', {
+    idleMs: AGENT_WORKER_IDLE_MS,
+    leaseMs: AGENT_WORKER_LEASE_MS,
   });
 }
 function json(response, statusCode, payload) {
@@ -523,20 +579,71 @@ function resolveVendorAsset(requestPath) {
   return '';
 }
 
-function filterSavedLibrary(projectId, query) {
-  const library = store.getLibrary(projectId);
-  if (!query) {
-    return library;
+async function resolveLegacyStatic(requestPath) {
+  if (requestPath !== '/legacy' && requestPath !== '/legacy/' && !requestPath.startsWith('/legacy/')) {
+    return '';
   }
 
-  const lowered = query.toLowerCase();
-  return library.filter((paper) =>
-    `${paper.title} ${paper.abstract} ${(paper.keywords || []).join(' ')}`.toLowerCase().includes(lowered),
-  );
+  const legacyEntry = path.join(WEB_DIR, 'legacy.html');
+  const relativePath = requestPath.replace(/^\/legacy\/?/, '');
+  if (!relativePath || !path.extname(relativePath)) {
+    return legacyEntry;
+  }
+
+  const candidate = path.resolve(WEB_DIR, relativePath);
+  const webRoot = path.resolve(WEB_DIR);
+  if (candidate !== webRoot && !candidate.startsWith(`${webRoot}${path.sep}`)) {
+    return legacyEntry;
+  }
+
+  try {
+    const stat = await fs.stat(candidate);
+    return stat.isFile() ? candidate : legacyEntry;
+  } catch {
+    return legacyEntry;
+  }
+}
+
+function libraryNoteIndex(projectId) {
+  const counts = new Map();
+  const notesByPaper = new Map();
+  for (const session of store.getReadingSessions(projectId)) {
+    const paperId = String(session.paperId || '').trim();
+    const notes = Array.isArray(session.notes) ? session.notes : [];
+    if (!paperId || !notes.length) {
+      continue;
+    }
+    counts.set(paperId, (counts.get(paperId) || 0) + notes.length);
+    notesByPaper.set(paperId, [...(notesByPaper.get(paperId) || []), ...notes]);
+  }
+
+  return { counts, notesByPaper };
+}
+
+function filterSavedLibrary(projectId, filters = {}) {
+  const { counts, notesByPaper } = libraryNoteIndex(projectId);
+  return filterLibraryPapers(store.getLibrary(projectId), filters).map((paper) => {
+    const notes = notesByPaper.get(paper.paperId) || [];
+    return {
+      ...paper,
+      noteCount: counts.get(paper.paperId) || 0,
+      notes,
+    };
+  });
 }
 
 function sanitisePaperPayload(payload) {
-  return sanitisePaperRecord(payload);
+  const paper = sanitisePaperRecord(payload);
+  if (payload?.display && typeof payload.display === 'object' && !Array.isArray(payload.display)) {
+    paper.display = { ...payload.display };
+  }
+  if (payload?.savedAt) {
+    paper.savedAt = String(payload.savedAt);
+  }
+  if (payload?.updatedAt) {
+    paper.updatedAt = String(payload.updatedAt);
+  }
+  return paper;
 }
 
 async function serveStatic(requestPath, response) {
@@ -556,38 +663,75 @@ async function serveStatic(requestPath, response) {
     }
   }
 
-  const cleanPath = requestPath === '/' ? '/index.html' : requestPath;
-  const filePath = path.join(WEB_DIR, cleanPath);
-  const resolved = path.resolve(filePath);
-
-  if (!resolved.startsWith(WEB_DIR)) {
-    notFound(response);
-    return;
-  }
-
-  try {
-    const stat = await fs.stat(resolved);
-    if (!stat.isFile()) {
+  const legacyPath = await resolveLegacyStatic(requestPath);
+  if (legacyPath) {
+    try {
+      const extension = path.extname(legacyPath);
+      const content =
+        extension === '.html'
+          ? injectLiveReloadScript(await fs.readFile(legacyPath, 'utf8'))
+          : await fs.readFile(legacyPath);
+      response.writeHead(200, {
+        'cache-control':
+          extension === '.html' || extension === '.css' || extension === '.js'
+            ? 'no-store'
+            : 'public, max-age=300',
+        'content-type': contentTypeForPath(legacyPath),
+      });
+      response.end(content);
+      return;
+    } catch {
       notFound(response);
       return;
     }
-
-    const extension = path.extname(resolved);
-    const content =
-      extension === '.html'
-        ? injectLiveReloadScript(await fs.readFile(resolved, 'utf8'))
-        : await fs.readFile(resolved);
-    response.writeHead(200, {
-      'content-type': contentTypeForPath(filePath),
-      'cache-control':
-        extension === '.html' || extension === '.css' || extension === '.js'
-          ? 'no-store'
-          : 'public, max-age=300',
-    });
-    response.end(content);
-  } catch {
-    notFound(response);
   }
+
+  const cleanPath = requestPath === '/' ? '/index.html' : requestPath;
+  const roots = [];
+  try {
+    const distStat = await fs.stat(WEB_DIST_DIR);
+    if (distStat.isDirectory()) {
+      roots.push(WEB_DIST_DIR);
+    }
+  } catch {
+    // The backend can still serve the legacy web directory before the Vite build exists.
+  }
+  roots.push(WEB_DIR);
+
+  for (const root of roots) {
+    const filePath = path.join(root, cleanPath);
+    const resolved = path.resolve(filePath);
+
+    if (!resolved.startsWith(`${root}${path.sep}`) && resolved !== root) {
+      continue;
+    }
+
+    try {
+      const stat = await fs.stat(resolved);
+      if (!stat.isFile()) {
+        continue;
+      }
+
+      const extension = path.extname(resolved);
+      const content =
+        extension === '.html'
+          ? injectLiveReloadScript(await fs.readFile(resolved, 'utf8'))
+          : await fs.readFile(resolved);
+      response.writeHead(200, {
+        'content-type': contentTypeForPath(filePath),
+        'cache-control':
+          extension === '.html' || extension === '.css' || extension === '.js'
+            ? 'no-store'
+            : 'public, max-age=300',
+      });
+      response.end(content);
+      return;
+    } catch {
+      // Try the next static root.
+    }
+  }
+
+  notFound(response);
 }
 
 const stopLiveReloadWatcher = await startLiveReloadWatcher();
@@ -667,6 +811,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'GET' && requestPath === '/api/health') {
       const codexAvailable = await agentRunService.checkAvailability();
+      const grounding = await agentRunService.getGroundingHealth();
       const profiles = agentRunService.getProfiles();
       const storage = typeof store.getBackendInfo === 'function' ? store.getBackendInfo() : { backend: store.backend || 'unknown' };
       json(response, 200, {
@@ -682,6 +827,7 @@ const server = http.createServer(async (request, response) => {
         profileDetails: profiles,
         profiles: profiles.map((profile) => profile.id),
         providerConfigured: Boolean(OPENALEX_API_KEY),
+        grounding,
         storage,
       });
       return;
@@ -903,7 +1049,6 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'GET' && requestPath === '/api/library') {
       const projectId = url.searchParams.get('projectId');
-      const query = (url.searchParams.get('q') || '').trim();
       if (!projectId) {
         sendError(response, new Error('projectId is required.'), 400);
         return;
@@ -913,7 +1058,13 @@ const server = http.createServer(async (request, response) => {
       }
 
       json(response, 200, {
-        results: filterSavedLibrary(projectId, query),
+        results: filterSavedLibrary(projectId, {
+          collection: url.searchParams.get('collection'),
+          q: url.searchParams.get('q'),
+          shelf: url.searchParams.get('shelf'),
+          sort: url.searchParams.get('sort'),
+          tag: url.searchParams.get('tag'),
+        }),
       });
       return;
     }
@@ -924,7 +1075,13 @@ const server = http.createServer(async (request, response) => {
         return;
       }
       json(response, 200, {
-        results: store.getLibrary(projectId),
+        results: filterSavedLibrary(projectId, {
+          collection: url.searchParams.get('collection'),
+          q: url.searchParams.get('q'),
+          shelf: url.searchParams.get('shelf'),
+          sort: url.searchParams.get('sort'),
+          tag: url.searchParams.get('tag'),
+        }),
       });
       return;
     }
@@ -1029,6 +1186,18 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (await handleWikiRoute(request, response, { requestPath, url })) {
+      return;
+    }
+
+    if (await handleAgentChatRoute(request, response, { requestPath })) {
+      return;
+    }
+
+    if (await handleLabRoute(request, response, { requestPath })) {
+      return;
+    }
+
     if (await handleAssetRoute(request, response, { requestPath })) {
       return;
     }
@@ -1039,8 +1208,37 @@ const server = http.createServer(async (request, response) => {
         return;
       }
       const body = await readJsonBody(request);
-      const paper = sanitisePaperPayload(body.paper);
+      const paper = {
+        ...sanitisePaperPayload(body.paper),
+        ...normaliseLibraryPatch(body.paper || {}, {}),
+      };
       const saved = await store.savePaper(projectId, paper);
+
+      json(response, 200, {
+        paper: saved,
+        project: store.getProject(projectId),
+      });
+      return;
+    }
+
+    if (request.method === 'PATCH' && /^\/api\/projects\/[^/]+\/library\/.+/.test(requestPath)) {
+      const parts = requestPath.split('/');
+      const projectId = parts[3];
+      if (!requireProjectAccess(request, response, projectId, 'write')) {
+        return;
+      }
+      const paperId = decodeURIComponent(parts.slice(5).join('/'));
+      const existing = store.getLibrary(projectId).find((paper) => paper.paperId === paperId);
+      if (!existing) {
+        notFound(response);
+        return;
+      }
+
+      const body = await readJsonBody(request);
+      const saved = await store.savePaper(projectId, {
+        ...existing,
+        ...normaliseLibraryPatch(body, existing),
+      });
 
       json(response, 200, {
         paper: saved,
@@ -1118,6 +1316,7 @@ server.listen(PORT, HOST, () => {
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     stopLiveReloadWatcher();
+    agentRunWorker?.stop();
     server.close(() => {
       process.exit(0);
     });

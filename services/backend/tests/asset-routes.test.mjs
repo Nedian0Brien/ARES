@@ -142,6 +142,68 @@ test('asset graph routes expose project graph and create graph assets', async (t
   assert.deepEqual(plan.asset.handoff.noteIds, ['note-1']);
   assert.deepEqual(plan.asset.sourceRefs, [{ id: 'note-1', label: 'Selected note', type: 'readingNote' }]);
 
+  const projectsResponse = await fetch(new URL('/api/projects', server.url));
+  const projectsPayload = await projectsResponse.json();
+  const projectSummary = projectsPayload.projects.find((project) => project.id === 'demo');
+  assert.equal(projectsResponse.status, 200);
+  assert.equal(projectSummary.labPlanCount, 1);
+  assert.equal(projectSummary.labExperimentCount, 1);
+  assert.equal(projectSummary.labArtifactCount, 0);
+  assert.deepEqual(projectSummary.labColumnCounts, {
+    analyze: 0,
+    design: 1,
+    done: 0,
+    running: 0,
+  });
+
+  const runResponse = await fetch(new URL('/api/projects/demo/experiment-runs', server.url), {
+    body: JSON.stringify({
+      id: 'run-1',
+      status: 'running',
+      title: 'Demo run',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  assert.equal(runResponse.status, 201);
+
+  const linkedDossierResponse = await fetch(new URL('/api/projects/demo/result-dossiers', server.url), {
+    body: JSON.stringify({
+      experimentRunIds: ['run-1'],
+      id: 'dossier-linked',
+      status: 'done',
+      title: 'Linked dossier',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  assert.equal(linkedDossierResponse.status, 201);
+
+  const unlinkedDossierResponse = await fetch(new URL('/api/projects/demo/result-dossiers', server.url), {
+    body: JSON.stringify({
+      id: 'dossier-unlinked',
+      status: 'done',
+      title: 'Unlinked dossier',
+    }),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  });
+  assert.equal(unlinkedDossierResponse.status, 201);
+
+  const updatedProjectsResponse = await fetch(new URL('/api/projects', server.url));
+  const updatedProjectsPayload = await updatedProjectsResponse.json();
+  const updatedProjectSummary = updatedProjectsPayload.projects.find((project) => project.id === 'demo');
+  assert.equal(updatedProjectsResponse.status, 200);
+  assert.equal(updatedProjectSummary.labRunCount, 1);
+  assert.equal(updatedProjectSummary.labArtifactCount, 2);
+  assert.equal(updatedProjectSummary.labExperimentCount, 3);
+  assert.deepEqual(updatedProjectSummary.labColumnCounts, {
+    analyze: 0,
+    design: 1,
+    done: 1,
+    running: 1,
+  });
+
   const evidenceResponse = await fetch(new URL('/api/projects/demo/evidence-links', server.url), {
     body: JSON.stringify({
       paperId: 'paper-1',
@@ -174,6 +236,12 @@ test('asset graph routes expose project graph and create graph assets', async (t
   const listed = await listResponse.json();
   assert.equal(listResponse.status, 200);
   assert.equal(listed.results[0].id, created.asset.id);
+
+  const getResponse = await fetch(new URL(`/api/projects/demo/insight-cards/${created.asset.id}`, server.url));
+  const fetched = await getResponse.json();
+  assert.equal(getResponse.status, 200);
+  assert.equal(fetched.asset.id, created.asset.id);
+  assert.equal(fetched.asset.projectId, 'demo');
 
   const draftResponse = await fetch(new URL('/api/projects/demo/drafts', server.url), {
     body: JSON.stringify({

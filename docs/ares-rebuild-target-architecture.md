@@ -2,6 +2,8 @@
 
 작성일: 2026-05-29
 
+> **참고 (2026-06-29)** — 상위 4탭 UI 기준은 [`design/DESIGN.md`](../design/DESIGN.md) (canonical: `design/ARES Papers Workspace.html`, 탭 = Reading/Lab/Wiki/Agent)로 확정됐다. 이 문서의 자산 그래프 중심 아키텍처는 그 위에서 동작하는 백엔드/데이터 구조를 다룬다.
+
 ## 1. 목적
 
 이 문서는 ARES를 기존 탭 중심 앱에서 완전히 해체하고, 연구 자산 그래프를 중심으로 재구성하기 위한 목표 구조를 정의한다.

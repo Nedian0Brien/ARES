@@ -16,6 +16,7 @@ import {
   normalisePaper,
   normaliseReadingPacket,
   normaliseReproductionPlan,
+  normaliseResultDossier,
 } from '../lib/asset-model.mjs';
 
 test('asset collection registry includes legacy and graph collections', () => {
@@ -38,6 +39,7 @@ test('normalisePaper maps legacy paper records into graph shape', () => {
       paperId: 'paper-1',
       paperUrl: 'https://example.org/paper',
       pdfUrl: 'https://example.org/paper.pdf',
+      display: { labTitle: 'Short Demo', labOrder: 1 },
       sourceProvider: 'seed',
       title: 'Demo Paper',
       venue: 'ACL',
@@ -51,6 +53,7 @@ test('normalisePaper maps legacy paper records into graph shape', () => {
   assert.equal(paper.url, 'https://example.org/paper');
   assert.equal(paper.year, 2026);
   assert.deepEqual(paper.authors, ['A', 'B']);
+  assert.deepEqual(paper.display, { labTitle: 'Short Demo', labOrder: 1 });
 });
 
 test('normaliseReadingPacket keeps evidence and source ids explicit', () => {
@@ -268,6 +271,7 @@ test('normaliseExperimentRun preserves external import boundary metadata', () =>
       kind: 'external-import',
       metrics: { accuracy: '0.842' },
       status: 'done',
+      title: 'External eval import',
     },
     { projectId: 'demo' },
   );
@@ -278,6 +282,75 @@ test('normaliseExperimentRun preserves external import boundary metadata', () =>
   assert.equal(run.config.rawLog, 'accuracy: 0.842');
   assert.deepEqual(run.artifacts, [{ label: 'metrics.json', type: 'json', url: 'file:///tmp/metrics.json' }]);
   assert.deepEqual(run.metrics, { accuracy: '0.842' });
+  assert.equal(run.title, 'External eval import');
+});
+
+test('normaliseExperimentRun preserves Lab workspace progress and report context', () => {
+  const run = normaliseExperimentRun(
+    {
+      designRows: [
+        { icon: 'note', label: '데이터셋', value: 'BEIR-13 + FiQA + NFCorpus' },
+      ],
+      elapsed: '2m 14s',
+      progressLabel: '5/5',
+      reportSummary: '가설 지지됨 · 차트 · 결과표 · 분석 포함',
+      runSteps: [
+        { status: 'done', st: '도메인별 τ* 그리드서치', so: '13 domains · τ* 0.35–0.70' },
+      ],
+      status: 'done',
+      tags: ['BEIR held-out'],
+      title: 'auto-τ regression',
+    },
+    { projectId: 'demo' },
+  );
+
+  assert.deepEqual(run.tags, ['BEIR held-out']);
+  assert.equal(run.progressLabel, '5/5');
+  assert.equal(run.elapsed, '2m 14s');
+  assert.equal(run.reportSummary, '가설 지지됨 · 차트 · 결과표 · 분석 포함');
+  assert.deepEqual(run.designRows, [
+    { icon: 'note', label: '데이터셋', value: 'BEIR-13 + FiQA + NFCorpus' },
+  ]);
+  assert.deepEqual(run.runSteps, [
+    { status: 'done', st: '도메인별 τ* 그리드서치', so: '13 domains · τ* 0.35–0.70' },
+  ]);
+});
+
+test('normaliseResultDossier preserves Lab report fields used by the workspace', () => {
+  const dossier = normaliseResultDossier(
+    {
+      analysis:
+        '5개 미관측 도메인 전부에서 τ̂가 고정 τ=0.6을 상회했고 oracle 상한의 약 78%를 회복했습니다.',
+      domainResults: [
+        { domain: 'FiQA', fixed: 38.1, ours: 40.3, oracle: 40.8 },
+      ],
+      designSummary: '가설을 정리하고 실험을 설계했습니다.',
+      executionSummary: '파이프라인을 실행했습니다.',
+      hypothesis: 'τ를 도메인 난이도(첫 단계 recall)로 회귀하면 nDCG@10을 유지할 수 있다.',
+      prompt: 'τ를 도메인 난이도로 회귀하면 nDCG@10을 유지할 수 있는지 검증해줘.',
+      resultLabel: '고정 τ 대비 개선',
+      subtitle: '가설 검증 실험 · BEIR held-out 5 domains · nDCG@10',
+      tags: ['BEIR held-out'],
+      title: 'auto-τ regression',
+      verdict: 'supported',
+      verdictText: 'held-out에서 고정 τ 대비 +1.3 nDCG',
+      versionLabel: 'v1',
+    },
+    { projectId: 'demo' },
+  );
+
+  assert.deepEqual(dossier.tags, ['BEIR held-out']);
+  assert.equal(dossier.verdict, 'supported');
+  assert.equal(dossier.versionLabel, 'v1');
+  assert.equal(dossier.subtitle, '가설 검증 실험 · BEIR held-out 5 domains · nDCG@10');
+  assert.equal(dossier.resultLabel, '고정 τ 대비 개선');
+  assert.equal(dossier.hypothesis, 'τ를 도메인 난이도(첫 단계 recall)로 회귀하면 nDCG@10을 유지할 수 있다.');
+  assert.equal(dossier.prompt, 'τ를 도메인 난이도로 회귀하면 nDCG@10을 유지할 수 있는지 검증해줘.');
+  assert.equal(dossier.designSummary, '가설을 정리하고 실험을 설계했습니다.');
+  assert.equal(dossier.executionSummary, '파이프라인을 실행했습니다.');
+  assert.equal(dossier.verdictText, 'held-out에서 고정 τ 대비 +1.3 nDCG');
+  assert.match(dossier.analysis, /oracle 상한/);
+  assert.deepEqual(dossier.domainResults, [{ domain: 'FiQA', fixed: 38.1, ours: 40.3, oracle: 40.8 }]);
 });
 
 test('normaliseAsset dispatches graph-specific contracts', () => {

@@ -10,3 +10,4 @@ data/runtime/store.json
 data/runtime/reading/
 npm-debug.log*
 test-results/
+web/dist/

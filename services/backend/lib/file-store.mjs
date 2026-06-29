@@ -10,6 +10,7 @@ import {
   normalizeProjectAccess,
   normalizeUser,
 } from './identity-model.mjs';
+import { normaliseSavedLibraryPaper } from './library-model.mjs';
 import { normalizeNewProject } from './project-model.mjs';
 import { normaliseReadingSession } from './reading-model.mjs';
 import {
@@ -42,6 +43,12 @@ const EVIDENCE_LINK_REFERENCE_COLLECTIONS = [
   'draftSections',
 ];
 
+async function writeFileAtomic(file, contents) {
+  const tmpFile = `${file}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tmpFile, contents, 'utf8');
+  await fs.rename(tmpFile, file);
+}
+
 async function ensureRuntimeStore(seedFile, runtimeFile) {
   await fs.mkdir(path.dirname(runtimeFile), { recursive: true });
 
@@ -49,14 +56,14 @@ async function ensureRuntimeStore(seedFile, runtimeFile) {
     await fs.access(runtimeFile);
   } catch {
     const seed = await fs.readFile(seedFile, 'utf8');
-    await fs.writeFile(runtimeFile, seed, 'utf8');
+    await writeFileAtomic(runtimeFile, seed);
   }
 
   const raw = await fs.readFile(runtimeFile, 'utf8');
   const migrated = migrateStoreState(JSON.parse(raw), { normalizeIdentity: true });
 
   if (migrated.changed) {
-    await fs.writeFile(runtimeFile, JSON.stringify(migrated.state, null, 2), 'utf8');
+    await writeFileAtomic(runtimeFile, JSON.stringify(migrated.state, null, 2));
   }
 
   return migrated.state;
@@ -68,7 +75,7 @@ export async function createFileStore({ seedFile, runtimeFile }) {
 
   async function persist() {
     const snapshot = JSON.stringify(state, null, 2);
-    writeChain = writeChain.then(() => fs.writeFile(runtimeFile, snapshot, 'utf8'));
+    writeChain = writeChain.then(() => writeFileAtomic(runtimeFile, snapshot));
     await writeChain;
   }
 
@@ -125,6 +132,35 @@ export async function createFileStore({ seedFile, runtimeFile }) {
     return next;
   }
 
+  function labColumnForStatus(status) {
+    const normalized = normaliseStatus(status);
+    if (['active', 'queued', 'running'].includes(normalized)) return 'running';
+    if (['analyzing', 'candidate', 'error', 'failed'].includes(normalized)) return 'analyze';
+    if (['completed', 'done'].includes(normalized)) return 'done';
+    return 'design';
+  }
+
+  function labSummaryFor(projectId) {
+    const plans = state.reproductionPlans.filter((entry) => entry.projectId === projectId);
+    const runs = state.experimentRuns.filter((entry) => entry.projectId === projectId);
+    const dossiers = state.resultDossiers.filter((entry) => entry.projectId === projectId);
+    const runIds = new Set(runs.map((entry) => String(entry.id || '')));
+    const visibleDossiers = dossiers.filter((dossier) => {
+      return !(dossier.experimentRunIds || []).some((runId) => runIds.has(String(runId)));
+    });
+    const labColumnCounts = { analyze: 0, design: plans.length, done: visibleDossiers.length, running: 0 };
+    for (const run of runs) {
+      labColumnCounts[labColumnForStatus(run.status)] += 1;
+    }
+    return {
+      labArtifactCount: dossiers.length,
+      labColumnCounts,
+      labExperimentCount: plans.length + runs.length + visibleDossiers.length,
+      labPlanCount: plans.length,
+      labRunCount: runs.length,
+    };
+  }
+
   function projectSummary(project) {
     const library = libraryFor(project.id);
     const queue = queueFor(project.id);
@@ -135,6 +171,7 @@ export async function createFileStore({ seedFile, runtimeFile }) {
 
     return {
       ...clone(project),
+      ...labSummaryFor(project.id),
       libraryCount: library.length,
       queueCount: queue.length,
       readingSessionCount: readingSessions.length,
@@ -238,7 +275,21 @@ export async function createFileStore({ seedFile, runtimeFile }) {
 
     for (const paper of [...libraryFor(projectId), ...queueFor(projectId)]) {
       const normalized = normalisePaper(paper, { projectId });
-      papers.set(normalized.paperId, normalized);
+      const existing = papers.get(normalized.paperId);
+      papers.set(
+        normalized.paperId,
+        existing
+          ? {
+              ...existing,
+              ...normalized,
+              source: existing.source || normalized.source,
+              display: {
+                ...(existing.display || {}),
+                ...(normalized.display || {}),
+              },
+            }
+          : normalized,
+      );
     }
 
     for (const session of listCollection('readingSessions', { projectId })) {
@@ -248,6 +299,7 @@ export async function createFileStore({ seedFile, runtimeFile }) {
           abstract: normalized.abstract,
           authors: normalized.authors,
           createdAt: normalized.createdAt,
+          display: normalized.display,
           keywords: normalized.keywords,
           paperId: normalized.paperId,
           paperUrl: normalized.paperUrl,
@@ -262,7 +314,14 @@ export async function createFileStore({ seedFile, runtimeFile }) {
         },
         { projectId },
       );
-      papers.set(paper.paperId, { ...papers.get(paper.paperId), ...paper });
+      const existing = papers.get(paper.paperId) || {};
+      const incomingDisplay = paper.display && Object.keys(paper.display).length ? paper.display : null;
+      papers.set(paper.paperId, {
+        ...existing,
+        ...paper,
+        source: existing.source || paper.source,
+        display: incomingDisplay ? { ...(existing.display || {}), ...incomingDisplay } : (existing.display || {}),
+      });
     }
 
     return Array.from(papers.values()).sort(sortByUpdatedDesc);
@@ -585,14 +644,16 @@ export async function createFileStore({ seedFile, runtimeFile }) {
     async savePaper(projectId, paper) {
       ensureProject(projectId);
       const library = libraryFor(projectId);
-      const nextPaper = {
-        ...clone(paper),
-        savedAt: nowIso(),
-      };
-      const index = library.findIndex((entry) => entry.paperId === nextPaper.paperId);
+      const index = library.findIndex((entry) => entry.paperId === paper.paperId);
+      const existing = index >= 0 ? library[index] : null;
+      const nextPaper = normaliseSavedLibraryPaper(paper, {
+        existing,
+        now: nowIso(),
+        projectId,
+      });
 
       if (index >= 0) {
-        library[index] = { ...library[index], ...nextPaper };
+        library[index] = nextPaper;
       } else {
         library.unshift(nextPaper);
       }

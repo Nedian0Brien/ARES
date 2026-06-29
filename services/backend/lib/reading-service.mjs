@@ -1042,6 +1042,7 @@ export function createReadingService({
       paperId: normalized.paperId,
       projectId: normalized.projectId,
       questionId: normalized.questionId || '',
+      readingSessionId: normalized.id,
       sections: normalized.sections,
       status: normalized.parseStatus === 'done' ? 'done' : normalized.parseStatus === 'error' ? 'error' : normalized.status,
       summary: normalized.summary || normalized.summaryCards?.tldr || '',
@@ -1744,13 +1745,14 @@ Rules:
       return store.getReadingSessions(projectId).map((session) => normaliseReadingSession(session));
     },
 
-    async createSession({ paper, projectId, runId = '', status = 'todo', summary = '' } = {}) {
+    async createSession({ display = null, paper, projectId, runId = '', status = 'todo', summary = '' } = {}) {
       if (!paper) {
         throw new Error('paper is required to create a reading session.');
       }
 
       const existing = store.getReadingSessionByPaper(projectId, paper.paperId);
       const seed = buildReadingSessionSeed(projectId, paper, {
+        display,
         runId,
         status,
         summary: summary || paper.summary || paper.abstract || '',

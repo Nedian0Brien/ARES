@@ -1,5 +1,6 @@
 import { createAgentRuntime } from './agent-runtime.mjs';
 import {
+  buildChatPrompt,
   buildInsightPrompt,
   buildReadingPrompt,
   buildResearchPrompt,
@@ -20,6 +21,13 @@ const DEFAULT_TIMEOUTS = {
 const MAX_PROGRESS_EVENTS = 80;
 
 export const CAPABILITY_PROFILES = {
+  chat: {
+    description: 'Grounded agent chat over project context without workspace mutation.',
+    id: 'chat',
+    sandbox: 'read-only',
+    shell: false,
+    toolPolicy: 'read-only grounded chat',
+  },
   analyst: {
     description: 'Result and log analysis with note writing, but no workspace mutation.',
     id: 'analyst',
@@ -58,6 +66,14 @@ export const CAPABILITY_PROFILES = {
 };
 
 const STAGE_TASKS = {
+  chat: {
+    agent: 'Agent chat',
+    buildPrompt: buildChatPrompt,
+    defaultTaskKind: 'answer-agent-chat',
+    outputCollections: [],
+    profileId: 'chat',
+    stage: 'chat',
+  },
   search: {
     agent: 'Scout agent',
     buildPrompt: buildSearchPrompt,
@@ -87,7 +103,7 @@ const STAGE_TASKS = {
     agent: 'Reproduction agent',
     buildPrompt: buildResearchPrompt,
     defaultTaskKind: 'create-repro-plan',
-    outputCollections: ['reproChecklistItems', 'experimentRuns'],
+    outputCollections: ['reproductionPlans', 'experimentRuns', 'resultDossiers'],
     profileId: 'research',
     stage: 'research',
   },
@@ -416,12 +432,15 @@ function resolveProjectContext(store, run) {
 
 function resolveSupportCollections(store, run) {
   return {
+    evidenceLinks: store.listProjectAssets(run.projectId, 'evidenceLinks'),
     experimentRuns: store.listProjectAssets(run.projectId, 'experimentRuns'),
     insightNotes: store.listProjectAssets(run.projectId, 'insightNotes'),
+    readingPackets: store.listProjectAssets(run.projectId, 'readingPackets'),
     readingSessions: store.getReadingSessions(run.projectId),
     reproChecklistItems: store.listProjectAssets(run.projectId, 'reproChecklistItems'),
     resultComparisons: store.listProjectAssets(run.projectId, 'resultComparisons'),
     writingDrafts: store.listProjectAssets(run.projectId, 'writingDrafts'),
+    wikiPages: store.listProjectAssets(run.projectId, 'wikiPages'),
   };
 }
 
@@ -430,7 +449,7 @@ function buildRunContext(store, run) {
   const project = resolveProjectContext(store, run);
   const definition = STAGE_TASKS[String(run.stage || '').trim().toLowerCase()];
   const paper = resolvePaper(store, run, input);
-  if (!paper && definition?.stage !== 'search') {
+  if (!paper && !['chat', 'search'].includes(definition?.stage)) {
     throw new Error(`Run ${run.id} is missing a paper reference.`);
   }
 
@@ -445,14 +464,22 @@ function buildRunContext(store, run) {
 
   return {
     collections,
+    chatMessages: ensureArray(input?.messages).map((message) => ({
+      citations: ensureArray(message?.citations),
+      role: String(message?.role || 'user').trim() || 'user',
+      text: String(message?.text || message?.content || '').trim(),
+    })).filter((message) => message.text),
+    chatThread: input?.thread && typeof input.thread === 'object' ? input.thread : null,
     experimentRuns: collections.experimentRuns,
     handoff,
     insightNotes: collections.insightNotes,
     paper,
     project,
     readingSession,
+    readingPackets: collections.readingPackets,
     reproChecklistItems: collections.reproChecklistItems,
     resultComparisons: collections.resultComparisons,
+    papers: ensureArray(project?.recentLibrary),
     searchQuery: String(input?.query || input?.q || project?.defaultQuery || '').trim(),
     searchScopes: ensureArray(input?.scopes).map((scope) => ({
       id: String(scope?.id || '').trim(),
@@ -460,6 +487,7 @@ function buildRunContext(store, run) {
       type: String(scope?.type || 'scope').trim(),
     })),
     writingDrafts: collections.writingDrafts,
+    wikiPages: collections.wikiPages,
   };
 }
 
@@ -469,6 +497,11 @@ function normaliseAgentPayload(payload, definition) {
     outputSummary: String(next.outputSummary || '').trim(),
   };
 
+  if (definition.stage === 'chat') {
+    result.answer = String(next.answer || '').trim();
+    result.citations = ensureArray(next.citations);
+  }
+
   for (const collectionName of definition.outputCollections) {
     result[collectionName] = ensureArray(next[collectionName]);
   }
@@ -476,8 +509,100 @@ function normaliseAgentPayload(payload, definition) {
   return result;
 }
 
+async function persistResearchOutputs({ context, output, run, store }) {
+  const outputRefs = [];
+  const sourceRefs = uniqueSourceRefs([
+    ...(context.paper?.paperId ? [assetRef('paper', context.paper.paperId, { label: context.paper.title })] : []),
+    ...(run.assetRefs || []),
+  ]);
+  const planIds = [];
+
+  for (const [index, item] of ensureArray(output.reproductionPlans).entries()) {
+    const stored = await store.upsertProjectAsset('reproductionPlans', {
+      ...item,
+      agentRunIds: uniqueStrings([...(item.agentRunIds || []), run.id]),
+      handoff: item.handoff || context.handoff,
+      idempotencyKey: item.idempotencyKey || outputIdempotencyKey({ collectionName: 'reproductionPlans', context, index, run }),
+      projectId: run.projectId,
+      sourceRefs: uniqueSourceRefs([...(item.sourceRefs || []), ...sourceRefs]),
+    }, {
+      matchBy: 'idempotencyKey',
+      prefix: 'plan',
+    });
+    planIds.push(stored.id);
+  }
+
+  if (planIds.length) {
+    outputRefs.push({ collection: 'reproductionPlans', ids: planIds });
+  }
+
+  const experimentRunIds = [];
+  for (const [index, item] of ensureArray(output.experimentRuns).entries()) {
+    const stored = await store.upsertProjectAsset('experimentRuns', {
+      ...item,
+      idempotencyKey: item.idempotencyKey || outputIdempotencyKey({ collectionName: 'experimentRuns', context, index, run }),
+      projectId: run.projectId,
+      reproductionPlanId: item.reproductionPlanId || planIds[0] || '',
+      sourceRefs: uniqueSourceRefs([...(item.sourceRefs || []), ...sourceRefs]),
+    }, {
+      matchBy: 'idempotencyKey',
+      prefix: 'experimentRun',
+    });
+    experimentRunIds.push(stored.id);
+  }
+
+  if (experimentRunIds.length) {
+    outputRefs.push({ collection: 'experimentRuns', ids: experimentRunIds });
+  }
+
+  const dossierIds = [];
+  for (const [index, item] of ensureArray(output.resultDossiers).entries()) {
+    const stored = await store.upsertProjectAsset('resultDossiers', {
+      ...item,
+      agentRunIds: uniqueStrings([...(item.agentRunIds || []), run.id]),
+      experimentRunIds: uniqueStrings([...(item.experimentRunIds || []), ...experimentRunIds]),
+      idempotencyKey: item.idempotencyKey || outputIdempotencyKey({ collectionName: 'resultDossiers', context, index, run }),
+      paperId: item.paperId || context.paper?.paperId || '',
+      projectId: run.projectId,
+      sourceRefs: uniqueSourceRefs([...(item.sourceRefs || []), ...sourceRefs]),
+    }, {
+      matchBy: 'idempotencyKey',
+      prefix: 'resultDossier',
+    });
+    dossierIds.push(stored.id);
+  }
+
+  if (dossierIds.length) {
+    outputRefs.push({ collection: 'resultDossiers', ids: dossierIds });
+  }
+
+  return {
+    createdAssetIds: assetIdsFromOutputRefs(outputRefs),
+    outputRef: outputRefs,
+    outputSummary:
+      output.outputSummary ||
+      `Reproduction agent created ${outputRefs.reduce((count, entry) => count + entry.ids.length, 0)} Lab asset(s).`,
+  };
+}
+
 async function persistTaskOutputs({ context, definition, output, run, store }) {
   const outputRefs = [];
+
+  if (definition.stage === 'chat') {
+    return {
+      createdAssetIds: [],
+      outputPayload: {
+        answer: output.answer,
+        citations: output.citations,
+      },
+      outputRef: [],
+      outputSummary: output.outputSummary || firstSentence(output.answer, 'Agent chat answer ready.'),
+    };
+  }
+
+  if (definition.stage === 'research') {
+    return persistResearchOutputs({ context, output, run, store });
+  }
 
   if (definition.stage === 'reading') {
     const paper = context.paper;
@@ -587,7 +712,9 @@ function hydrateOutputRef(store, outputRef) {
 }
 
 export function createAgentRunService({
+  autoExecuteRuns = true,
   cancelPollMs = 500,
+  groundingScorer,
   rootDir,
   runtimeName = 'codex',
   searchService,
@@ -605,6 +732,50 @@ export function createAgentRunService({
   });
   const activeRuns = new Map();
   const runSubscribers = new Map();
+
+  async function addGroundingContext(context, definition) {
+    if (definition.stage !== 'chat' || !groundingScorer?.score) {
+      return context;
+    }
+
+    try {
+      const grounding = await groundingScorer.score(context);
+      return {
+        ...context,
+        grounding,
+      };
+    } catch (error) {
+      return {
+        ...context,
+        grounding: {
+          candidates: [],
+          error: error instanceof Error ? error.message : String(error),
+          ok: false,
+          scorer: groundingScorer.id || 'custom',
+        },
+      };
+    }
+  }
+
+  async function getGroundingHealth() {
+    if (!groundingScorer) {
+      return {
+        mode: 'none',
+        ok: false,
+        scorer: 'none',
+      };
+    }
+
+    if (typeof groundingScorer.checkHealth === 'function') {
+      return groundingScorer.checkHealth();
+    }
+
+    return {
+      mode: 'custom',
+      ok: true,
+      scorer: groundingScorer.id || 'custom',
+    };
+  }
 
   function notifyRun(runId) {
     const listeners = runSubscribers.get(runId);
@@ -677,6 +848,7 @@ export function createAgentRunService({
     let context;
     try {
       context = buildRunContext(notifyingStore, run);
+      context = await addGroundingContext(context, definition);
     } catch (error) {
       await notifyingStore.updateAgentRun(runId, {
         createdAssetIds: [],
@@ -763,6 +935,7 @@ export function createAgentRunService({
         leaseExpiresAt: null,
         leaseOwner: '',
         outputRef: persisted.outputRef,
+        outputPayload: persisted.outputPayload,
         outputSummary: persisted.outputSummary,
         status: 'done',
         warning: combineWarnings(summary.rawStderr),
@@ -825,7 +998,9 @@ export function createAgentRunService({
     });
 
     notifyRun(run.id);
-    void executeRun(run.id);
+    if (autoExecuteRuns) {
+      void executeRun(run.id);
+    }
     return store.getAgentRun(run.id);
   }
 
@@ -903,6 +1078,57 @@ export function createAgentRunService({
     return getRun(claimed.id);
   }
 
+  function startWorkerLoop({
+    idleMs = 1000,
+    leaseMs = 60_000,
+    onError,
+    stages = [],
+    workerId = 'agent-worker',
+  } = {}) {
+    let stopped = false;
+    let timer = null;
+
+    const schedule = (delayMs) => {
+      if (stopped) {
+        return;
+      }
+      timer = setTimeout(tick, Math.max(0, delayMs));
+      timer.unref?.();
+    };
+
+    const reportError = (error) => {
+      if (typeof onError === 'function') {
+        onError(error);
+      }
+    };
+
+    async function tick() {
+      if (stopped) {
+        return;
+      }
+
+      try {
+        const result = await processNextQueuedRun({ leaseMs, stages, workerId });
+        schedule(result ? 0 : idleMs);
+      } catch (error) {
+        reportError(error);
+        schedule(idleMs);
+      }
+    }
+
+    schedule(0);
+
+    return {
+      stop() {
+        stopped = true;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+      },
+    };
+  }
+
   async function recoverInterruptedRuns() {
     const activeStatuses = new Set(['queue', 'running']);
     const interrupted = store
@@ -969,11 +1195,13 @@ export function createAgentRunService({
 
     abortRun,
     createRun,
+    getGroundingHealth,
     getRun,
     processNextQueuedRun,
     recoverInterruptedRuns,
     recoverStaleRuns,
     retryRun,
+    startWorkerLoop,
     subscribeRun,
   };
 }

@@ -2,7 +2,22 @@
 
 작성일: 2026-05-17
 
-## 1. 목적
+> **⚠️ SUPERSEDED (2026-06-29)** — 이 문서가 제안한 4탭 그룹핑(`Search+Reading / Research+Result / Insight / Writing`)은 **확정 디자인에서 채택되지 않았다.** 실현된 상위 4탭은 **Reading / Lab / Wiki / Agent**다. 아래 본문은 초기 탐색 기록으로 보존하되, **현행 기준은 [`design/DESIGN.md`](../design/DESIGN.md)** (canonical 디자인: `design/ARES Papers Workspace.html`)를 따른다.
+
+## 0. 현행 구조 (2026-06-29 기준)
+
+상위 4탭은 산출물·작업 모드 기준으로 다음과 같이 확정됐다. 자세한 내용·스크린샷은 `design/DESIGN.md` 참조.
+
+- **Reading** (라이브러리 ⇄ 리더) — 논문을 읽을 수 있는 연구 자산으로. 라이브러리에서 추가·정리·목록·리더 진입, 리더에서 PDF/Summary ↔ Chat/Notes/Assets.
+- **Lab** (프로젝트 → 보드 → 워크스페이스) — 가설→설계→에이전트 실행→리포트의 실험 라이프사이클. 프로젝트가 상위 단위(할당 자산 + 독립 칸반), 그 아래 다중 실험.
+- **Wiki** (탐색기 ⇄ 뷰어) — 읽은 논문들의 지식 지도. 폴더 구조를 반영한 Graph/List/Grid + Notion급 문서 뷰어.
+- **Agent** (대화 ⇄ 근거 원장) — 근거 기반 리딩 파트너. 교차 문서 추론 + 모든 답변에 재확인 가능한 근거 + 저장 가능한 산출물.
+
+기존 6단계(`Search/Reading/Research/Result/Insight/Writing`)는 폐기되지 않고 각 탭 내부의 상태·모드로 보존한다(원안 2.1과 동일 원칙). "가짜 완성도 배제" 원칙도 유지된다(원안 2.4).
+
+---
+
+## 1. 목적 *(원안 — 초기 탐색)*
 
 현재 ARES의 제품 흐름은 `Search -> Reading -> Research -> Result -> Insight -> Writing`의 6단계로 정의되어 있다. 이 구조는 연구 워크플로우를 세밀하게 설명하기에는 좋지만, 모바일 하단 네비게이션과 반복 사용 관점에서는 탭 수가 많고 단계 간 이동 비용이 크다.
 

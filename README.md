@@ -93,8 +93,11 @@ ARES/
 │   ├── store.seed.json
 │   └── runtime/
 ├── design/
+│   ├── DESIGN.md                 # ← v1 디자인 기준 (single source of truth)
+│   ├── ARES Papers Workspace.html # ← canonical 4탭 기준 디자인
+│   ├── ARES Design System.html
 │   ├── ARES Prototype.html
-│   ├── ARES Wireframes.html
+│   ├── archive/                  # superseded mockups
 │   └── screenshots/
 ├── docs/
 │   ├── product vision.md
@@ -120,10 +123,14 @@ ARES/
 
 ## Key Documents
 
+- [Design Baseline](design/DESIGN.md)
+  - **v1 디자인 기준 (single source of truth)** — 4탭(Reading/Lab/Wiki/Agent) 구조·탭별 내비·토큰·스크린샷
+- [Canonical Design](design/ARES%20Papers%20Workspace.html)
+  - 확정된 기준 디자인 (브라우저로 직접 열어 확인)
+- [4-Tab Implementation Checklist](docs/ares-v1-4tab-implementation-checklist.md)
+  - 확정 디자인을 실제 앱으로 구현하기 위한 마스터 체크리스트 (현 구현 ↔ 디자인 갭 레이어)
 - [Prototype](design/ARES%20Prototype.html)
-  - 현재 UI/UX의 가장 구체적인 기준안
-- [Wireframes](design/ARES%20Wireframes.html)
-  - 초기 구조와 화면 흐름 참고용
+  - 초기 프로토타입 (참고용; 현행 기준은 위 Design Baseline)
 - [Specification](docs/specification.md)
   - 프로토타입 기준으로 정렬된 기능 명세 문서
 - [Product Vision](docs/product%20vision.md)
@@ -226,7 +233,7 @@ bash deploy/deploy-dev-web.sh main
 bash deploy/smoke-dev-web.sh
 ```
 
-프로토타입 자체만 빠르게 보고 싶다면 기존처럼 `design/ARES Prototype.html`을 브라우저에서 직접 열어도 된다.
+확정 디자인을 빠르게 보고 싶다면 `design/ARES Papers Workspace.html`(기준 4탭 디자인)을 브라우저에서 직접 열면 된다. 구조·의도는 `design/DESIGN.md` 참조.
 
 ## Design Principles
 

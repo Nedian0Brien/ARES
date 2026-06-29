@@ -18,6 +18,10 @@ export const GRAPH_ASSET_COLLECTIONS = [
   'experimentRuns',
   'resultDossiers',
   'insightCards',
+  'wikiFolders',
+  'wikiPages',
+  'agentThreads',
+  'agentMessages',
   'drafts',
   'draftSections',
   'draftRevisions',
@@ -189,6 +193,7 @@ export function normalisePaper(input = {}, options = {}) {
     abstract: ensureText(input.abstract),
     authors: ensureTextArray(input.authors, 16),
     createdAt: ensureText(input.createdAt || input.savedAt || input.queuedAt, nowIso()),
+    display: input.display && typeof input.display === 'object' && !Array.isArray(input.display) ? clone(input.display) : {},
     externalId: ensureText(input.externalId || paperId),
     id: paperId,
     keywords: ensureTextArray(input.keywords, 16),
@@ -255,9 +260,11 @@ export function normaliseReproductionPlan(input = {}, options = {}) {
     evidenceLinkIds: ensureTextArray(input.evidenceLinkIds, 64),
     handoff: normaliseHandoff(input.handoff),
     metrics: ensureTextArray(input.metrics, 32),
+    progressLabel: ensureText(input.progressLabel),
     questionId: ensureText(input.questionId),
     readingPacketId: ensureText(input.readingPacketId),
     sourceRefs: ensureObjectArray(input.sourceRefs, 64),
+    title: ensureText(input.title || input.name, 'Reproduction plan'),
   };
 }
 
@@ -269,11 +276,18 @@ export function normaliseExperimentRun(input = {}, options = {}) {
     artifacts: ensureObjectArray(input.artifacts, 32),
     completedAt: input.completedAt || null,
     config: input.config && typeof input.config === 'object' ? clone(input.config) : {},
+    designRows: ensureObjectArray(input.designRows, 16),
+    elapsed: ensureText(input.elapsed),
     kind: ensureText(input.kind, 'manual'),
     metrics: input.metrics && typeof input.metrics === 'object' ? clone(input.metrics) : {},
     notes: ensureText(input.notes),
+    progressLabel: ensureText(input.progressLabel),
+    reportSummary: ensureText(input.reportSummary),
     reproductionPlanId: ensureText(input.reproductionPlanId),
+    runSteps: ensureObjectArray(input.runSteps, 32),
     startedAt: input.startedAt || null,
+    tags: ensureTextArray(input.tags, 16),
+    title: ensureText(input.title || input.name, 'Experiment run'),
   };
 }
 
@@ -283,13 +297,32 @@ export function normaliseResultDossier(input = {}, options = {}) {
   return {
     ...base,
     agentRunIds: ensureTextArray(input.agentRunIds, 16),
+    analysis: ensureText(input.analysis),
     comparisons: ensureObjectArray(input.comparisons, 64),
     deltaSummary: ensureText(input.deltaSummary),
+    designRows: ensureObjectArray(input.designRows, 16),
+    domainResults: ensureObjectArray(input.domainResults, 64),
+    elapsed: ensureText(input.elapsed),
     evidenceLinkIds: ensureTextArray(input.evidenceLinkIds, 64),
     experimentRunIds: ensureTextArray(input.experimentRunIds, 32),
     failureNotes: ensureTextArray(input.failureNotes, 32),
+    footnote: ensureText(input.footnote),
+    hypothesis: ensureText(input.hypothesis),
     paperId: ensureText(input.paperId),
+    prompt: ensureText(input.prompt),
     questionId: ensureText(input.questionId),
+    progressLabel: ensureText(input.progressLabel),
+    designSummary: ensureText(input.designSummary),
+    executionSummary: ensureText(input.executionSummary),
+    reportSummary: ensureText(input.reportSummary),
+    resultLabel: ensureText(input.resultLabel),
+    runSteps: ensureObjectArray(input.runSteps, 32),
+    subtitle: ensureText(input.subtitle),
+    tags: ensureTextArray(input.tags, 16),
+    title: ensureText(input.title || input.name, 'Result dossier'),
+    verdict: ensureText(input.verdict),
+    verdictText: ensureText(input.verdictText),
+    versionLabel: ensureText(input.versionLabel),
   };
 }
 
@@ -481,6 +514,67 @@ export function normaliseNotification(input = {}, options = {}) {
   };
 }
 
+export function normaliseWikiFolder(input = {}, options = {}) {
+  const base = baseAsset(input, { ...options, fallbackStatus: 'active', prefix: 'wiki-folder' });
+  const name = ensureText(input.name || input.title, 'Untitled folder');
+
+  return {
+    ...base,
+    color: ensureText(input.color),
+    name,
+    parentId: ensureText(input.parentId || input.parentFolderId),
+    title: ensureText(input.title, name),
+  };
+}
+
+export function normaliseWikiPage(input = {}, options = {}) {
+  const base = baseAsset(input, { ...options, fallbackStatus: 'draft', prefix: 'wiki' });
+  const title = ensureText(input.title || input.name, 'Untitled wiki page');
+
+  return {
+    ...base,
+    body: ensureObjectArray(input.body || input.blocks, 128),
+    evidenceLinkIds: ensureTextArray(input.evidenceLinkIds, 64),
+    folderId: ensureText(input.folderId),
+    links: ensureTextArray(input.links || input.linkedPageIds, 64),
+    name: ensureText(input.name, title),
+    paperIds: ensureTextArray(input.paperIds, 64),
+    properties: input.properties && typeof input.properties === 'object' ? clone(input.properties) : {},
+    tags: ensureTextArray(input.tags, 32),
+    title,
+    type: ensureText(input.type, 'concept'),
+  };
+}
+
+export function normaliseAgentThread(input = {}, options = {}) {
+  const base = baseAsset(input, { ...options, fallbackStatus: 'active', prefix: 'thread' });
+
+  return {
+    ...base,
+    contextScope: input.contextScope && typeof input.contextScope === 'object' ? clone(input.contextScope) : {},
+    display: input.display && typeof input.display === 'object' && !Array.isArray(input.display) ? clone(input.display) : {},
+    messageIds: ensureTextArray(input.messageIds, 256),
+    savedMessageIds: ensureTextArray(input.savedMessageIds, 128),
+    title: ensureText(input.title, 'New thread'),
+  };
+}
+
+export function normaliseAgentMessage(input = {}, options = {}) {
+  const base = baseAsset(input, { ...options, fallbackStatus: 'done', prefix: 'message' });
+  const role = ensureText(input.role, 'user').toLowerCase();
+
+  return {
+    ...base,
+    artifacts: ensureObjectArray(input.artifacts, 32),
+    citations: ensureObjectArray(input.citations, 64),
+    display: input.display && typeof input.display === 'object' && !Array.isArray(input.display) ? clone(input.display) : {},
+    role: ['assistant', 'system', 'user'].includes(role) ? role : 'user',
+    text: ensureText(input.text || input.content),
+    threadId: ensureText(input.threadId),
+    trace: ensureObjectArray(input.trace, 64),
+  };
+}
+
 export function normaliseAsset(collectionName, input = {}, options = {}) {
   switch (collectionName) {
     case 'researchQuestions':
@@ -497,6 +591,14 @@ export function normaliseAsset(collectionName, input = {}, options = {}) {
       return normaliseResultDossier(input, options);
     case 'insightCards':
       return normaliseInsightCard(input, options);
+    case 'wikiFolders':
+      return normaliseWikiFolder(input, options);
+    case 'wikiPages':
+      return normaliseWikiPage(input, options);
+    case 'agentThreads':
+      return normaliseAgentThread(input, options);
+    case 'agentMessages':
+      return normaliseAgentMessage(input, options);
     case 'drafts':
       return normaliseDraft(input, options);
     case 'draftSections':

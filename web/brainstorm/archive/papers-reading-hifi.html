@@ -1,0 +1,1708 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARES Papers — Reading</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650&family=JetBrains+Mono:wght@400;500&family=Tinos:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* =====================================================================
+         ARES Design System — tokens (design/ARES Design System.html, v0.1 locked)
+         Layout is intentionally NOT taken from the DS (per direction): the shell
+         keeps a wide main content column. Everything else conforms to the DS.
+         ===================================================================== */
+      :root {
+        color-scheme: light;
+        --bg: #fbfbfa;
+        --sb: #f5f5f4;
+        --s1: #ffffff;
+        --s2: #f7f7f6;
+        --s3: #f0efed;
+        --b1: #e8e8e6;
+        --b2: #d4d4d2;
+        --tx: #0a0a0b;
+        --t2: #4a4a50;
+        --t3: #8a8a92;
+        --t4: #b0b0b8;
+
+        /* stage accents — used only via icon/label pairing or tints */
+        --search: #5e9c6f;
+        --read: #5e6ad2;
+        --research: #8957c9;
+        --result: #c07b3a;
+        --insight: #c04e68;
+        --writing: #3aa3a3;
+
+        /* radius scale */
+        --r-sm: 3px;
+        --r-md: 5px;
+        --r-lg: 6px;
+        --r-xl: 7px;
+        --r-2xl: 8px;
+
+        /* elevation — E1 float / page; cards stay flat (border only) */
+        --e1: 0 6px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+        --page: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 36px -10px rgba(15, 15, 15, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--tx);
+        font-family: "Inter", -apple-system, system-ui, sans-serif;
+        font-feature-settings: "cv11", "ss01", "ss03";
+        font-size: 13px;
+        line-height: 1.5;
+        letter-spacing: -0.006em;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        border: none;
+        background: none;
+      }
+      svg {
+        display: block;
+      }
+      .mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        letter-spacing: 0;
+        font-feature-settings: normal;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
+      }
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #d8d7d3;
+        border: 2px solid transparent;
+        border-radius: 6px;
+        background-clip: padding-box;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #b8b7b3;
+        background-clip: padding-box;
+      }
+
+      /* uppercase section label — 11px / 600 / 0.06–0.09em / t3 (never brighter) */
+      .label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--t3);
+      }
+      .kbd {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border: 1px solid var(--b1);
+        border-radius: var(--r-sm);
+        background: var(--s1);
+        color: var(--t3);
+        font-size: 10.5px;
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+
+      /* buttons — primary always #18181b; one per view */
+      .btn-p {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 13px;
+        border-radius: var(--r-lg);
+        background: #18181b;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .btn-p:hover {
+        background: #26262b;
+      }
+      .btn-s {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 11px;
+        border: 1px solid var(--b1);
+        border-radius: var(--r-lg);
+        background: var(--s1);
+        color: var(--tx);
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .btn-s:hover {
+        background: var(--s2);
+        border-color: var(--b2);
+      }
+      .btn-i {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--b1);
+        border-radius: var(--r-lg);
+        background: var(--s1);
+        color: var(--t2);
+      }
+      .btn-i:hover {
+        background: var(--s2);
+        border-color: var(--b2);
+        color: var(--tx);
+      }
+      .btn-i svg {
+        width: 16px;
+        height: 16px;
+      }
+      .ghost {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border-radius: var(--r-md);
+        color: var(--t3);
+      }
+      .ghost:hover {
+        background: rgba(0, 0, 0, 0.04);
+        color: var(--t2);
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 256px minmax(0, 1fr) 376px;
+        height: 100vh;
+        min-height: 700px;
+      }
+
+      /* ============================ LEFT RAIL ============================ */
+      .rail {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--sb);
+        border-right: 1px solid var(--b1);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        height: 52px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--b1);
+      }
+      .logo {
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        border-radius: var(--r-md);
+        /* gradient allowed for logo/avatar only */
+        background: linear-gradient(135deg, #5e6ad2, #8b5cf6);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .brand b {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .brand small {
+        display: block;
+        margin-top: -1px;
+        color: var(--t3);
+        font-size: 10.5px;
+      }
+      .brand .ghost {
+        margin-left: auto;
+      }
+
+      .tabs {
+        padding: 8px 8px 10px;
+        border-bottom: 1px solid var(--b1);
+      }
+      .tab {
+        display: grid;
+        grid-template-columns: 22px 1fr auto;
+        align-items: center;
+        gap: 10px;
+        height: 32px;
+        padding: 0 7px;
+        border-radius: var(--r-lg);
+        text-align: left;
+        margin-bottom: 1px;
+      }
+      .tab:hover {
+        background: rgba(0, 0, 0, 0.035);
+      }
+      .tab .chip {
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border-radius: var(--r-md);
+      }
+      .tab .chip svg {
+        width: 13px;
+        height: 13px;
+      }
+      .tab span {
+        font-size: 12.5px;
+        font-weight: 450;
+        color: var(--t2);
+      }
+      .tab.on {
+        background: rgba(0, 0, 0, 0.05);
+      }
+      .tab.on span {
+        color: var(--tx);
+        font-weight: 550;
+      }
+      /* per-tab stage tint — inactive: ${c}1a chip + colored glyph; active: solid */
+      .tab.t-read .chip {
+        background: rgba(94, 106, 210, 0.12);
+        color: var(--read);
+      }
+      .tab.t-read.on .chip {
+        background: var(--read);
+        color: #fff;
+      }
+      .tab.t-research .chip {
+        background: rgba(137, 87, 201, 0.12);
+        color: var(--research);
+      }
+      .tab.t-research.on .chip {
+        background: var(--research);
+        color: #fff;
+      }
+      .tab.t-search .chip {
+        background: rgba(94, 156, 111, 0.12);
+        color: var(--search);
+      }
+      .tab.t-search.on .chip {
+        background: var(--search);
+        color: #fff;
+      }
+      .tab.t-writing .chip {
+        background: rgba(58, 163, 163, 0.12);
+        color: var(--writing);
+      }
+      .tab.t-writing.on .chip {
+        background: var(--writing);
+        color: #fff;
+      }
+
+      .lib {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        min-height: 0;
+        padding: 0 8px;
+      }
+      .coll {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 42px;
+        padding: 0 7px;
+      }
+      .coll .sq {
+        width: 9px;
+        height: 9px;
+        border-radius: var(--r-sm);
+        background: var(--read);
+      }
+      .coll b {
+        flex: 1;
+        font-size: 12.5px;
+        font-weight: 550;
+        letter-spacing: -0.005em;
+      }
+      .coll .c {
+        color: var(--t3);
+      }
+      .coll svg {
+        width: 14px;
+        height: 14px;
+        color: var(--t3);
+      }
+      .search-box {
+        display: grid;
+        grid-template-columns: 15px 1fr auto;
+        align-items: center;
+        gap: 8px;
+        height: 32px;
+        margin-bottom: 6px;
+        padding: 0 9px;
+        border: 1px solid var(--b1);
+        border-radius: var(--r-lg);
+        background: var(--s1);
+      }
+      .search-box svg {
+        width: 15px;
+        height: 15px;
+        color: var(--t3);
+      }
+      .search-box input {
+        border: 0;
+        outline: 0;
+        background: none;
+        font-size: 13px;
+        color: var(--tx);
+      }
+      .search-box input::placeholder {
+        color: var(--t3);
+      }
+
+      .papers {
+        min-height: 0;
+        overflow-y: auto;
+        margin: 0 -8px;
+        padding: 2px 6px 12px;
+      }
+      .grp {
+        margin: 12px 7px 5px;
+      }
+      .grp:first-child {
+        margin-top: 2px;
+      }
+      .pap {
+        position: relative;
+        display: block;
+        width: 100%;
+        padding: 8px 9px;
+        border-radius: var(--r-lg);
+        text-align: left;
+        color: inherit;
+      }
+      .pap:hover {
+        background: rgba(0, 0, 0, 0.025);
+      }
+      .pap.on {
+        background: rgba(94, 106, 210, 0.07);
+      }
+      .pap.on::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 8px;
+        bottom: 8px;
+        width: 2.5px;
+        border-radius: 2px;
+        background: var(--read);
+      }
+      .pap .t {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        font-size: 12.5px;
+        font-weight: 450;
+        line-height: 1.34;
+        letter-spacing: -0.006em;
+        color: var(--t2);
+      }
+      .pap.on .t {
+        font-weight: 550;
+        color: var(--tx);
+      }
+      .pap .m {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 5px;
+        color: var(--t3);
+        font-size: 11.5px;
+        font-weight: 500;
+        letter-spacing: -0.003em;
+      }
+      .pap .m .dot {
+        width: 2.5px;
+        height: 2.5px;
+        border-radius: 50%;
+        background: var(--t4);
+      }
+      .pap .m .st {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .st svg {
+        width: 13px;
+        height: 13px;
+      }
+      .st .rd {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--read);
+      }
+      .pdash {
+        margin-top: 7px;
+        height: 2px;
+        border-radius: 1px;
+        background: var(--s3);
+        overflow: hidden;
+      }
+      .pdash i {
+        display: block;
+        height: 100%;
+        background: var(--read);
+      }
+
+      .rail-foot {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 44px;
+        padding: 0 14px;
+        border-top: 1px solid var(--b1);
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+      .rail-foot .av {
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--s3);
+        color: var(--t2);
+        font-size: 10px;
+        font-weight: 600;
+      }
+      .rail-foot b {
+        color: var(--t2);
+        font-weight: 500;
+      }
+      .rail-foot .sync {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .rail-foot .sd {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--search);
+      }
+
+      /* ============================ READER ============================ */
+      .reader {
+        display: grid;
+        grid-template-rows: 52px 40px minmax(0, 1fr);
+        min-width: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      .rhead {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+        padding: 0 16px 0 20px;
+        border-bottom: 1px solid var(--b1);
+      }
+      .stage-h {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .stage-h .badge {
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border-radius: var(--r-md);
+        background: var(--read);
+        color: #fff;
+      }
+      .stage-h .badge svg {
+        width: 13px;
+        height: 13px;
+      }
+      .stage-h h1 {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 13.5px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .stage-h .crumb {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+      .stage-h .crumb .d {
+        color: var(--t4);
+      }
+      .ractions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .vsep {
+        width: 1px;
+        height: 18px;
+        margin: 0 3px;
+        background: var(--b1);
+      }
+
+      .rsub {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 16px 0 20px;
+        border-bottom: 1px solid var(--b1);
+        background: var(--s1);
+      }
+      .segs {
+        display: flex;
+        gap: 1px;
+        padding: 2px;
+        border-radius: var(--r-xl);
+        background: var(--s3);
+      }
+      .segs button {
+        height: 24px;
+        padding: 0 11px;
+        border-radius: var(--r-md);
+        color: var(--t2);
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+      .segs button.on {
+        background: var(--s1);
+        color: var(--tx);
+        font-weight: 550;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+      .rsub .grow {
+        flex: 1;
+      }
+      .pager {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .pager button {
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border-radius: var(--r-md);
+        color: var(--t3);
+      }
+      .pager button:hover {
+        background: rgba(0, 0, 0, 0.045);
+        color: var(--tx);
+      }
+      .pager svg {
+        width: 15px;
+        height: 15px;
+      }
+      .pager .pg {
+        padding: 0 5px;
+        color: var(--t2);
+        font-size: 12px;
+      }
+      .pager .pg b {
+        font-weight: 550;
+        color: var(--tx);
+      }
+      .pager .pg s {
+        color: var(--t4);
+        text-decoration: none;
+      }
+      .zoomc {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--t3);
+        font-size: 12px;
+      }
+      .zoomc .zl {
+        width: 64px;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--s3);
+      }
+      .zoomc .zl i {
+        display: block;
+        width: 54%;
+        height: 100%;
+        border-radius: 2px;
+        background: var(--t2);
+      }
+      .hlc {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--t3);
+        font-size: 12px;
+      }
+      .hlc .sw {
+        width: 11px;
+        height: 11px;
+        border-radius: var(--r-sm);
+        border-bottom: 2px solid var(--read);
+        background: rgba(94, 106, 210, 0.12);
+      }
+
+      .canvas {
+        min-height: 0;
+        overflow-y: auto;
+        padding: 28px 0 52px;
+        background: var(--s3);
+      }
+
+      /* ---- paper sheet (document content — serif, mirrors a real PDF) ---- */
+      .sheet {
+        position: relative;
+        width: 686px;
+        margin: 0 auto;
+        padding: 50px 58px 38px;
+        background: #fffefb;
+        border: 1px solid rgba(0, 0, 0, 0.04);
+        border-radius: 2px;
+        box-shadow: var(--page);
+        font-family: "Tinos", "Times New Roman", serif;
+        color: #1a1814;
+      }
+      .runhead {
+        position: absolute;
+        top: 22px;
+        left: 58px;
+        right: 58px;
+        display: flex;
+        justify-content: space-between;
+        color: #9b958a;
+        font-size: 9px;
+        font-style: italic;
+        letter-spacing: 0.03em;
+      }
+      .ptitle {
+        margin: 6px auto 9px;
+        max-width: 92%;
+        font-size: 21px;
+        font-weight: 700;
+        line-height: 1.16;
+        text-align: center;
+        letter-spacing: -0.01em;
+      }
+      .pauth {
+        margin: 0 auto 3px;
+        text-align: center;
+        font-size: 11.5px;
+      }
+      .pauth sup {
+        font-size: 8px;
+      }
+      .paff {
+        margin: 0 auto 18px;
+        text-align: center;
+        color: #4a463e;
+        font-size: 9.5px;
+        font-style: italic;
+      }
+      .prule {
+        height: 1px;
+        margin: 0 0 16px;
+        background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.16) 12%, rgba(0, 0, 0, 0.16) 88%, transparent);
+      }
+      .pcols {
+        column-count: 2;
+        column-gap: 26px;
+      }
+      .ph {
+        margin: 13px 0 4px;
+        font-size: 11.5px;
+        font-weight: 700;
+        break-after: avoid;
+      }
+      .ph:first-child {
+        margin-top: 0;
+      }
+      .ph .sn {
+        margin-right: 6px;
+      }
+      .pp {
+        margin: 0 0 8px;
+        font-size: 10.5px;
+        line-height: 1.62;
+        text-align: justify;
+        hyphens: auto;
+      }
+      .pp .sc {
+        font-variant: small-caps;
+        letter-spacing: 0.02em;
+      }
+      .cit {
+        color: #2f3a86;
+      }
+      /* DS prose highlights — bg ${c}1a + 2px underline, double-coded */
+      .hl-method {
+        background: rgba(94, 106, 210, 0.1);
+        border-bottom: 2px solid var(--read);
+        padding: 1px 0;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+      }
+      .hl-claim {
+        background: rgba(137, 87, 201, 0.1);
+        border-bottom: 2px solid var(--research);
+        padding: 1px 0;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+      }
+      .eq {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 10px;
+        margin: 6px 0 9px;
+        break-inside: avoid;
+      }
+      .eq .ex {
+        font-size: 12.5px;
+        font-style: italic;
+        text-align: center;
+      }
+      .eq .ex .op {
+        font-size: 17px;
+        font-style: normal;
+        vertical-align: -3px;
+      }
+      .eq .ex sub {
+        font-size: 7.5px;
+        font-style: normal;
+      }
+      .eq .ex .vec {
+        font-weight: 700;
+      }
+      .eq .tag {
+        color: #4a463e;
+        font-size: 10px;
+      }
+      .fig {
+        margin: 8px 0 10px;
+        padding: 10px 10px 8px;
+        break-inside: avoid;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        background: #fffefb;
+      }
+      .chart {
+        width: 100%;
+        font-family: "Inter", sans-serif;
+      }
+      .chart .axis {
+        stroke: rgba(0, 0, 0, 0.32);
+        stroke-width: 0.8;
+      }
+      .chart .grid {
+        stroke: rgba(0, 0, 0, 0.1);
+        stroke-width: 0.7;
+        stroke-dasharray: 1.6 2.4;
+      }
+      .chart .tk {
+        fill: #6a655c;
+        font-size: 6px;
+      }
+      .chart .vl {
+        fill: #3a362f;
+        font-size: 5.6px;
+        font-weight: 600;
+      }
+      .chart .cl {
+        fill: #4a463e;
+        font-size: 6.2px;
+      }
+      .figcap {
+        margin: 7px 1px 0;
+        color: #3a362f;
+        font-size: 9px;
+        line-height: 1.45;
+      }
+      .figcap b {
+        font-weight: 700;
+      }
+      .pfoot {
+        margin-top: 14px;
+        padding-top: 7px;
+        border-top: 1px solid rgba(0, 0, 0, 0.14);
+        width: 38%;
+      }
+      .pfoot p {
+        margin: 0;
+        color: #4a463e;
+        font-size: 8.5px;
+        line-height: 1.5;
+      }
+      .pfoot sup {
+        font-size: 6.5px;
+      }
+      .pin {
+        position: absolute;
+        right: -14px;
+        display: grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 1px solid rgba(94, 106, 210, 0.3);
+        background: var(--s1);
+        color: var(--read);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 9.5px;
+        font-weight: 500;
+        box-shadow: var(--e1);
+      }
+      .pin::before {
+        content: "";
+        position: absolute;
+        right: 26px;
+        width: 20px;
+        height: 1px;
+        background: linear-gradient(90deg, rgba(94, 106, 210, 0.45), rgba(94, 106, 210, 0));
+      }
+
+      /* ============================ CONTEXT PANEL ============================ */
+      .ctx {
+        display: grid;
+        grid-template-rows: 52px minmax(0, 1fr) auto;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--bg);
+        border-left: 1px solid var(--b1);
+      }
+      .chead {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 12px 0 16px;
+        border-bottom: 1px solid var(--b1);
+      }
+      .chead .ic {
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border-radius: var(--r-md);
+        background: rgba(94, 106, 210, 0.12);
+        color: var(--read);
+      }
+      .chead .ic svg {
+        width: 13px;
+        height: 13px;
+      }
+      .chead b {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+      }
+      .chead .tog {
+        display: flex;
+        gap: 1px;
+        padding: 2px;
+        border-radius: var(--r-lg);
+        background: var(--s3);
+      }
+      .chead .tog button {
+        display: grid;
+        place-items: center;
+        width: 26px;
+        height: 22px;
+        border-radius: var(--r-md);
+        color: var(--t3);
+      }
+      .chead .tog button.on {
+        background: var(--s1);
+        color: var(--tx);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+      .chead .tog svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .cbody {
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .sec {
+        padding: 15px 16px;
+        border-bottom: 1px solid var(--b1);
+      }
+      .sh {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .sh .label {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .sh .label svg {
+        width: 13px;
+        height: 13px;
+        color: var(--t3);
+      }
+      .sh .meta {
+        margin-left: auto;
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+      .sh .link {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        color: var(--read);
+        font-size: 11.5px;
+        font-weight: 500;
+      }
+      .sh .link svg {
+        width: 13px;
+        height: 13px;
+      }
+
+      /* agent answer */
+      .ask {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .ask .qd {
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--s3);
+        color: var(--t2);
+        font-size: 10px;
+        font-weight: 600;
+      }
+      .ask p {
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.45;
+        color: var(--tx);
+      }
+      .ans {
+        font-size: 13px;
+        line-height: 1.65;
+        color: var(--t2);
+      }
+      .ans p {
+        margin: 0 0 9px;
+      }
+      .ans strong {
+        color: var(--tx);
+        font-weight: 600;
+      }
+      .ans .ref {
+        display: inline-flex;
+        align-items: center;
+        height: 15px;
+        padding: 0 4px;
+        border-radius: var(--r-sm);
+        background: rgba(94, 106, 210, 0.12);
+        border: 1px solid rgba(94, 106, 210, 0.25);
+        color: var(--read);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 9.5px;
+        font-weight: 500;
+        vertical-align: 1px;
+      }
+      .ans .ref.w {
+        background: rgba(94, 156, 111, 0.12);
+        border-color: rgba(94, 156, 111, 0.25);
+        color: var(--search);
+      }
+      .sources {
+        margin-top: 4px;
+        border: 1px solid var(--b1);
+        border-radius: var(--r-2xl);
+        background: var(--s1);
+        overflow: hidden;
+      }
+      .src {
+        display: grid;
+        grid-template-columns: 52px 1fr 14px;
+        gap: 9px;
+        align-items: center;
+        padding: 9px 11px;
+      }
+      .src + .src {
+        border-top: 1px solid var(--b1);
+      }
+      .src:hover {
+        background: var(--s2);
+      }
+      .src .sid {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 9.5px;
+        font-weight: 500;
+        line-height: 1.35;
+        color: var(--read);
+      }
+      .src .sid.w {
+        color: var(--search);
+      }
+      .src .sid s {
+        display: block;
+        color: var(--t4);
+        text-decoration: none;
+      }
+      .src .stx {
+        min-width: 0;
+        font-size: 12px;
+        line-height: 1.38;
+        color: var(--t2);
+      }
+      .src .stx b {
+        color: var(--tx);
+        font-weight: 550;
+      }
+      .src .go {
+        color: var(--t4);
+      }
+      .src .go svg {
+        width: 13px;
+        height: 13px;
+      }
+      .ansact {
+        display: flex;
+        gap: 7px;
+        margin-top: 11px;
+      }
+      .ansact .btn-s {
+        flex: 1;
+        justify-content: center;
+        height: 31px;
+        color: var(--t2);
+        font-size: 12.5px;
+      }
+      .ansact .btn-s:hover {
+        color: var(--tx);
+      }
+      .ansact .btn-s svg {
+        width: 14px;
+        height: 14px;
+        color: var(--t3);
+      }
+
+      /* wiki connections — wiki accent = search green */
+      .wmap {
+        position: relative;
+        height: 148px;
+        margin-bottom: 12px;
+        border-radius: var(--r-2xl);
+        border: 1px solid var(--b1);
+        overflow: hidden;
+        background: var(--s1);
+      }
+      .wmap svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .conn .crow {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding: 9px 4px;
+        border-radius: var(--r-md);
+      }
+      .conn .crow:hover {
+        background: rgba(0, 0, 0, 0.025);
+      }
+      .conn .crow + .crow {
+        border-top: 1px solid var(--b1);
+      }
+      .crow .nd {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--search);
+      }
+      .crow .nd.dim {
+        background: var(--t4);
+      }
+      .crow .ct b {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 500;
+        color: var(--tx);
+      }
+      .crow .ct span {
+        display: block;
+        margin-top: 1px;
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+      .crow .cc {
+        color: var(--t3);
+        font-size: 11.5px;
+      }
+
+      /* saved work */
+      .wr {
+        display: grid;
+        grid-template-columns: 15px 1fr auto;
+        gap: 10px;
+        padding: 9px 4px;
+        border-radius: var(--r-md);
+      }
+      .wr:hover {
+        background: rgba(0, 0, 0, 0.025);
+      }
+      .wr + .wr {
+        border-top: 1px solid var(--b1);
+      }
+      .wr .ki {
+        margin-top: 1px;
+      }
+      .wr .ki svg {
+        width: 14px;
+        height: 14px;
+      }
+      .wr .ki.read {
+        color: var(--read);
+      }
+      .wr .ki.neutral {
+        color: var(--t3);
+      }
+      .wr .ki.research {
+        color: var(--research);
+      }
+      .wr .wt {
+        min-width: 0;
+        font-size: 12.5px;
+        line-height: 1.42;
+        color: var(--t2);
+      }
+      .wr .wt b {
+        color: var(--tx);
+        font-weight: 550;
+      }
+      .wr .wt .kn {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--t3);
+      }
+      .wr .wref {
+        color: var(--t4);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+
+      .composer {
+        padding: 11px 14px 13px;
+        border-top: 1px solid var(--b1);
+        background: var(--bg);
+      }
+      .cinput {
+        display: grid;
+        grid-template-columns: 1fr 30px;
+        align-items: end;
+        gap: 6px;
+        padding: 8px 8px 8px 12px;
+        border: 1px solid var(--b2);
+        border-radius: var(--r-2xl);
+        background: var(--s1);
+      }
+      .cinput textarea {
+        border: 0;
+        outline: 0;
+        resize: none;
+        background: none;
+        font: inherit;
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--tx);
+        padding: 1px 0;
+        height: 34px;
+      }
+      .cinput textarea::placeholder {
+        color: var(--t3);
+      }
+      .cinput .snd {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: var(--r-lg);
+        background: #18181b;
+        color: #fff;
+      }
+      .cinput .snd:hover {
+        background: #26262b;
+      }
+      .cinput .snd svg {
+        width: 15px;
+        height: 15px;
+      }
+      .cmeta {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 8px;
+      }
+      .cmeta .ctag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 7px;
+        border-radius: var(--r-sm);
+        background: var(--s2);
+        border: 1px solid var(--b1);
+        color: var(--t2);
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .cmeta .ctag svg {
+        width: 11px;
+        height: 11px;
+        color: var(--t3);
+      }
+      .cmeta .req {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--search);
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .cmeta .req .d {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--search);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <!-- ===================== LEFT RAIL ===================== -->
+      <aside class="rail">
+        <div class="brand">
+          <div class="logo">A</div>
+          <div>
+            <b>ARES Papers</b>
+            <small>Research reading</small>
+          </div>
+          <button class="ghost" aria-label="New">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </div>
+
+        <nav class="tabs">
+          <button class="tab t-read on">
+            <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" /></svg></span>
+            <span>Reading</span><span class="kbd">1</span>
+          </button>
+          <button class="tab t-research">
+            <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6" /><path d="M10 3v6L4.5 18a2 2 0 001.7 3h11.6a2 2 0 001.7-3L14 9V3" /><path d="M7 15h10" /></svg></span>
+            <span>Lab</span><span class="kbd">2</span>
+          </button>
+          <button class="tab t-search">
+            <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg></span>
+            <span>Wiki</span><span class="kbd">3</span>
+          </button>
+          <button class="tab t-writing">
+            <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" /></svg></span>
+            <span>Agent</span><span class="kbd">4</span>
+          </button>
+        </nav>
+
+        <section class="lib">
+          <div class="coll">
+            <span class="sq"></span>
+            <b>Late-Interaction Retrieval</b>
+            <span class="c mono" style="font-size:11px">14</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </div>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            <input placeholder="Search papers" />
+            <span class="kbd">⌘K</span>
+          </div>
+
+          <div class="papers">
+            <div class="grp label">Reading now</div>
+            <button class="pap on">
+              <div class="t">ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction</div>
+              <div class="m"><span>NAACL 2022</span><span class="dot"></span><span class="st"><span class="rd"></span><span class="mono">p.4 / 16</span></span></div>
+              <div class="pdash"><i style="width:62%"></i></div>
+            </button>
+            <button class="pap">
+              <div class="t">FlashRAG: A Modular Toolkit for Efficient RAG Research</div>
+              <div class="m"><span>EMNLP 2024</span><span class="dot"></span><span class="st"><span class="rd"></span>11 notes</span></div>
+              <div class="pdash"><i style="width:74%"></i></div>
+            </button>
+
+            <div class="grp label">Up next</div>
+            <button class="pap">
+              <div class="t">SPLADE: Sparse Lexical and Expansion Model for Retrieval</div>
+              <div class="m"><span>SIGIR 2021</span><span class="dot"></span><span class="st"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#b0b0b8" stroke-width="2" /></svg>Queued</span></div>
+            </button>
+            <button class="pap">
+              <div class="t">Dense Passage Retrieval for Open-Domain Question Answering</div>
+              <div class="m"><span>EMNLP 2020</span><span class="dot"></span><span class="st"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#8a8a92" stroke-width="2" stroke-dasharray="2 3" /></svg>Needs PDF</span></div>
+            </button>
+
+            <div class="grp label">Completed</div>
+            <button class="pap">
+              <div class="t">Khattab &amp; Zaharia — ColBERT: Efficient Passage Search</div>
+              <div class="m"><span>SIGIR 2020</span><span class="dot"></span><span class="st"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#5e9c6f" /><path d="M8 12l3 3 5-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>Done</span></div>
+            </button>
+            <button class="pap">
+              <div class="t">A Survey of Hallucination in Large Language Models</div>
+              <div class="m"><span>ACM CSUR</span><span class="dot"></span><span class="st"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#5e9c6f" /><path d="M8 12l3 3 5-6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>Done</span></div>
+            </button>
+          </div>
+        </section>
+
+        <div class="rail-foot">
+          <span class="av">MP</span>
+          <span>Minjae · <b>Local</b></span>
+          <span class="sync"><span class="sd"></span>Saved 2m</span>
+        </div>
+      </aside>
+
+      <!-- ===================== READER ===================== -->
+      <section class="reader">
+        <header class="rhead">
+          <div class="stage-h">
+            <span class="badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" /></svg></span>
+            <h1>ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction</h1>
+            <span class="crumb"><span class="d">·</span> Santhanam et al. · NAACL 2022 · §3</span>
+          </div>
+          <div class="ractions">
+            <button class="btn-i" aria-label="Highlight">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-5 5v3h3l5-5" /><path d="m13 7 4 4 3.5-3.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L13 7Z" /></svg>
+            </button>
+            <button class="btn-i" aria-label="New note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z" /></svg>
+            </button>
+            <span class="vsep"></span>
+            <button class="btn-s">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#3aa3a3" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" /></svg>
+              Ask agent
+            </button>
+          </div>
+        </header>
+
+        <div class="rsub">
+          <div class="segs">
+            <button class="on">PDF</button>
+            <button>Text</button>
+            <button>Summary</button>
+            <button>HTML</button>
+            <button>Info</button>
+          </div>
+          <span class="grow"></span>
+          <div class="pager">
+            <button aria-label="Previous page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6" /></svg></button>
+            <span class="pg mono"><b>4</b> <s>/16</s></span>
+            <button aria-label="Next page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></button>
+          </div>
+          <span class="vsep"></span>
+          <div class="zoomc"><span class="mono">112%</span><span class="zl"><i></i></span></div>
+          <span class="vsep"></span>
+          <div class="hlc"><span class="sw"></span>2 highlights</div>
+        </div>
+
+        <div class="canvas">
+          <article class="sheet">
+            <div class="runhead"><span>Santhanam, Khattab, Saad-Falcon, Potts &amp; Zaharia</span><span>4</span></div>
+
+            <h2 class="ptitle">ColBERTv2: Effective and Efficient Retrieval<br />via Lightweight Late Interaction</h2>
+            <p class="pauth">Keshav Santhanam<sup>1</sup>&nbsp;&nbsp;Omar Khattab<sup>1</sup>&nbsp;&nbsp;Jon Saad-Falcon<sup>2</sup>&nbsp;&nbsp;Christopher Potts<sup>1</sup>&nbsp;&nbsp;Matei Zaharia<sup>1</sup></p>
+            <p class="paff"><sup>1</sup>Stanford University&nbsp;&nbsp;·&nbsp;&nbsp;<sup>2</sup>Georgia Institute of Technology</p>
+            <div class="prule"></div>
+
+            <div class="pcols">
+              <h3 class="ph"><span class="sn">3</span>Late Interaction</h3>
+              <p class="pp">
+                Single-vector retrievers encode a query and a passage into one dense embedding each and score them by a single
+                dot product. This is fast, but it forces the model to compress every token interaction into one point in space.
+                <span class="hl-method">Late interaction instead retains a per-token embedding for the query and the document, and
+                defers their comparison to scoring time.</span> Each query token is matched to its most similar document token, and
+                the resulting maximum similarities are summed <span class="cit">[18]</span>.
+              </p>
+
+              <div class="eq">
+                <div class="ex">
+                  <span class="vec">S</span><sub>q,d</sub> &nbsp;=&nbsp; <span class="op">&sum;</span><sub>i&isin;q</sub>
+                  &nbsp;<span class="op">max</span><sub>j&isin;d</sub>&nbsp; <span class="vec">E</span><sub>q<sub>i</sub></sub>
+                  &middot; <span class="vec">E</span><sub>d<sub>j</sub></sub><sup>&#8868;</sup>
+                </div>
+                <div class="tag">(1)</div>
+              </div>
+
+              <p class="pp">
+                Here <span style="font-style:italic">E</span><sub style="font-size:7px">q</sub> and
+                <span style="font-style:italic">E</span><sub style="font-size:7px">d</sub> are the token-level embedding matrices.
+                The <span class="sc">MaxSim</span> operator in Eq. (1) is cheap because document embeddings are pre-computed and
+                indexed; only the per-query maxima are evaluated at search time.
+              </p>
+
+              <h3 class="ph"><span class="sn">3.1</span>Denoised Supervision</h3>
+              <p class="pp">
+                ColBERTv2 improves the original model along two axes. First, it distills late-interaction scores from a stronger
+                cross-encoder teacher, which sharpens the token alignments. Second, it compresses the index with residual
+                quantization, storing each embedding as a centroid index plus a low-bit residual.
+                <span class="hl-claim">The two changes are complementary: distillation raises quality while residual compression
+                keeps the per-token index small enough to be practical.</span>
+              </p>
+
+              <div class="fig">
+                <svg class="chart" viewBox="0 0 252 132" preserveAspectRatio="xMidYMid meet" aria-label="MRR@10 by retriever">
+                  <g class="grid">
+                    <line x1="34" y1="16" x2="244" y2="16" />
+                    <line x1="34" y1="40" x2="244" y2="40" />
+                    <line x1="34" y1="64" x2="244" y2="64" />
+                    <line x1="34" y1="88" x2="244" y2="88" />
+                  </g>
+                  <g class="tk" text-anchor="end">
+                    <text x="29" y="114">0</text>
+                    <text x="29" y="90">.1</text>
+                    <text x="29" y="66">.2</text>
+                    <text x="29" y="42">.3</text>
+                    <text x="29" y="18">.4</text>
+                  </g>
+                  <line class="axis" x1="34" y1="112" x2="244" y2="112" />
+                  <g>
+                    <rect x="44" y="68.8" width="34" height="43.2" rx="1.5" fill="#cfccc4" />
+                    <text class="vl" x="61" y="64" text-anchor="middle">.18</text>
+                    <text class="cl" x="61" y="123" text-anchor="middle">BM25</text>
+                    <rect x="92" y="52.0" width="34" height="60" rx="1.5" fill="#aaa69c" />
+                    <text class="vl" x="109" y="47.2" text-anchor="middle">.25</text>
+                    <text class="cl" x="109" y="123" text-anchor="middle">DPR</text>
+                    <rect x="140" y="42.4" width="34" height="69.6" rx="1.5" fill="#8a867c" />
+                    <text class="vl" x="157" y="37.6" text-anchor="middle">.29</text>
+                    <text class="cl" x="157" y="123" text-anchor="middle">SPLADE</text>
+                    <rect x="188" y="25.6" width="34" height="86.4" rx="1.5" fill="#5e6ad2" />
+                    <text class="vl" x="205" y="20.8" text-anchor="middle" fill="#454fb0">.36</text>
+                    <text class="cl" x="205" y="123" text-anchor="middle" fill="#454fb0" font-weight="600">ColBERTv2</text>
+                  </g>
+                </svg>
+                <p class="figcap"><b>Figure 3.</b> MRR@10 on the BEIR out-of-domain suite. Late interaction (ColBERTv2) recovers
+                  fine-grained matches that single-vector DPR averages away, without the index cost of full cross-encoders.</p>
+              </div>
+
+              <h3 class="ph"><span class="sn">3.2</span>Why It Helps</h3>
+              <p class="pp">
+                The benefit is most visible on queries with rare entities or multi-term constraints, where a single averaged
+                vector dilutes the decisive token. <span class="sc">MaxSim</span> preserves that signal because the contributing
+                token is scored directly <span class="cit">[22]</span>. The cost is a larger index; §4 shows residual compression
+                cuts it by an order of magnitude with negligible quality loss.
+              </p>
+            </div>
+
+            <div class="pfoot">
+              <p><sup>1</sup>&thinsp;Code and indexes are released to reproduce all reported numbers under the shared evaluation harness.</p>
+            </div>
+
+            <span class="pin" style="top:231px">S1</span>
+            <span class="pin" style="top:400px">S2</span>
+          </article>
+        </div>
+      </section>
+
+      <!-- ===================== CONTEXT PANEL ===================== -->
+      <aside class="ctx">
+        <header class="chead">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" /></svg></span>
+          <b>Context · §3</b>
+          <div class="tog">
+            <button class="on" aria-label="Agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 01-9 8.3L4 21l1.2-3.6A8.3 8.3 0 1121 11.5z" /></svg></button>
+            <button aria-label="Outline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg></button>
+          </div>
+        </header>
+
+        <div class="cbody">
+          <!-- AGENT -->
+          <section class="sec">
+            <div class="sh">
+              <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 01-9 8.3L4 21l1.2-3.6A8.3 8.3 0 1121 11.5z" /></svg>Agent</span>
+              <span class="meta">grounded · 3 sources</span>
+            </div>
+            <div class="ask">
+              <span class="qd">MP</span>
+              <p>Why does late interaction beat single-vector retrieval here, and what does it cost?</p>
+            </div>
+            <div class="ans">
+              <p><strong>It keeps per-token signal that a single vector averages away.</strong> Single-vector DPR compresses a passage into one embedding, so a decisive rare token gets diluted. Late interaction scores every query token against its best-matching document token with <span class="mono" style="font-style:italic">MaxSim</span>, so that token is scored directly <span class="ref">p4·S1</span>.</p>
+              <p>The cost is index size — one embedding per token. ColBERTv2 makes it practical with <strong>residual compression</strong>, cutting the index ~10× at negligible quality loss <span class="ref">p4·S2</span>, which is why it stays ahead of SPLADE on BEIR <span class="ref w">Wiki</span>.</p>
+              <div class="sources">
+                <div class="src">
+                  <span class="sid mono">PDF<s>p4·S1</s></span>
+                  <span class="stx"><b>MaxSim</b> retains per-token embeddings; matches each query token to its best document token.</span>
+                  <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg></span>
+                </div>
+                <div class="src">
+                  <span class="sid mono">PDF<s>p4·S2</s></span>
+                  <span class="stx"><b>Residual compression</b> keeps the per-token index small enough to be practical.</span>
+                  <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg></span>
+                </div>
+                <div class="src">
+                  <span class="sid w mono">WIKI<s>doc</s></span>
+                  <span class="stx"><b>Late interaction</b> recovers fine-grained matches DPR averages away (Fig. 3).</span>
+                  <span class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg></span>
+                </div>
+              </div>
+              <div class="ansact">
+                <button class="btn-s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v16l-6-3.5L6 20Z" /></svg>Save card</button>
+                <button class="btn-s"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z" /></svg>To note</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- WIKI -->
+          <section class="sec">
+            <div class="sh">
+              <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" /></svg>Wiki path</span>
+              <a class="link">Open map <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></a>
+            </div>
+            <div class="wmap">
+              <svg viewBox="0 0 344 148" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                <g fill="none">
+                  <path d="M172 74 L84 40" stroke="rgba(94,156,111,.5)" stroke-width="1.4" />
+                  <path d="M172 74 L264 44" stroke="rgba(94,156,111,.5)" stroke-width="1.4" />
+                  <path d="M172 74 L90 114" stroke="rgba(94,156,111,.38)" stroke-width="1.3" />
+                  <path d="M172 74 L258 112" stroke="rgba(94,156,111,.38)" stroke-width="1.3" />
+                  <path d="M84 40 L90 114" stroke="rgba(0,0,0,.08)" stroke-width="1" />
+                  <path d="M264 44 L258 112" stroke="rgba(0,0,0,.08)" stroke-width="1" />
+                </g>
+                <circle cx="172" cy="74" r="6" fill="#5e9c6f" />
+                <circle cx="172" cy="74" r="11" fill="none" stroke="rgba(94,156,111,.32)" stroke-width="1.4" />
+                <circle cx="84" cy="40" r="4.5" fill="#7d7a72" />
+                <circle cx="264" cy="44" r="4.5" fill="#7d7a72" />
+                <circle cx="90" cy="114" r="4.5" fill="#b0b0b8" />
+                <circle cx="258" cy="112" r="4.5" fill="#b0b0b8" />
+                <g font-family="Inter, sans-serif" font-size="9.5">
+                  <text x="172" y="98" text-anchor="middle" font-weight="600" fill="#5e9c6f">Late interaction</text>
+                  <text x="84" y="28" text-anchor="middle" fill="#4a4a50">MaxSim</text>
+                  <text x="264" y="32" text-anchor="middle" fill="#4a4a50">Residual comp.</text>
+                  <text x="90" y="132" text-anchor="middle" fill="#8a8a92">Single-vector</text>
+                  <text x="258" y="130" text-anchor="middle" fill="#8a8a92">BM25</text>
+                </g>
+              </svg>
+            </div>
+            <div class="conn">
+              <div class="crow">
+                <span class="nd"></span>
+                <span class="ct"><b>Late interaction</b><span>Core concept · §3 defines MaxSim</span></span>
+                <span class="cc mono">8</span>
+              </div>
+              <div class="crow">
+                <span class="nd"></span>
+                <span class="ct"><b>Residual compression</b><span>Makes the per-token index practical</span></span>
+                <span class="cc mono">4</span>
+              </div>
+              <div class="crow">
+                <span class="nd dim"></span>
+                <span class="ct"><b>Single-vector retrieval</b><span>Contrast — DPR baseline in Fig. 3</span></span>
+                <span class="cc mono">11</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- SAVED WORK -->
+          <section class="sec">
+            <div class="sh">
+              <span class="label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16l-7-4-7 4Z" /></svg>Saved work</span>
+              <span class="meta">this paper · 3</span>
+            </div>
+            <div class="work">
+              <div class="wr">
+                <span class="ki read"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-5 5v3h3l5-5" /><path d="m13 7 4 4 3.5-3.5a1.5 1.5 0 0 0 0-2.1l-1.9-1.9a1.5 1.5 0 0 0-2.1 0L13 7Z" /></svg></span>
+                <span class="wt"><span class="kn">Highlight</span> Late interaction defers token comparison to scoring time.</span>
+                <span class="wref">p4</span>
+              </div>
+              <div class="wr">
+                <span class="ki neutral"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4L7 21H3v-4L17 3z" /></svg></span>
+                <span class="wt"><b>Compare with DPR.</b> Same encoder, but DPR pools to one vector — Fig. 3 is the cleanest contrast.</span>
+                <span class="wref">W3</span>
+              </div>
+              <div class="wr">
+                <span class="ki research"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 1 4 10.5c-.7.7-1 1.3-1 2.5H9c0-1.2-.3-1.8-1-2.5A6 6 0 0 1 12 3Z" /></svg></span>
+                <span class="wt"><b>Test MaxSim pruning.</b> Cap document tokens per query — measure MRR vs. index size tradeoff.</span>
+                <span class="wref">L1</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="composer">
+          <div class="cinput">
+            <textarea placeholder="Ask about the selected span, the figure, or a linked concept…"></textarea>
+            <button class="snd" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6" /></svg></button>
+          </div>
+          <div class="cmeta">
+            <span class="ctag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h10l4 4v12H5z" /></svg>PDF · §3</span>
+            <span class="ctag">Wiki · 5</span>
+            <span class="req"><span class="d"></span>Sources on</span>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </body>
+</html>

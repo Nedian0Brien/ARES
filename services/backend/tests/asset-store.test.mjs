@@ -60,6 +60,35 @@ test('file store migrates graph collections and returns project graph', async ()
   assert.equal(graph.papers[0].paperId, 'paper-1');
 });
 
+test('file store preserves library paper identity when reading sessions enrich graph papers', async () => {
+  const store = await createDemoStore();
+  await store.savePaper('demo', {
+    display: { labOrder: 2, labTitle: 'Lab title' },
+    paperId: 'paper-2',
+    source: 'library',
+    title: 'Library title',
+  });
+  await store.queuePaper('demo', {
+    paperId: 'paper-2',
+    sourceProvider: 'queue',
+    title: 'Queued title',
+  });
+  await store.upsertReadingSession({
+    paperId: 'paper-2',
+    projectId: 'demo',
+    sourceProvider: 'reading',
+    summary: 'Reading session summary',
+    title: 'Reading title',
+  });
+
+  const graph = store.getProjectGraph('demo');
+  const paper = graph.papers.find((entry) => entry.paperId === 'paper-2');
+
+  assert.equal(paper.source, 'library');
+  assert.deepEqual(paper.display, { labOrder: 2, labTitle: 'Lab title' });
+  assert.equal(paper.title, 'Reading title');
+});
+
 test('file store persists graph asset collections through generic project asset API', async () => {
   const store = await createDemoStore();
   const question = await store.upsertProjectAsset('researchQuestions', {

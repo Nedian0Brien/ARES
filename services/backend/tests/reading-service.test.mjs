@@ -241,6 +241,32 @@ test('reading service keeps demo PDF generation behind an explicit flag', async 
   );
 });
 
+test('reading service demo PDF does not invent academic metadata', async (t) => {
+  const { service, store } = await createHarness();
+  t.after(async () => {
+    await store.close?.();
+  });
+
+  const session = await service.createSession({
+    paper: {
+      ...buildDemoPaper(),
+      authors: [],
+      venue: '',
+      year: null,
+    },
+    projectId: 'demo',
+  });
+
+  const pdf = await service.getSessionPdf(session.id);
+  const text = pdf.buffer.toString('utf8');
+  assert.match(text, /Authors not provided/);
+  assert.match(text, /출처 정보 없음/);
+  assert.doesNotMatch(text, /Kim, J/);
+  assert.doesNotMatch(text, /KAIST/);
+  assert.doesNotMatch(text, /ACL 2024/);
+  assert.doesNotMatch(text, /arXiv:2406/);
+});
+
 test('reading service creates uploaded PDF sessions with cached source files', async (t) => {
   const { rootDir, service, store } = await createHarness();
   t.after(async () => {
@@ -356,6 +382,7 @@ test('reading service mirrors sessions into reading packets for the asset graph'
   });
 
   const session = await service.createSession({
+    display: { labMeta: "Kim · ACL '24", labOrder: 1, labTitle: 'Adaptive Skipping' },
     paper: buildDemoPaper(),
     projectId: 'demo',
   });
@@ -363,6 +390,8 @@ test('reading service mirrors sessions into reading packets for the asset graph'
   assert.equal(graph.readingPackets.length, 1);
   assert.equal(graph.readingPackets[0].id, `packet-${session.id}`);
   assert.equal(graph.readingPackets[0].paperId, 'demo-paper');
+  assert.equal(graph.readingPackets[0].readingSessionId, session.id);
+  assert.deepEqual(session.display, { labMeta: "Kim · ACL '24", labOrder: 1, labTitle: 'Adaptive Skipping' });
 
   await service.parseSession(session.id);
   graph = store.getProjectGraph('demo');
