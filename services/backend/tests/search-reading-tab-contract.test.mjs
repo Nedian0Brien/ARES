@@ -386,7 +386,8 @@ test('Reader chat is not wired to retrieval scorer configuration', async () => {
   assert.doesNotMatch(readme, /retrieval scorer|local-cross-encoder|validate-retrieval-scorer|smoke:retrieval-scorer/i);
   assert.doesNotMatch(runtimeDoc, /ARES_RETRIEVAL_SCORER|retrieval scorer|smoke:retrieval-scorer/i);
   assert.doesNotMatch(readingModel, /lastRetrieval|retrievalReady|lowConfidenceChatCount/);
-  assert.doesNotMatch(readingService, /buildChatContextChunks|Paper context:|lastRetrieval|retrievalReady|lowConfidenceChatCount/);
+  assert.match(readingService, /Paper context:/);
+  assert.doesNotMatch(readingService, /buildChatContextChunks|lastRetrieval|retrievalReady|lowConfidenceChatCount/);
   await assert.rejects(readProjectFile('services/backend/lib/retrieval-scorer.mjs'), /ENOENT/);
   await assert.rejects(readProjectFile('scripts/validate-retrieval-scorer.mjs'), /ENOENT/);
 });

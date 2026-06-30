@@ -830,7 +830,7 @@ test('reading chat stores turns with citations after parse', async (t) => {
   assert.equal(payload.session.evidenceCoverage.citedChatCount, 1);
 });
 
-test('reading chat sends only PDF location and the user question to the agent by default', async (t) => {
+test('reading chat sends parsed paper context and the user question to the agent by default', async (t) => {
   const runtime = createChatRuntime({
     answer: '이 논문은 reranker 호출을 줄이기 위해 불확실성 기반 게이트를 사용합니다.',
   });
@@ -855,10 +855,13 @@ test('reading chat sends only PDF location and the user question to the agent by
   assert.match(runtime.calls[0].prompt, /PDF location:/);
   assert.match(runtime.calls[0].prompt, /- pdfUrl: https:\/\/example\.org\/papers\/demo\.pdf/);
   assert.match(runtime.calls[0].prompt, /- cachedPdfPath: data\/runtime\/reading\//);
+  assert.match(runtime.calls[0].prompt, /Paper context:/);
+  assert.match(runtime.calls[0].prompt, /TLDR: Adaptive skipping reduces reranker latency/);
+  assert.match(runtime.calls[0].prompt, /Section summaries:/);
+  assert.match(runtime.calls[0].prompt, /Abstract \(p\.1\): .*Adaptive skipping reduces reranker latency/);
+  assert.match(runtime.calls[0].prompt, /Relevant paper chunks:/);
+  assert.match(runtime.calls[0].prompt, /\[p\.1\] .*Adaptive skipping reduces reranker latency/);
   assert.match(runtime.calls[0].prompt, /User question:\n이 논문에 대해 알려줘/);
-  assert.doesNotMatch(runtime.calls[0].prompt, /TLDR:/);
-  assert.doesNotMatch(runtime.calls[0].prompt, /Section summaries:/);
-  assert.doesNotMatch(runtime.calls[0].prompt, /Paper context:/);
   assert.doesNotMatch(payload.messages[1].text, /근거를 충분히 찾지 못했습니다/);
 });
 

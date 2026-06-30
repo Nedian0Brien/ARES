@@ -1728,10 +1728,56 @@ JSON field rules:
     return { lineCount, page, quote, sourceBounds: normaliseSourceBounds(value.sourceBounds, page || 1) };
   }
 
-  function buildChatPrompt(session, message, selection) {
+  function buildChatPaperContext(session, artifact) {
+    const summaryCards = session.summaryCards || {};
+    const summaryLines = [
+      ['TLDR', summaryCards.tldr || session.summary || session.abstract],
+      ['Method', summaryCards.method],
+      ['Result', summaryCards.result],
+      ['Limit', summaryCards.limit],
+    ]
+      .map(([label, value]) => {
+        const text = clipText(value, 500);
+        return text ? `- ${label}: ${text}` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+    const sectionLines = (artifact.sections || [])
+      .slice(0, 8)
+      .map((section) => {
+        const label = ensureTrimmedString(section.label, 'Section');
+        const page = section.pageStart || section.page || '?';
+        const summary = clipText(section.summary, 420);
+        return summary ? `- ${label} (p.${page}): ${summary}` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+    const chunkLines = (artifact.chunks || [])
+      .slice(0, 12)
+      .map((chunk) => {
+        const text = clipText(chunk.text, 520);
+        return text ? `- [p.${chunk.page || '?'}] ${text}` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+
+    return `
+Paper context:
+${summaryLines || '- Summary: unavailable'}
+
+Section summaries:
+${sectionLines || '- Section summaries: unavailable'}
+
+Relevant paper chunks:
+${chunkLines || '- Paper chunks: unavailable'}
+`.trim();
+  }
+
+  function buildChatPrompt(session, message, selection, artifact) {
     const selectionContext = selection
       ? `Primary selected PDF text (treat this as the active user-selected passage):\n- quote: ${selection.quote}\n- page: ${selection.page || ''}\n- lines: ${selection.lineCount || ''}\n`
       : 'Primary selected PDF text: none\n';
+    const paperContext = buildChatPaperContext(session, artifact);
 
     return `
 Return JSON only with keys: answer, citations.
@@ -1743,11 +1789,13 @@ PDF location:
 - cachedPdfPath: ${session.pdfCachePath || ''}
 - parsedArtifactPath: ${session.parsedArtifactPath || ''}
 ${selectionContext}
+${paperContext}
+
 User question:
 ${message}
 
 Rules:
-- Use the PDF location and selected passage to answer the user.
+- Use the paper context, PDF location, and selected passage to answer the user.
 - For requests like "translate this", "이 내용 번역", "selected text", or "선택한 부분", answer about the selected passage itself.
 - When translating, translate the selected quote faithfully and do not substitute nearby chunks.
 - citations must be an array of objects with label, page, quote, sectionId.
@@ -2223,7 +2271,7 @@ Rules:
 
       const selection = normaliseChatSelection(selectionInput);
       const generated = await runRuntimeJsonTask(
-        buildChatPrompt(session, prompt, selection),
+        buildChatPrompt(session, prompt, selection, artifact),
       );
       if (!generated?.payload) {
         throw new Error(`AI chat generation failed: ${generated?.provenance?.runtimeError || 'agent runtime unavailable'}`);
