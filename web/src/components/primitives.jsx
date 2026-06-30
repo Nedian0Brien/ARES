@@ -17,6 +17,7 @@ const Icon = ({ name, size=15, color='currentColor', style={} }) => {
     grid:<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
     send:<><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></>,
     highlight:<><path d="M12 20l9-9-4-4-9 9v4z"/><path d="M14 7l4 4"/><path d="M3 21h7"/></>,
+    link:<><path d="M10 13a5 5 0 007.1 0l2-2a5 5 0 00-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 00-7.1 0l-2 2A5 5 0 0012 20.1l1.1-1.1"/></>,
     pen:<><path d="M17 3l4 4L7 21H3v-4L17 3z"/></>,
     quote:<><path d="M6 8c0-1 1-2 2-2h2v6H6V8zM14 8c0-1 1-2 2-2h2v6h-4V8z"/></>,
     chevR:<path d="M9 6l6 6-6 6"/>,

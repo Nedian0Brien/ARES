@@ -83,6 +83,15 @@ test('React Reading reader hydrates the real session PDF through the existing PD
   assert.match(source, /api\/projects\/\$\{encodeURIComponent\(projectId\)\}\/reading-sessions/);
   assert.match(source, /api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/pdf/);
   assert.match(source, /data-reading-pdf-host="true"/);
+  assert.match(source, /onPageCount/);
+  assert.match(source, /onPagePreview/);
+  assert.match(source, /readingSessionHash\(projectId, session\.id/);
+  assert.match(source, /window\.location\.hash = hash/);
+  assert.match(source, /aria-label="하이라이트"/);
+  assert.match(source, /aria-label="메모 추가"/);
+  assert.match(source, /aria-label="노트 링크"/);
+  assert.match(source, /aria-label="노트 링크 선택"/);
+  assert.match(source, /linkPdfSelectionToNote/);
   assert.doesNotMatch(source, /<h1>Reducing Reranker Costs/);
 });
 

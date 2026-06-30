@@ -296,6 +296,7 @@ test('Reading reader hydrates a real session PDF in the React PDF tab', async ({
 test('Reading PDF smart selection snaps to words and clamps paragraph overflow', async ({ page, request }) => {
   const diagnostics = collectBrowserDiagnostics(page);
   const paperId = `e2e-smart-pdf-selection-${Date.now()}`;
+  let existingNoteId = '';
   let sessionId = '';
 
   try {
@@ -318,9 +319,25 @@ test('Reading PDF smart selection snaps to words and clamps paragraph overflow',
     });
     expect(created.ok()).toBeTruthy();
     sessionId = (await created.json()).readingSession.id;
+    const noteResponse = await request.post(`/api/reading-sessions/${encodeURIComponent(sessionId)}/notes`, {
+      data: {
+        body: 'Existing synthesis note',
+        kind: 'note',
+      },
+    });
+    expect(noteResponse.ok()).toBeTruthy();
+    existingNoteId = (await noteResponse.json()).note.id;
 
     await page.goto(`/#/projects/rag-reranker/reading/sessions/${encodeURIComponent(sessionId)}/pdf`);
+    await expect.poll(() => page.evaluate(() => window.location.hash)).toContain(`/reading/sessions/${encodeURIComponent(sessionId)}/pdf`);
+
     await expect(page.locator('.reading-pdf-text-layer span').first()).toBeVisible();
+    await page.getByRole('button', { name: '페이지 미리보기' }).click();
+    await expect(page.locator('.dock-pages .pgt.has-image img')).toHaveCount(3);
+    const previewImages = await page.locator('.dock-pages .pgt.has-image img').evaluateAll((images) => images.map((image) => image.getAttribute('src') || ''));
+    expect(previewImages.every((src) => /^data:image\/jpeg;base64,/.test(src))).toBeTruthy();
+    await page.getByRole('button', { name: '페이지 미리보기' }).click();
+
     const dragPoints = await page.evaluate(() => {
       function wordRect(span, word) {
         const node = Array.from(span.childNodes).find((child) => child.nodeType === Node.TEXT_NODE);
@@ -357,10 +374,38 @@ test('Reading PDF smart selection snaps to words and clamps paragraph overflow',
     await page.mouse.up();
 
     await expect(page.locator('.dock-wrap .sel-chip')).toBeVisible();
+    await expect(page.getByRole('button', { name: '하이라이트' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '메모 추가' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '노트 링크' })).toBeEnabled();
     const selectedText = await page.evaluate(() => window.getSelection().toString().replace(/\s+/g, ' ').trim());
     expect(selectedText).toMatch(/^deterministic\b/);
     expect(selectedText).toContain('selection');
     expect(selectedText).not.toContain(dragPoints.laterText);
+
+    await page.getByRole('button', { name: '노트 링크' }).click();
+    const linkSheet = page.getByRole('dialog', { name: '노트 링크 선택' });
+    await expect(linkSheet).toBeVisible();
+    await linkSheet.getByRole('button', { name: /노트에 연결: Existing synthesis note/ }).click();
+    await expect(page.locator('.pdf-toast')).toContainText('노트에 연결했습니다.');
+    let sessions = await (await request.get('/api/projects/rag-reranker/reading-sessions')).json();
+    let savedSession = sessions.results.find((entry) => entry.id === sessionId);
+    const linkedNote = savedSession.notes.find((note) => note.id === existingNoteId);
+    expect(linkedNote?.quote).toContain('deterministic');
+    expect(linkedNote?.sourceBounds?.unit).toBe('page-ratio');
+
+    await page.mouse.move(dragPoints.start.x, dragPoints.start.y);
+    await page.mouse.down();
+    await page.mouse.move(dragPoints.end.x, dragPoints.end.y, { steps: 14 });
+    await page.mouse.up();
+    await expect(page.locator('.dock-wrap .sel-chip')).toBeVisible();
+
+    await page.getByRole('button', { name: '하이라이트' }).click();
+    await expect(page.locator('.pdf-toast')).toContainText('하이라이트를 저장했습니다.');
+    sessions = await (await request.get('/api/projects/rag-reranker/reading-sessions')).json();
+    savedSession = sessions.results.find((entry) => entry.id === sessionId);
+    const savedHighlight = savedSession.notes.find((note) => note.kind === 'highlight' && note.quote.includes('deterministic'));
+    expect(savedHighlight).toBeTruthy();
+    expect(savedHighlight.sourceBounds?.unit).toBe('page-ratio');
 
     diagnostics.assertClean();
   } finally {

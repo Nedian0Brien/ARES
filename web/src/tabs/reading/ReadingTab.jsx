@@ -261,15 +261,27 @@ function readingDockSearchResults(session, query) {
     .slice(0, 8);
 }
 
-function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPage = 1 }) {
+function readingProjectHash(projectId) {
+  return `#/projects/${encodeURIComponent(projectId || 'rag-reranker')}/reading`;
+}
+
+function readingSessionHash(projectId, sessionId, docTab = 'pdf') {
+  const tab = ['pdf', 'summary'].includes(docTab) ? docTab : 'pdf';
+  return `${readingProjectHash(projectId)}/sessions/${encodeURIComponent(sessionId)}/${tab}`;
+}
+
+function PdfView({ dockHidden = false, onOpenNotes = null, onRefresh = null, session, sourceHighlight = null, targetPage = 1 }) {
   const [zoom, setZoom] = useState(100);
   const [pdfSelection, setPdfSelection] = useState(null);
   const [dockPanel, setDockPanel] = useState('');
+  const [dockStatus, setDockStatus] = useState({ message: '', status: 'idle' });
+  const [pagePreviews, setPagePreviews] = useState({});
+  const [renderedPageCount, setRenderedPageCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPage, setSelectedPage] = useState(Math.max(1, Number(targetPage) || 1));
   const hostRef = useRef(null);
   const pdfUrl = session?.id ? appUrl(`api/reading-sessions/${encodeURIComponent(session.id)}/pdf`).href : '';
-  const pageCount = Math.max(1, Number(session?.pageCount) || 1);
+  const pageCount = Math.max(1, Number(session?.pageCount) || 0, renderedPageCount);
   const activePage = Math.min(pageCount, Math.max(1, Number(selectedPage) || Number(targetPage) || 1));
   const pdfAnnotations = [
     ...(Array.isArray(session?.highlights) ? session.highlights : []),
@@ -278,21 +290,26 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
   const sections = Array.isArray(session?.sections) && session.sections.length
     ? session.sections
     : [{ id: 'document', label: 'Document', pageStart: 1 }];
+  const linkableNotes = Array.isArray(session?.notes)
+    ? session.notes.filter((note) => note?.id && String(note.kind || '').toLowerCase() !== 'highlight')
+    : [];
   const searchResults = readingDockSearchResults(session, searchQuery);
-  const pagePreviewLines = [
-    [90, 70, 100, 60, 85, 100, 75, 90],
-    [100, 80, 65, 100, 90, 70, 100, 60],
-    [80, 100, 60, 90, 75, 100, 70, 85],
-    [100, 70, 85, 60, 100, 80, 65, 95],
-  ];
-
   useEffect(() => {
     setSelectedPage(Math.max(1, Number(targetPage) || 1));
   }, [targetPage]);
 
   useEffect(() => {
     setPdfSelection(null);
+    setDockStatus({ message: '', status: 'idle' });
+    setPagePreviews({});
+    setRenderedPageCount(0);
   }, [session?.id]);
+
+  useEffect(() => {
+    if (!dockStatus.message || dockStatus.status === 'running') return undefined;
+    const timeout = window.setTimeout(() => setDockStatus({ message: '', status: 'idle' }), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [dockStatus.message, dockStatus.status]);
 
   const jumpToPage = (page) => {
     const nextPage = Math.min(pageCount, Math.max(1, Math.round(Number(page) || 1)));
@@ -311,6 +328,18 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
       annotations: pdfAnnotations,
       baseUrl: appUrl(''),
       host,
+      onPageCount(count) {
+        setRenderedPageCount(Math.max(1, Math.round(Number(count) || 1)));
+      },
+      onPagePreview(preview) {
+        setPagePreviews((current) => {
+          const page = Number(preview?.page) || 0;
+          if (!page || current[page]?.src === preview.src) {
+            return current;
+          }
+          return { ...current, [page]: preview };
+        });
+      },
       pdfUrl,
       sourceHighlight,
       targetPage: activePage,
@@ -337,6 +366,73 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
       },
     });
   }, [session?.id, session?.pdfUrl]);
+
+  const clearPdfSelection = () => {
+    window.getSelection?.()?.removeAllRanges();
+    setPdfSelection(null);
+  };
+
+  const savePdfSelection = async (kind) => {
+    if (!session?.id || !pdfSelection?.quote || dockStatus.status === 'running') {
+      return;
+    }
+
+    const labels = {
+      highlight: '하이라이트',
+      link: '노트 링크',
+      note: '메모',
+    };
+    const payload = {
+      body: '',
+      kind,
+      origin: 'user',
+      page: pdfSelection.page,
+      quote: pdfSelection.quote,
+      sourceBounds: pdfSelection.sourceBounds,
+    };
+    setDockStatus({ message: `${labels[kind] || '선택'} 저장 중`, status: 'running' });
+    try {
+      await api(`api/reading-sessions/${encodeURIComponent(session.id)}/notes`, {
+        body: payload,
+        method: 'POST',
+      });
+      clearPdfSelection();
+      setDockPanel('');
+      if (kind !== 'highlight') {
+        onOpenNotes?.();
+      }
+      onRefresh?.();
+      setDockStatus({ message: `${labels[kind] || '선택'}를 저장했습니다.`, status: 'done' });
+    } catch (error) {
+      setDockStatus({ message: error instanceof Error ? error.message : '선택을 저장하지 못했습니다.', status: 'error' });
+    }
+  };
+
+  const linkPdfSelectionToNote = async (note) => {
+    if (!session?.id || !note?.id || !pdfSelection?.quote || dockStatus.status === 'running') {
+      return;
+    }
+
+    setDockStatus({ message: '노트 연결 중', status: 'running' });
+    try {
+      await api(`api/reading-sessions/${encodeURIComponent(session.id)}/notes/${encodeURIComponent(note.id)}`, {
+        body: {
+          body: note.body || '',
+          kind: note.kind || 'note',
+          page: pdfSelection.page,
+          quote: pdfSelection.quote,
+          sourceBounds: pdfSelection.sourceBounds,
+        },
+        method: 'PATCH',
+      });
+      clearPdfSelection();
+      setDockPanel('');
+      onRefresh?.();
+      setDockStatus({ message: '노트에 연결했습니다.', status: 'done' });
+    } catch (error) {
+      setDockStatus({ message: error instanceof Error ? error.message : '노트에 연결하지 못했습니다.', status: 'error' });
+    }
+  };
 
   if (!session?.id) {
     return (
@@ -372,12 +468,17 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
         </div>
       </div>
 
-      {!dockHidden && <div className="dock-wrap">
+      {!dockHidden && <div className={`dock-wrap ${pdfSelection ? 'has-selection' : ''}`}>
         {pdfSelection && (
           <div className="sel-chip">
             <span className="qi"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2.5 4h11M2.5 8h8M2.5 12h5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></span>
             <span className="q">"{pdfSelection.quote.length > 58 ? `${pdfSelection.quote.slice(0, 55)}...` : pdfSelection.quote}"</span>
-            <button className="x" onClick={() => { window.getSelection?.()?.removeAllRanges(); setPdfSelection(null); }} aria-label="선택 해제"><Icon name="x" size={9}/></button>
+            <button className="x" onClick={clearPdfSelection} aria-label="선택 해제"><Icon name="x" size={9}/></button>
+          </div>
+        )}
+        {dockStatus.message && (
+          <div className={`pdf-toast ${dockStatus.status === 'error' ? 'is-error' : ''}`} role="status">
+            {dockStatus.message}
           </div>
         )}
         {dockPanel === 'toc' && (
@@ -413,16 +514,43 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
             </div>
           </div>
         )}
+        {dockPanel === 'link' && (
+          <div className="dock-pop dock-note-links pdf-dock-sheet" role="dialog" aria-label="노트 링크 선택">
+            <div className="ph">노트 링크</div>
+            {linkableNotes.length > 0 ? (
+              <div className="note-link-list">
+                {linkableNotes.slice(0, 8).map((note) => {
+                  const text = String(note.body || note.quote || '빈 노트').trim();
+                  return (
+                    <button className="note-link-row" key={note.id} onClick={() => linkPdfSelectionToNote(note)} type="button" aria-label={`노트에 연결: ${text.slice(0, 36)}`}>
+                      <span className="note-link-kind">{noteLabel(note)}</span>
+                      <span className="note-link-text">{text}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="note-link-empty">
+                <span>연결할 노트가 없습니다.</span>
+                <button className="btn-s" disabled={!pdfSelection || dockStatus.status === 'running'} onClick={() => savePdfSelection('note')} type="button"><Icon name="note" size={12}/> 메모 추가</button>
+              </div>
+            )}
+          </div>
+        )}
         {dockPanel === 'pages' && (
           <div className="dock-pop dock-pages pdf-dock-sheet" role="dialog" aria-label="페이지 미리보기">
             <div className="ph">페이지 미리보기</div>
             <div className="pgrid">
               {Array.from({ length: Math.min(pageCount, 24) }).map((_, index) => {
                 const page = index + 1;
-                const lines = pagePreviewLines[index % pagePreviewLines.length];
+                const preview = pagePreviews[page];
                 return (
                   <button className={`pgi ${page === activePage ? 'cur' : ''}`} key={page} onClick={() => jumpToPage(page)} type="button">
-                    <span className="pgt">{lines.map((width, lineIndex) => <i className="pgl" key={lineIndex} style={{ width:`${width}%` }} />)}</span>
+                    <span className={`pgt ${preview?.src ? 'has-image' : ''}`}>
+                      {preview?.src
+                        ? <img alt={`Page ${page} preview`} height={preview.height} src={preview.src} width={preview.width} />
+                        : <span className="pgt-loading">PDF</span>}
+                    </span>
                     <span className="pgn">{page}</span>
                   </button>
                 );
@@ -430,7 +558,7 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
             </div>
           </div>
         )}
-        <div className="dock" role="toolbar" aria-label="PDF tools">
+        <div className={`dock ${pdfSelection ? 'has-selection' : ''}`} role="toolbar" aria-label="PDF tools">
           <button className={`dock-btn ${dockPanel === 'toc' ? 'on' : ''}`} title="목차" aria-label="목차" onClick={() => setDockPanel((panel) => panel === 'toc' ? '' : 'toc')} type="button"><Icon name="list" size={13}/></button>
           <div className="dock-div"/>
           <button className="dock-btn dock-zoom-btn" title="Zoom out" aria-label="축소" onClick={() => setZoom(z => Math.max(50, z-10))} type="button"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 8h9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg></button>
@@ -442,6 +570,21 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
           <button className={`dock-btn ${dockPanel === 'search' ? 'on' : ''}`} title="본문 검색" aria-label="본문 검색" onClick={() => setDockPanel((panel) => panel === 'search' ? '' : 'search')} type="button"><Icon name="search" size={13}/></button>
           <div className="dock-div"/>
           <button className={`dock-btn ${dockPanel === 'pages' ? 'on' : ''}`} title="페이지 미리보기" aria-label="페이지 미리보기" onClick={() => setDockPanel((panel) => panel === 'pages' ? '' : 'pages')} type="button"><Icon name="grid" size={13}/></button>
+          <div className="dock-sel-group" aria-label="선택한 텍스트 작업">
+            <div className="dock-div"/>
+            <button className="dock-btn hl" disabled={!pdfSelection || dockStatus.status === 'running'} title="하이라이트" aria-label="하이라이트" onClick={() => savePdfSelection('highlight')} type="button">
+              <Icon name="highlight" size={13}/>
+              <span className="lbl-wrap"><span className="lbl">하이라이트</span></span>
+            </button>
+            <button className="dock-btn nt" disabled={!pdfSelection || dockStatus.status === 'running'} title="메모 추가" aria-label="메모 추가" onClick={() => savePdfSelection('note')} type="button">
+              <Icon name="note" size={13}/>
+              <span className="lbl-wrap"><span className="lbl">메모 추가</span></span>
+            </button>
+            <button className={`dock-btn link ${dockPanel === 'link' ? 'on' : ''}`} disabled={!pdfSelection || dockStatus.status === 'running'} title="노트 링크" aria-label="노트 링크" onClick={() => setDockPanel((panel) => panel === 'link' ? '' : 'link')} type="button">
+              <Icon name="link" size={13}/>
+              <span className="lbl-wrap"><span className="lbl">노트 링크</span></span>
+            </button>
+          </div>
         </div>
       </div>}
     </div>
@@ -1499,7 +1642,40 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
   const panelOutline = useMemo(() => buildPanelOutline(session), [session]);
   const panelNotes = useMemo(() => buildPanelNotes(session), [session]);
   const panelProgress = panelOutlineProgress(panelOutline, paper, session);
-  const openReader = (id) => { setPaperId(id); setView('reader'); };
+  const applyHash = useCallback((hash) => {
+    if (typeof window === 'undefined') return;
+    if (window.location.hash === hash) {
+      return;
+    }
+    window.location.hash = hash;
+  }, []);
+  const openLibrary = useCallback(() => {
+    setView('library');
+    applyHash(readingProjectHash(projectId));
+  }, [applyHash, projectId]);
+  const openReader = useCallback((id) => {
+    const nextPaperId = String(id || '');
+    const nextSession = readingSessions.find((entry) => entry.paperId === nextPaperId || entry.id === nextPaperId);
+    setPaperId(nextSession?.paperId || nextPaperId);
+    setView('reader');
+    setDocTab('pdf');
+    if (nextSession?.id) {
+      applyHash(readingSessionHash(projectId, nextSession.id, 'pdf'));
+    }
+  }, [applyHash, projectId, readingSessions]);
+  const openCurrentReader = useCallback(() => {
+    setView('reader');
+    if (session?.id) {
+      applyHash(readingSessionHash(projectId, session.id, docTab || 'pdf'));
+    }
+  }, [applyHash, docTab, projectId, session?.id]);
+  const setReaderDocTab = useCallback((nextTab) => {
+    const normalizedTab = nextTab === 'summary' ? 'summary' : 'pdf';
+    setDocTab(normalizedTab);
+    if (session?.id) {
+      applyHash(readingSessionHash(projectId, session.id, normalizedTab));
+    }
+  }, [applyHash, projectId, session?.id]);
   const drag = useRef(null);
 
   const pickUploadFile = () => {
@@ -1638,15 +1814,23 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
   const jumpToAssetSource = useCallback((sourceHighlight) => {
     if (!sourceHighlight?.page) return;
     setAssetSource(sourceHighlight);
-    setDocTab('pdf');
+    setReaderDocTab('pdf');
     setMobileWorkbenchOpen(false);
-  }, []);
+  }, [setReaderDocTab]);
 
   const openMobileWorkbench = (nextTab) => {
     setWbTab(nextTab);
     setWbCollapsed(false);
     setMobileWorkbenchOpen(true);
   };
+
+  const openNotesWorkbench = useCallback(() => {
+    setWbTab('notes');
+    setWbCollapsed(false);
+    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 860px)').matches) {
+      setMobileWorkbenchOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (routeSession?.paperId && paperId !== routeSession.paperId) {
@@ -1698,8 +1882,8 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
   const sessionPdfUrl = session?.id ? appUrl(`api/reading-sessions/${encodeURIComponent(session.id)}/pdf`).href : '';
   const docPane = (
     <div className="pane reading-pane reading-doc-pane" style={{ flex: wbCollapsed ? 1 : `0 0 calc(${split}% - 2.5px)` }}>
-      <DocumentHeader pageCount={session?.pageCount} pdfUrl={sessionPdfUrl} tab={docTab} setTab={setDocTab} summarized={sessionSummaryReady} orient={orient} setOrient={setOrient}/>
-          <div className="pane-body">{docTab==='pdf' ? <PdfView dockHidden={mobileWorkbenchOpen} session={session} sourceHighlight={assetSource} targetPage={assetSource?.page || 1}/> : <SummaryView actionStatus={readingAction.status} ready={sessionSummaryReady} session={session} onGen={summarizeSession}/>}</div>
+      <DocumentHeader pageCount={session?.pageCount} pdfUrl={sessionPdfUrl} tab={docTab} setTab={setReaderDocTab} summarized={sessionSummaryReady} orient={orient} setOrient={setOrient}/>
+          <div className="pane-body">{docTab==='pdf' ? <PdfView dockHidden={mobileWorkbenchOpen} onOpenNotes={openNotesWorkbench} onRefresh={() => setLibraryRefresh((value) => value + 1)} session={session} sourceHighlight={assetSource} targetPage={assetSource?.page || 1}/> : <SummaryView actionStatus={readingAction.status} ready={sessionSummaryReady} session={session} onGen={summarizeSession}/>}</div>
     </div>
   );
   const wbPane = (
@@ -1728,8 +1912,8 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
 
   const viewToggle = (
     <div className="seg">
-      <button className={view==='library'?'on':''} onClick={() => setView('library')}><Icon name="grid" size={13}/> 라이브러리</button>
-      <button className={view==='reader'?'on':''} onClick={() => setView('reader')}><Icon name="book" size={13}/> 리더</button>
+      <button className={view==='library'?'on':''} onClick={openLibrary}><Icon name="grid" size={13}/> 라이브러리</button>
+      <button className={view==='reader'?'on':''} onClick={openCurrentReader}><Icon name="book" size={13}/> 리더</button>
     </div>
   );
 
@@ -1793,7 +1977,7 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
     <>
       <div className="metabar reading-reader-metabar">
         <div className="crumb-group"><Icon name="book" size={13} color={T.read}/><span style={{ color:T.read, fontWeight:550 }}>Reading</span></div>
-        <button className="btn-ghost" style={{ marginRight:2 }} onClick={() => setView('library')}><Icon name="chevL" size={14}/> 라이브러리</button>
+        <button className="btn-ghost" style={{ marginRight:2 }} onClick={openLibrary}><Icon name="chevL" size={14}/> 라이브러리</button>
         <div style={{ display:'flex', flexDirection:'column', minWidth:0 }}>
           <div className="title">{paper.title}</div>
           <div className="byline">
