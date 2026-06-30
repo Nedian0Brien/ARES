@@ -293,6 +293,81 @@ test('Reading reader hydrates a real session PDF in the React PDF tab', async ({
   }
 });
 
+test('Reading PDF smart selection snaps to words and clamps paragraph overflow', async ({ page, request }) => {
+  const diagnostics = collectBrowserDiagnostics(page);
+  const paperId = `e2e-smart-pdf-selection-${Date.now()}`;
+  let sessionId = '';
+
+  try {
+    const created = await request.post('/api/projects/rag-reranker/reading-sessions', {
+      data: {
+        paper: {
+          abstract: 'A deterministic e2e paper for validating smart PDF text selection.',
+          authors: ['ARES E2E'],
+          keyPoints: ['PDF drag selection stays word bounded.'],
+          paperId,
+          paperUrl: `https://example.org/papers/${paperId}`,
+          pdfUrl: `https://example.org/papers/${paperId}.pdf`,
+          sourceProvider: 'e2e',
+          summary: 'A deterministic smart selection paper.',
+          title: 'E2E Smart Selection Boundary',
+          venue: 'ARES QA',
+          year: 2026,
+        },
+      },
+    });
+    expect(created.ok()).toBeTruthy();
+    sessionId = (await created.json()).readingSession.id;
+
+    await page.goto(`/#/projects/rag-reranker/reading/sessions/${encodeURIComponent(sessionId)}/pdf`);
+    await expect(page.locator('.reading-pdf-text-layer span').first()).toBeVisible();
+    const dragPoints = await page.evaluate(() => {
+      function wordRect(span, word) {
+        const node = Array.from(span.childNodes).find((child) => child.nodeType === Node.TEXT_NODE);
+        const start = node?.textContent?.indexOf(word) ?? -1;
+        if (!node || start < 0) return null;
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, start + word.length);
+        const rect = range.getBoundingClientRect();
+        return { bottom: rect.bottom, left: rect.left, right: rect.right, top: rect.top };
+      }
+
+      const spans = Array.from(document.querySelectorAll('.reading-pdf-text-layer span:not(.markedContent)'));
+      const titleSpan = spans.find((span) => span.textContent.includes('Smart Selection Boundary'));
+      const titleRect = titleSpan.getBoundingClientRect();
+      const abstractSpan = spans.find((span) => span.textContent.includes('deterministic e2e paper'));
+      const abstractRect = abstractSpan.getBoundingClientRect();
+      const startRect = wordRect(abstractSpan, 'deterministic');
+      const laterSpan = spans.find((span) => {
+        const rect = span.getBoundingClientRect();
+        return rect.top > Math.max(titleRect.bottom, abstractRect.bottom) + 24 && span.textContent.trim().length > 8;
+      });
+      const laterRect = laterSpan.getBoundingClientRect();
+      return {
+        end: { x: laterRect.left + Math.min(16, laterRect.width / 2), y: laterRect.top + laterRect.height / 2 },
+        laterText: laterSpan.textContent.trim().split(/\s+/)[0],
+        start: { x: startRect.left + (startRect.right - startRect.left) * 0.55, y: startRect.top + (startRect.bottom - startRect.top) / 2 },
+      };
+    });
+
+    await page.mouse.move(dragPoints.start.x, dragPoints.start.y);
+    await page.mouse.down();
+    await page.mouse.move(dragPoints.end.x, dragPoints.end.y, { steps: 14 });
+    await page.mouse.up();
+
+    await expect(page.locator('.dock-wrap .sel-chip')).toBeVisible();
+    const selectedText = await page.evaluate(() => window.getSelection().toString().replace(/\s+/g, ' ').trim());
+    expect(selectedText).toMatch(/^deterministic\b/);
+    expect(selectedText).toContain('selection');
+    expect(selectedText).not.toContain(dragPoints.laterText);
+
+    diagnostics.assertClean();
+  } finally {
+    await deleteLibraryPaper(request, paperId);
+  }
+});
+
 test('Reading workbench renders parsed session summary, notes, and assets from the API', async ({ page, request }) => {
   test.setTimeout(60000);
   const diagnostics = collectBrowserDiagnostics(page);

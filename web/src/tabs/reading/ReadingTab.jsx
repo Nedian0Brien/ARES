@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, Kbd, StatusIcon, T, Tag, mono } from '../../components/primitives.jsx';
 import { api, appUrl } from '../../lib/api.js';
+import { createPdfSmartSelectionController } from '../../lib/pdfSelection.js';
 import { invalidateServerResource, useServerResource } from '../../lib/serverState.js';
 import { COLLECTIONS, SHELVES, STATUS_C, libStatus, shelfMatch } from '../../mock/reading.js';
 import { hydrateReadingPdfSurface, resetReadingPdfSurface } from '../../../app/lib/pdf-viewer.js';
@@ -262,16 +263,11 @@ function readingDockSearchResults(session, query) {
 
 function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPage = 1 }) {
   const [zoom, setZoom] = useState(100);
-  const [sel, setSel] = useState(null);
+  const [pdfSelection, setPdfSelection] = useState(null);
   const [dockPanel, setDockPanel] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPage, setSelectedPage] = useState(Math.max(1, Number(targetPage) || 1));
   const hostRef = useRef(null);
-
-  const onUp = () => {
-    const t = (window.getSelection && window.getSelection().toString().trim()) || '';
-    if (t.length > 5) { setSel(t.length > 58 ? t.slice(0,55) + '...' : t); }
-  };
   const pdfUrl = session?.id ? appUrl(`api/reading-sessions/${encodeURIComponent(session.id)}/pdf`).href : '';
   const pageCount = Math.max(1, Number(session?.pageCount) || 1);
   const activePage = Math.min(pageCount, Math.max(1, Number(selectedPage) || Number(targetPage) || 1));
@@ -293,6 +289,10 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
   useEffect(() => {
     setSelectedPage(Math.max(1, Number(targetPage) || 1));
   }, [targetPage]);
+
+  useEffect(() => {
+    setPdfSelection(null);
+  }, [session?.id]);
 
   const jumpToPage = (page) => {
     const nextPage = Math.min(pageCount, Math.max(1, Math.round(Number(page) || 1)));
@@ -322,6 +322,22 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
     };
   }, [activePage, pdfUrl, session?.id, session?.pdfUrl, session?.notes, session?.highlights, sourceHighlight, zoom]);
 
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !session?.id || !session?.pdfUrl) {
+      return undefined;
+    }
+
+    return createPdfSmartSelectionController({
+      host,
+      onSelection(selection) {
+        if (selection.quote.length > 5) {
+          setPdfSelection(selection);
+        }
+      },
+    });
+  }, [session?.id, session?.pdfUrl]);
+
   if (!session?.id) {
     return (
       <div className="empty-state">
@@ -344,7 +360,7 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
 
   return (
     <div className="pdf-host">
-      <div className="pdf-scroll" onMouseUp={onUp}>
+      <div className="pdf-scroll">
         <div
           ref={hostRef}
           className="reading-pdf-canvas-root"
@@ -357,11 +373,11 @@ function PdfView({ dockHidden = false, session, sourceHighlight = null, targetPa
       </div>
 
       {!dockHidden && <div className="dock-wrap">
-        {sel && (
+        {pdfSelection && (
           <div className="sel-chip">
             <span className="qi"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2.5 4h11M2.5 8h8M2.5 12h5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></span>
-            <span className="q">"{sel}"</span>
-            <button className="x" onClick={() => setSel(null)} aria-label="선택 해제"><Icon name="x" size={9}/></button>
+            <span className="q">"{pdfSelection.quote.length > 58 ? `${pdfSelection.quote.slice(0, 55)}...` : pdfSelection.quote}"</span>
+            <button className="x" onClick={() => { window.getSelection?.()?.removeAllRanges(); setPdfSelection(null); }} aria-label="선택 해제"><Icon name="x" size={9}/></button>
           </div>
         )}
         {dockPanel === 'toc' && (
