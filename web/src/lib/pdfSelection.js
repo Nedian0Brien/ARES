@@ -24,6 +24,30 @@ function wordIndex(word, fallback) {
   return Number.isFinite(Number(word?.globalIndex)) ? Number(word.globalIndex) : fallback;
 }
 
+function selectionBlockIndex(word) {
+  return Number.isFinite(Number(word?.blockIndex)) ? Number(word.blockIndex) : word?.paragraphIndex;
+}
+
+function selectionLineSeparated(word, anchor) {
+  const wordLeft = Number.isFinite(Number(word?.lineLeft)) ? Number(word.lineLeft) : word?.rect?.left;
+  const wordRight = Number.isFinite(Number(word?.lineRight)) ? Number(word.lineRight) : word?.rect?.right;
+  const anchorLeft = Number.isFinite(Number(anchor?.lineLeft)) ? Number(anchor.lineLeft) : anchor?.rect?.left;
+  const anchorRight = Number.isFinite(Number(anchor?.lineRight)) ? Number(anchor.lineRight) : anchor?.rect?.right;
+  if (![wordLeft, wordRight, anchorLeft, anchorRight].every((value) => Number.isFinite(Number(value)))) {
+    return false;
+  }
+  const gapTolerance = Math.max(20, Math.min(word?.rect?.height || 0, anchor?.rect?.height || 0) * 2);
+  return wordLeft > anchorRight + gapTolerance || anchorLeft > wordRight + gapTolerance;
+}
+
+function sameSelectionBlock(word, anchor) {
+  return (
+    selectionBlockIndex(word) === selectionBlockIndex(anchor) &&
+    word.columnIndex === anchor.columnIndex &&
+    !selectionLineSeparated(word, anchor)
+  );
+}
+
 export function resolveSmartWordRange({ anchorIndex, focusIndex, raw = false, words }) {
   if (!Array.isArray(words) || !words.length) {
     return null;
@@ -37,7 +61,7 @@ export function resolveSmartWordRange({ anchorIndex, focusIndex, raw = false, wo
     return null;
   }
 
-  if (raw || anchor.paragraphIndex === focus.paragraphIndex) {
+  if (raw || sameSelectionBlock(focus, anchor)) {
     const startPosition = Math.min(anchorPosition, focusPosition);
     const endPosition = Math.max(anchorPosition, focusPosition);
     return {
@@ -51,7 +75,7 @@ export function resolveSmartWordRange({ anchorIndex, focusIndex, raw = false, wo
 
   const sameParagraph = words
     .map((word, index) => ({ index, word }))
-    .filter((entry) => entry.word.paragraphIndex === anchor.paragraphIndex);
+    .filter((entry) => sameSelectionBlock(entry.word, anchor));
   const startPosition = focusPosition < anchorPosition
     ? sameParagraph[0].index
     : anchorPosition;
@@ -106,6 +130,38 @@ function caretFromPoint(x, y) {
 
 function textNodeForSpan(span) {
   return Array.from(span.childNodes).find((node) => node.nodeType === Node.TEXT_NODE) || null;
+}
+
+function rectFromDomRect(rect) {
+  return rect ? {
+    bottom: rect.bottom,
+    height: rect.height,
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    width: rect.width,
+  } : null;
+}
+
+function isRotatedTransform(transform) {
+  const match = String(transform || '').match(/^matrix\(([^)]+)\)$/);
+  if (!match) return false;
+  const values = match[1].split(',').map((value) => Number(value.trim()));
+  if (values.length < 4 || values.some((value) => !Number.isFinite(value))) {
+    return false;
+  }
+  return Math.abs(values[1]) > 0.2 || Math.abs(values[2]) > 0.2;
+}
+
+export function isPdfTextRunArtifact({ rect, text = '', transform = '' } = {}) {
+  const value = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!value || !rect?.width || !rect?.height) return false;
+
+  const rotated = isRotatedTransform(transform);
+  const tallNarrow = rect.height > Math.max(48, rect.width * 3);
+  const arxivMarginLabel = /^arXiv:\d{4}\.\d+/i.test(value);
+
+  return (rotated && tallNarrow) || (arxivMarginLabel && tallNarrow);
 }
 
 function rectForTextRun(startNode, startOffset, endNode, endOffset) {
@@ -217,8 +273,13 @@ function buildLineGroups(words) {
     const centerY = (word.rect.top + word.rect.bottom) / 2;
     const line = lines.find((candidate) => {
       const candidateCenterY = (candidate.top + candidate.bottom) / 2;
-      const tolerance = Math.max(3, Math.min(candidate.height, word.rect.height) * 0.55);
-      return Math.abs(candidateCenterY - centerY) <= tolerance;
+      const verticalTolerance = Math.max(3, Math.min(candidate.height, word.rect.height) * 0.55);
+      const horizontalTolerance = Math.max(10, Math.min(candidate.height, word.rect.height));
+      const horizontallyNear = (
+        word.rect.left <= candidate.right + horizontalTolerance &&
+        word.rect.right >= candidate.left - horizontalTolerance
+      );
+      return Math.abs(candidateCenterY - centerY) <= verticalTolerance && horizontallyNear;
     });
 
     if (line) {
@@ -237,6 +298,7 @@ function buildLineGroups(words) {
       left: word.rect.left,
       right: word.rect.right,
       top: word.rect.top,
+      width: word.rect.width,
       words: [word],
     });
   });
@@ -245,39 +307,112 @@ function buildLineGroups(words) {
     .sort((a, b) => a.top - b.top || a.left - b.left)
     .map((line, index) => {
       line.index = index;
+      line.width = line.right - line.left;
       line.words.sort((a, b) => a.rect.left - b.rect.left);
       line.words.forEach((word) => {
         word.lineIndex = index;
+        word.lineLeft = line.left;
+        word.lineRight = line.right;
       });
       return line;
     });
 }
 
-function assignParagraphs(words) {
-  const lines = buildLineGroups(words);
-  let paragraphIndex = 0;
-  let previousLine = null;
+function buildColumnGroups(lines) {
+  if (!lines.length) return [];
+
+  const left = Math.min(...lines.map((line) => line.left));
+  const right = Math.max(...lines.map((line) => line.right));
+  const textWidth = Math.max(1, right - left);
+  const candidates = lines.filter((line) => line.width <= textWidth * 0.62);
+  const columns = [];
+
+  candidates
+    .sort((a, b) => a.left - b.left)
+    .forEach((line) => {
+      const column = columns.find((candidate) => Math.abs(candidate.left - line.left) < Math.max(48, line.height * 4));
+      if (column) {
+        column.left = Math.min(column.left, line.left);
+        column.right = Math.max(column.right, line.right);
+        column.count += 1;
+        return;
+      }
+
+      columns.push({
+        count: 1,
+        left: line.left,
+        right: line.right,
+      });
+    });
+
+  if (!columns.length) {
+    return [{ count: lines.length, left, right }];
+  }
+
+  const sortedColumns = columns.sort((a, b) => a.left - b.left);
+  const recurringThreshold = Math.max(3, Math.floor(lines.length * 0.08));
+  const recurringColumns = sortedColumns.filter((column) => column.count >= recurringThreshold);
+
+  return recurringColumns.length ? recurringColumns : sortedColumns;
+}
+
+function assignLineColumns(lines) {
+  const columns = buildColumnGroups(lines);
 
   lines.forEach((line) => {
-    if (previousLine) {
-      const gap = line.top - previousLine.bottom;
-      const lineHeight = Math.max(previousLine.height, line.height);
-      const smallerLineHeight = Math.max(1, Math.min(previousLine.height, line.height));
-      const leftShift = Math.abs(line.left - previousLine.left);
-      const heightShift = Math.abs(line.height - previousLine.height);
-      const sameVerticalBand = line.top < previousLine.bottom + lineHeight * 0.35;
-      const columnJump = sameVerticalBand && line.left > previousLine.right + lineHeight * 4;
-      const shiftedBlockBreak = gap > Math.max(3, smallerLineHeight * 0.25) && leftShift > smallerLineHeight * 0.65;
-      const fontBlockBreak = gap > Math.max(4, smallerLineHeight * 0.35) && heightShift > smallerLineHeight * 0.18;
-      if (gap > Math.max(5, lineHeight * 0.55) || columnJump || shiftedBlockBreak || fontBlockBreak) {
-        paragraphIndex += 1;
-      }
+    const lineCenter = (line.left + line.right) / 2;
+    const best = columns.reduce((current, column, index) => {
+      const columnCenter = (column.left + column.right) / 2;
+      const distance = Math.abs(lineCenter - columnCenter);
+      return distance < current.distance ? { distance, index } : current;
+    }, { distance: Infinity, index: 0 });
+    line.columnIndex = best.index;
+    line.words.forEach((word) => {
+      word.columnIndex = best.index;
+    });
+  });
+}
+
+function assignParagraphs(words) {
+  const lines = buildLineGroups(words);
+  assignLineColumns(lines);
+  let paragraphIndex = 0;
+  const columnIndexes = [...new Set(lines.map((line) => line.columnIndex))].sort((a, b) => a - b);
+  let hasAssignedBlock = false;
+
+  columnIndexes.forEach((columnIndex) => {
+    const columnLines = lines
+      .filter((line) => line.columnIndex === columnIndex)
+      .sort((a, b) => a.top - b.top || a.left - b.left);
+    let previousLine = null;
+
+    if (hasAssignedBlock && columnLines.length) {
+      paragraphIndex += 1;
     }
 
-    line.words.forEach((word) => {
-      word.paragraphIndex = paragraphIndex;
+    columnLines.forEach((line) => {
+      if (previousLine) {
+        const gap = line.top - previousLine.bottom;
+        const lineHeight = Math.max(previousLine.height, line.height);
+        const smallerLineHeight = Math.max(1, Math.min(previousLine.height, line.height));
+        const leftShift = Math.abs(line.left - previousLine.left);
+        const heightShift = Math.abs(line.height - previousLine.height);
+        const sameVerticalBand = line.top < previousLine.bottom + lineHeight * 0.35;
+        const columnJump = sameVerticalBand && line.left > previousLine.right + lineHeight * 4;
+        const shiftedBlockBreak = gap > Math.max(3, smallerLineHeight * 0.25) && leftShift > smallerLineHeight * 0.65;
+        const fontBlockBreak = gap > Math.max(4, smallerLineHeight * 0.35) && heightShift > smallerLineHeight * 0.18;
+        if (gap > Math.max(5, lineHeight * 0.55) || columnJump || shiftedBlockBreak || fontBlockBreak) {
+          paragraphIndex += 1;
+        }
+      }
+
+      line.words.forEach((word) => {
+        word.blockIndex = paragraphIndex;
+        word.paragraphIndex = paragraphIndex;
+      });
+      previousLine = line;
+      hasAssignedBlock = true;
     });
-    previousLine = line;
   });
 }
 
@@ -288,18 +423,24 @@ function buildPageSelectionModel(pageNode) {
     .map((span) => {
       const node = textNodeForSpan(span);
       const rect = span.getBoundingClientRect?.();
-      return node ? {
+      const run = node ? {
         node,
-        rect: rect ? {
-          bottom: rect.bottom,
-          height: rect.height,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          width: rect.width,
-        } : null,
+        rect: rectFromDomRect(rect),
+        span,
         text: node.textContent,
+        transform: window.getComputedStyle?.(span)?.transform || '',
       } : null;
+      if (!run) return null;
+
+      if (isPdfTextRunArtifact(run)) {
+        span.dataset.pdfSelectionArtifact = 'true';
+        span.style.pointerEvents = 'none';
+        span.style.userSelect = 'none';
+        return null;
+      }
+
+      delete span.dataset.pdfSelectionArtifact;
+      return run;
     })
     .filter(Boolean);
 
@@ -373,6 +514,20 @@ function wordFromPoint(model, x, y) {
     const distance = distanceToRect(x, y, word.rect);
     return distance < best.distance ? { distance, word } : best;
   }, { distance: Infinity, word: null }).word;
+}
+
+function selectionBlockWords(model, anchorWord) {
+  return model.words.filter((word) => sameSelectionBlock(word, anchorWord));
+}
+
+function selectionBlockBounds(words) {
+  if (!words.length) return null;
+  return {
+    bottom: Math.max(...words.map((word) => word.rect.bottom)),
+    left: Math.min(...words.map((word) => word.rect.left)),
+    right: Math.max(...words.map((word) => word.rect.right)),
+    top: Math.min(...words.map((word) => word.rect.top)),
+  };
 }
 
 function setNativeWordSelection(startWord, endWord) {
@@ -491,6 +646,7 @@ export function createPdfSmartSelectionController({ host, onSelection }) {
   if (!host) return () => {};
 
   let activeDrag = null;
+  let selectionFrame = 0;
 
   function publishSelection(mode) {
     const selection = capturePdfSelection(host, { mode });
@@ -501,8 +657,20 @@ export function createPdfSmartSelectionController({ host, onSelection }) {
 
   function updateSmartSelection(clientX, clientY) {
     if (!activeDrag || activeDrag.raw) return;
-    const focusWord = wordFromPoint(activeDrag.model, clientX, clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
+    let focusWord = wordFromPoint(activeDrag.model, clientX, clientY);
     if (!focusWord) return;
+    if (
+      activeDrag.anchorBlockWords?.length &&
+      activeDrag.anchorBlockBounds &&
+      !sameSelectionBlock(focusWord, activeDrag.anchorWord)
+    ) {
+      if (clientX > activeDrag.anchorBlockBounds.right + 24) {
+        focusWord = activeDrag.anchorBlockWords.at(-1);
+      } else if (clientX < activeDrag.anchorBlockBounds.left - 24) {
+        focusWord = activeDrag.anchorBlockWords[0];
+      }
+    }
 
     const range = resolveSmartWordRange({
       anchorIndex: activeDrag.anchorWord.globalIndex,
@@ -510,7 +678,6 @@ export function createPdfSmartSelectionController({ host, onSelection }) {
       words: activeDrag.model.words,
     });
     if (!range) return;
-
     const startWord = activeDrag.model.words[range.startPosition];
     const endWord = activeDrag.model.words[range.endPosition];
     setNativeWordSelection(startWord, endWord);
@@ -539,7 +706,14 @@ export function createPdfSmartSelectionController({ host, onSelection }) {
     }
 
     event.preventDefault();
-    activeDrag = { anchorWord, model, raw: false };
+    const anchorBlockWords = selectionBlockWords(model, anchorWord);
+    activeDrag = {
+      anchorBlockBounds: selectionBlockBounds(anchorBlockWords),
+      anchorBlockWords,
+      anchorWord,
+      model,
+      raw: false,
+    };
     setNativeWordSelection(anchorWord, anchorWord);
   }
 
@@ -549,21 +723,33 @@ export function createPdfSmartSelectionController({ host, onSelection }) {
     }
 
     event.preventDefault();
-    window.requestAnimationFrame(() => {
-      updateSmartSelection(event.clientX, event.clientY);
-    });
+    activeDrag.clientX = event.clientX;
+    activeDrag.clientY = event.clientY;
+    if (!selectionFrame) {
+      selectionFrame = window.requestAnimationFrame(() => {
+        selectionFrame = 0;
+        updateSmartSelection(activeDrag?.clientX, activeDrag?.clientY);
+      });
+    }
   }
 
-  function onPointerUp() {
+  function onPointerUp(event) {
     if (!activeDrag) {
       return;
     }
 
+    event.preventDefault();
     const mode = activeDrag.raw ? 'raw-shift' : 'word';
-    window.setTimeout(() => {
+    activeDrag.clientX = event.clientX;
+    activeDrag.clientY = event.clientY;
+    window.requestAnimationFrame(() => {
+      if (!activeDrag) return;
+      if (!activeDrag.raw) {
+        updateSmartSelection(activeDrag.clientX, activeDrag.clientY);
+      }
       publishSelection(mode);
-    }, 0);
-    activeDrag = null;
+      activeDrag = null;
+    });
   }
 
   host.addEventListener('pointerdown', onPointerDown);
@@ -574,5 +760,8 @@ export function createPdfSmartSelectionController({ host, onSelection }) {
     host.removeEventListener('pointerdown', onPointerDown);
     document.removeEventListener('pointermove', onPointerMove);
     document.removeEventListener('pointerup', onPointerUp);
+    if (selectionFrame) {
+      window.cancelAnimationFrame(selectionFrame);
+    }
   };
 }
