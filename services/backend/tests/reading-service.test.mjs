@@ -90,6 +90,16 @@ function createPdfParserStub({ text, pages = null, total = 1 } = {}) {
   };
 }
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, reject, resolve };
+}
+
 async function waitFor(assertion, { attempts = 50, delayMs = 20 } = {}) {
   let lastError = null;
   for (let index = 0; index < attempts; index += 1) {
@@ -373,6 +383,119 @@ test('reading service returns provisional PDF metadata, then replaces it with AI
   assert.match(summaryPrompt, /당신은 AI 분야 연구논문 요약 정리기입니다/);
   assert.match(summaryPrompt, /paperTitleEnglish/);
   assert.match(summaryPrompt, /authors/);
+});
+
+test('reading chat waits for uploaded PDF analysis instead of blocking immediately', async (t) => {
+  const parseGate = createDeferred();
+  let parserCalls = 0;
+  const metadataText = [
+    'Immediate Upload Title',
+    'First Author, Second Author',
+    '',
+    'Abstract',
+    'The upload starts analysis immediately so chat can join the parsing work.',
+  ].join('\n');
+  const parsedText = [
+    'Abstract',
+    'Immediate chat over an uploaded PDF waits for parsing and then answers from the paper.',
+    '',
+    '1 Introduction',
+    'The reader should not block questions while extraction is already running.',
+    '',
+    '2 Method',
+    'The backend joins the active analysis task before generating the chat answer.',
+  ].join('\n');
+  const runtime = {
+    async checkAvailability() {
+      return true;
+    },
+    parseJsonFromMessages(messages) {
+      return JSON.parse(messages[0].content);
+    },
+    async runJsonTask({ prompt }) {
+      if (/paperTitleEnglish/.test(prompt)) {
+        return [
+          {
+            role: 'assistant',
+            content: JSON.stringify({
+              fullSummary: '## Summary\n\nImmediate chat remains available while uploaded PDFs are parsed.',
+              keyPoints: ['질문은 파싱 작업에 합류한다.', '분석 완료 뒤 답변을 생성한다.'],
+              limit: 'PDF 추출 시간이 답변 대기 시간에 포함될 수 있다.',
+              method: '활성 분석 작업을 공유한다.',
+              result: '업로드 직후에도 질문 입력을 막지 않는다.',
+              sectionSummaries: [],
+              tldr: '업로드 직후 질문해도 분석 준비 후 답변한다.',
+            }),
+          },
+        ];
+      }
+      return [
+        {
+          role: 'assistant',
+          content: JSON.stringify({
+            answer: 'The backend joins the active analysis task before answering.',
+            citations: [{ label: 'Method', page: 1, quote: 'joins the active analysis task', sectionId: '2-method' }],
+          }),
+        },
+      ];
+    },
+  };
+  const { service, store } = await createHarness({
+    agentRuntime: runtime,
+    ocrEngine: null,
+    pdfParseFactory: () => {
+      parserCalls += 1;
+      if (parserCalls === 1) {
+        return createPdfParserStub({ text: metadataText });
+      }
+      return {
+        async destroy() {},
+        async getImage() {
+          return { pages: [], total: 1 };
+        },
+        async getInfo() {
+          return { info: {}, pages: [], total: 1 };
+        },
+        async getTable() {
+          return { pages: [], total: 1 };
+        },
+        async getText() {
+          await parseGate.promise;
+          return {
+            pages: [{ num: 1, text: parsedText }],
+            text: parsedText,
+            total: 1,
+          };
+        },
+      };
+    },
+  });
+  t.after(async () => {
+    parseGate.resolve();
+    await store.close?.();
+  });
+
+  const payload = await service.createUploadedSession({
+    contentBase64: Buffer.from('%PDF-1.4\n%%EOF').toString('base64'),
+    fileName: 'instant-chat.pdf',
+    projectId: 'demo',
+  });
+  assert.equal(payload.session.parseStatus, 'running');
+
+  const chatPromise = service
+    .chat(payload.session.id, {
+      message: 'Can I ask immediately after upload?',
+    })
+    .catch((error) => ({ error }));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  parseGate.resolve();
+
+  const chat = await chatPromise;
+  assert.ifError(chat.error);
+  assert.equal(chat.session.parseStatus, 'done');
+  assert.equal(chat.messages[1].role, 'assistant');
+  assert.match(chat.messages[1].text, /active analysis task/i);
+  assert.equal(parserCalls, 2);
 });
 
 test('reading service mirrors sessions into reading packets for the asset graph', async (t) => {

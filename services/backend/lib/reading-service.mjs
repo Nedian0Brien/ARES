@@ -1009,6 +1009,7 @@ export function createReadingService({
   const artifacts = artifactStore || createLocalArtifactStore({ rootDir });
 
   let runtimeAvailablePromise = null;
+  const analysisTasks = new Map();
 
   async function isRuntimeAvailable() {
     if (!runtimeAvailablePromise) {
@@ -1016,6 +1017,21 @@ export function createReadingService({
     }
 
     return runtimeAvailablePromise;
+  }
+
+  function runSessionAnalysis(sessionId, { refresh = false } = {}) {
+    const existingTask = analysisTasks.get(sessionId);
+    if (existingTask && !refresh) {
+      return existingTask;
+    }
+
+    const task = serviceApi.analyzeSession(sessionId, { refresh }).finally(() => {
+      if (analysisTasks.get(sessionId) === task) {
+        analysisTasks.delete(sessionId);
+      }
+    });
+    analysisTasks.set(sessionId, task);
+    return task;
   }
 
   async function getSessionOrThrow(sessionId) {
@@ -1298,9 +1314,7 @@ export function createReadingService({
   }
 
   function scheduleUploadedSessionAnalysis(sessionId) {
-    void (async () => {
-      await serviceApi.analyzeSession(sessionId);
-    })().catch(async (error) => {
+    void runSessionAnalysis(sessionId).catch(async (error) => {
       await updateSession(sessionId, {
         parseError: error instanceof Error ? error.message : String(error),
         parseFinishedAt: nowIso(),
@@ -2188,9 +2202,13 @@ Rules:
     },
 
     async chat(sessionId, { message, selection: selectionInput = null } = {}) {
-      const session = await getSessionOrThrow(sessionId);
+      let session = await getSessionOrThrow(sessionId);
       if (session.parseStatus !== 'done' || !session.parsedArtifactPath) {
-        throw new Error('Analyze the paper before asking questions.');
+        await runSessionAnalysis(sessionId);
+        session = await getSessionOrThrow(sessionId);
+        if (session.parseStatus !== 'done' || !session.parsedArtifactPath) {
+          throw new Error('The paper could not be prepared for chat.');
+        }
       }
 
       const prompt = ensureTrimmedString(message, '');

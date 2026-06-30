@@ -720,7 +720,8 @@ function readingChatSelectionPayload(selection) {
 function ChatView({ actionStatus = '', onClearSelection = null, onSend, selectedTextSelection = null, session }) {
   const [draft, setDraft] = useState('');
   const messages = Array.isArray(session?.chatMessages) ? session.chatMessages : [];
-  const canChat = Boolean(session?.id && session.parseStatus === 'done');
+  const canChat = Boolean(session?.id);
+  const preparingPaper = canChat && session.parseStatus !== 'done';
   const activeSection = activeReadingSection(session);
   const activeSectionLabel = readingSectionContextLabel(activeSection);
   const activeTextSelection = selectedTextSelection?.quote ? selectedTextSelection : null;
@@ -752,7 +753,7 @@ function ChatView({ actionStatus = '', onClearSelection = null, onSend, selected
           <div className="empty-state" style={{ minHeight:220 }}>
             <div style={{ width:52, height:52, borderRadius:14, background:'rgba(94,106,210,0.08)', display:'flex', alignItems:'center', justifyContent:'center' }}><Icon name="chat" size={24} color={T.t3}/></div>
             <div className="title">아직 대화가 없습니다</div>
-            <div className="sub">{canChat ? '논문 내용에 대해 질문할 수 있습니다.' : '텍스트 추출 후 질문할 수 있습니다.'}</div>
+            <div className="sub">{preparingPaper ? '질문을 남기면 준비가 끝나는 대로 답변합니다.' : '논문 내용에 대해 질문할 수 있습니다.'}</div>
           </div>
         )}
       </div>
@@ -768,7 +769,7 @@ function ChatView({ actionStatus = '', onClearSelection = null, onSend, selected
               )}
             </div>
           )}
-          <textarea disabled={!canChat || actionStatus === 'running'} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder={canChat ? '이 논문에게 질문하기...' : '텍스트 추출 후 질문할 수 있습니다'} value={draft}/>
+          <textarea disabled={!canChat || actionStatus === 'running'} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder="이 논문에게 질문하기..." value={draft}/>
           <div className="chat-irow">
             <button className="chat-tool icon" disabled type="button" aria-label="문단 첨부"><Icon name="plus" size={13}/></button>
             <span className="chat-tool" style={{ cursor:'default' }}><Icon name="pdf" size={13}/>현재 섹션</span>
@@ -777,7 +778,7 @@ function ChatView({ actionStatus = '', onClearSelection = null, onSend, selected
             <button className="chat-send" disabled={!draft.trim() || !canChat || actionStatus === 'running'}><Icon name="send" size={14} color="#fff"/></button>
           </div>
         </div>
-        <div className="chat-disc">{canChat ? (activeTextSelection ? '선택 텍스트가 질문과 함께 전달됩니다' : '논문 텍스트를 바탕으로 답변합니다') : '텍스트 추출이 끝난 뒤 질문할 수 있습니다'}</div>
+        <div className="chat-disc">{preparingPaper ? '논문을 준비한 뒤 답변합니다' : (activeTextSelection ? '선택 텍스트가 질문과 함께 전달됩니다' : '논문 텍스트를 바탕으로 답변합니다')}</div>
       </form>
     </div>
   );

@@ -435,6 +435,11 @@ test('Reader exposes one paper analysis action instead of separate parse summary
   assert.match(appJs, /readingSessionApiPath\(currentSession\.id, step\.path\)/);
   assert.match(appJs, /nextSession\?\.parseStatus !== "done"/);
   assert.match(readingRoutesJs, /\/analyze/);
+  assert.match(readingJs, /const canChat = Boolean\(session\?\.id\);/);
+  assert.doesNotMatch(readingJs, /Analyze the paper before asking/);
+  assert.doesNotMatch(readingJs, /enable chat/);
+  assert.doesNotMatch(readingJs, /Waiting for paper text/);
+  assert.match(readingJs, /Preparing the paper/);
   assert.match(styles, /\.reading-analysis-button\.is-progress/);
   assert.match(styles, /--reading-analysis-progress/);
   assert.doesNotMatch(styles, /@keyframes reading-analysis-progress/);

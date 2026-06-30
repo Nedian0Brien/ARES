@@ -102,6 +102,8 @@ test('React Reading workbench renders session data instead of mock chat, notes, 
   const source = await readProjectFile('web/src/tabs/reading/ReadingTab.jsx');
 
   assert.match(source, /chatMessages: Array\.isArray\(session\?\.chatMessages\)/);
+  assert.match(source, /const canChat = Boolean\(session\?\.id\);/);
+  assert.doesNotMatch(source, /텍스트 추출 후 질문할 수 있습니다/);
   assert.match(source, /assets: Array\.isArray\(session\?\.assets\)/);
   assert.match(source, /summaryCards: session\?\.summaryCards/);
   assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/summarize`/);

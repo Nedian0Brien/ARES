@@ -1143,6 +1143,7 @@ export function createReadingFeature({
     const assets = deriveReadingAssets(session);
     const summary = deriveReadingSummary(session);
     const parsed = readingIsParsed(session);
+    const canChat = Boolean(session?.id);
     const summarized = readingIsSummarized(session);
     const summaryFailed = readingSummaryFailed(session);
     const split = state.readingOrientation === "vertical" ? state.readingSplitVertical : state.readingSplitHorizontal;
@@ -1993,7 +1994,7 @@ export function createReadingFeature({
               ? `
                   <div class="reading-chat-warning">
                     ${icon("info", { size: 13, color: TOKENS.result })}
-                      <div><strong>Analyze the paper</strong> to enable chat.</div>
+                      <div><strong>Preparing the paper</strong> before the answer.</div>
                   </div>
                 `
               : ""
@@ -2065,11 +2066,11 @@ export function createReadingFeature({
         <form class="reading-chat-input" data-action="submit-reading-chat-form">
           ${chatContextChips}
           <div class="reading-chat-input-box">
-            <textarea name="readingChatMessage" rows="2" placeholder="${parsed ? "Ask about this paper..." : "Analyze the paper before asking"}" ${!parsed || chatBusy ? "disabled" : ""}></textarea>
-            <button type="submit" class="reading-chat-send" aria-label="Send reading question" ${!parsed || chatBusy ? "disabled" : ""}>${icon("send", { size: 13, color: "#fff" })}</button>
+            <textarea name="readingChatMessage" rows="2" placeholder="Ask about this paper..." ${!canChat || chatBusy ? "disabled" : ""}></textarea>
+            <button type="submit" class="reading-chat-send" aria-label="Send reading question" ${!canChat || chatBusy ? "disabled" : ""}>${icon("send", { size: 13, color: "#fff" })}</button>
           </div>
           <div class="reading-chat-footer">
-            <span>${parsed ? "Answers include paper evidence" : "Waiting for paper text"}</span>
+            <span>${parsed ? "Answers include paper evidence" : "Preparing the paper first"}</span>
             <span class="mono">${chatBusy ? "running" : "reader-agent"}</span>
           </div>
         </form>
