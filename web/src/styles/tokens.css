@@ -164,10 +164,18 @@ button { font-family:inherit; }
 .reading-pdf-canvas-page { width:max-content; max-width:100%; display:flex; flex-direction:column; align-items:center; gap:6px; scroll-margin:18px; }
 .reading-pdf-page-surface { position:relative; max-width:100%; background:#fff; border:1px solid var(--b1); border-radius:4px; overflow:hidden; box-shadow:0 2px 6px rgba(15,15,15,0.04), 0 1px 2px rgba(15,15,15,0.03); }
 .reading-pdf-canvas { display:block; max-width:100%; background:#fff; }
-.reading-pdf-text-layer { position:absolute; inset:0; color:transparent; opacity:1; overflow:clip; pointer-events:auto; user-select:text; z-index:2; }
-.reading-pdf-text-layer :is(span, br) { color:transparent; cursor:text; user-select:text; }
+.reading-pdf-text-layer { --min-font-size:1; --text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv:calc(1 / var(--min-font-size)); position:absolute; inset:0; color:transparent; opacity:1; overflow:clip; pointer-events:auto; user-select:text; z-index:2; text-align:initial; line-height:1; text-size-adjust:none; forced-color-adjust:none; transform-origin:0 0; caret-color:CanvasText; }
+.reading-pdf-text-layer :is(span, br) { color:transparent; position:absolute; white-space:pre; cursor:text; transform-origin:0% 0%; user-select:text; }
+.reading-pdf-text-layer > :not(.markedContent),
+.reading-pdf-text-layer .markedContent span:not(.markedContent) { z-index:1; --font-height:0; font-size:calc(var(--text-scale-factor) * var(--font-height)); --scale-x:1; --rotate:0deg; transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.reading-pdf-text-layer .markedContent { display:contents; }
+.reading-pdf-text-layer span[role="img"] { cursor:default; user-select:none; }
 .reading-pdf-text-layer::selection,
 .reading-pdf-text-layer ::selection { background:color-mix(in srgb, var(--read) 34%, transparent); }
+.reading-pdf-text-layer br::selection,
+.reading-pdf-text-layer .endOfContent::selection { background:transparent; }
+.reading-pdf-text-layer .endOfContent { display:block; position:absolute; inset:100% 0 0; z-index:0; cursor:default; user-select:none; }
+.reading-pdf-text-layer.selecting .endOfContent { top:0; }
 .reading-pdf-annotation-layer { position:absolute; inset:0; pointer-events:none; z-index:3; }
 .reading-pdf-annotation-box { position:absolute; border-radius:2px; background:rgba(94,106,210,0.13); border-bottom:2px solid var(--read); }
 .reading-pdf-annotation-box.is-note { background:rgba(94,156,111,0.14); border-bottom-color:var(--search); }

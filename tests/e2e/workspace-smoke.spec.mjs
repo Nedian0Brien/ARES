@@ -271,13 +271,21 @@ test('Reading reader hydrates a real session PDF in the React PDF tab', async ({
     const textLayerSelectionStyle = await page.locator('.reading-pdf-text-layer').first().evaluate((layer) => {
       const layerStyle = window.getComputedStyle(layer);
       const selectionStyle = window.getComputedStyle(layer, '::selection');
+      const firstTextRun = layer.querySelector('span:not(.markedContent)');
+      const firstTextRunStyle = firstTextRun ? window.getComputedStyle(firstTextRun) : null;
       return {
         opacity: layerStyle.opacity,
         selectionBackground: selectionStyle.backgroundColor,
+        textRunPosition: firstTextRunStyle?.position || '',
+        textRunTransformOrigin: firstTextRunStyle?.transformOrigin || '',
+        textRunWhiteSpace: firstTextRunStyle?.whiteSpace || '',
       };
     });
     expect(Number(textLayerSelectionStyle.opacity)).toBeGreaterThan(0.95);
     expect(textLayerSelectionStyle.selectionBackground).not.toMatch(/^(transparent|rgba\(0,\s*0,\s*0,\s*0\))$/);
+    expect(textLayerSelectionStyle.textRunPosition).toBe('absolute');
+    expect(textLayerSelectionStyle.textRunTransformOrigin).toMatch(/^0(px)? 0(px)?/);
+    expect(textLayerSelectionStyle.textRunWhiteSpace).toBe('pre');
 
     diagnostics.assertClean();
   } finally {
