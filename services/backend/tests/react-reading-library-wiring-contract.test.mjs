@@ -90,8 +90,11 @@ test('React Reading reader hydrates the real session PDF through the existing PD
   assert.match(source, /aria-label="하이라이트"/);
   assert.match(source, /aria-label="메모 추가"/);
   assert.match(source, /aria-label="노트 링크"/);
+  assert.match(source, /aria-label="AI에게 질문"/);
   assert.match(source, /aria-label="노트 링크 선택"/);
   assert.match(source, /linkPdfSelectionToNote/);
+  assert.match(source, /onSelectionChange\?\.\(selection\)/);
+  assert.match(source, /onAskSelection\?\.\(pdfSelection\)/);
   assert.doesNotMatch(source, /<h1>Reducing Reranker Costs/);
 });
 
@@ -103,7 +106,9 @@ test('React Reading workbench renders session data instead of mock chat, notes, 
   assert.match(source, /summaryCards: session\?\.summaryCards/);
   assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/summarize`/);
   assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/chat`/);
-  assert.match(source, /<ChatView actionStatus=\{readingAction\.status\} onSend=\{sendReadingChat\} session=\{session\}\/>/);
+  assert.match(source, /function readingChatSelectionPayload\(selection\)/);
+  assert.match(source, /body: chatSelection \? \{ message, selection: chatSelection \} : \{ message \}/);
+  assert.match(source, /<ChatView actionStatus=\{readingAction\.status\} onClearSelection=\{clearReaderSelection\} onSend=\{sendReadingChat\} selectedTextSelection=\{readerSelection\} session=\{session\}\/>/);
   assert.match(source, /api\(`api\/projects\/\$\{encodeURIComponent\(projectId\)\}\/wiki`/);
   assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/notes`/);
   assert.match(source, /api\(`api\/reading-sessions\/\$\{encodeURIComponent\(session\.id\)\}\/notes\/\$\{encodeURIComponent\(noteId\)\}`/);

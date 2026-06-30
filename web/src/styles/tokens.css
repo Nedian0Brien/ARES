@@ -203,9 +203,11 @@ button { font-family:inherit; }
 .dock-btn.nt:hover { background:rgba(94,106,210,0.1); }
 .dock-btn.link { color:var(--search); }
 .dock-btn.link:hover { background:rgba(94,156,111,0.12); color:var(--search); }
+.dock-btn.chat { color:var(--read); }
+.dock-btn.chat:hover { background:rgba(94,106,210,0.1); color:var(--read); }
 .dock-btn:disabled:hover { background:transparent; color:var(--t2); }
 .dock-sel-group { display:flex; align-items:center; gap:1px; max-width:1px; overflow:hidden; opacity:0; pointer-events:none; transition:max-width 180ms ease, opacity 140ms ease; }
-.dock.has-selection .dock-sel-group { max-width:360px; opacity:1; pointer-events:auto; }
+.dock.has-selection .dock-sel-group { max-width:460px; opacity:1; pointer-events:auto; }
 .dock-sel-group .lbl-wrap { display:grid; grid-template-columns:0fr; transition:grid-template-columns 180ms ease; }
 .dock.has-selection .dock-sel-group .lbl-wrap { grid-template-columns:1fr; }
 .dock-sel-group .lbl { min-width:0; overflow:hidden; white-space:nowrap; }
@@ -285,7 +287,8 @@ button { font-family:inherit; }
 .chat-box:focus-within { border-color:var(--b2); box-shadow:0 3px 18px rgba(20,20,30,0.085); }
 .chat-attach { display:flex; flex-wrap:wrap; gap:6px; padding:7px 8px 2px; }
 .chat-context-chip { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--b1); border-radius:9px; background:var(--s2); color:var(--t2); font-size:11.5px; line-height:1; padding:5px 7px; }
-.chat-context-chip .x { color:var(--t4); font-size:12px; line-height:1; }
+.chat-context-chip .x { color:var(--t4); font-size:12px; line-height:1; border:none; background:transparent; padding:0; cursor:pointer; font-family:inherit; }
+.chat-context-chip .x:hover { color:var(--tx); }
 .chip { font-size:11px; padding:3px 6px 3px 9px; background:var(--s2); color:var(--t2); border:1px solid var(--b1); border-radius:9px; display:inline-flex; align-items:center; gap:5px; }
 .chip .x { cursor:pointer; color:var(--t4); display:inline-flex; border-radius:50%; }
 .chip .x:hover { color:var(--t2); background:var(--b1); }

@@ -327,6 +327,8 @@ test('Reading PDF smart selection snaps to words and clamps paragraph overflow',
     });
     expect(noteResponse.ok()).toBeTruthy();
     existingNoteId = (await noteResponse.json()).note.id;
+    const parsed = await request.post(`/api/reading-sessions/${encodeURIComponent(sessionId)}/parse`);
+    expect(parsed.ok()).toBeTruthy();
 
     await page.goto(`/#/projects/rag-reranker/reading/sessions/${encodeURIComponent(sessionId)}/pdf`);
     await expect.poll(() => page.evaluate(() => window.location.hash)).toContain(`/reading/sessions/${encodeURIComponent(sessionId)}/pdf`);
@@ -377,10 +379,32 @@ test('Reading PDF smart selection snaps to words and clamps paragraph overflow',
     await expect(page.getByRole('button', { name: '하이라이트' })).toBeEnabled();
     await expect(page.getByRole('button', { name: '메모 추가' })).toBeEnabled();
     await expect(page.getByRole('button', { name: '노트 링크' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'AI에게 질문' })).toBeEnabled();
     const selectedText = await page.evaluate(() => window.getSelection().toString().replace(/\s+/g, ' ').trim());
     expect(selectedText).toMatch(/^deterministic\b/);
     expect(selectedText).toContain('selection');
     expect(selectedText).not.toContain(dragPoints.laterText);
+
+    let chatBody = null;
+    await page.route(`**/api/reading-sessions/${encodeURIComponent(sessionId)}/chat`, async (route) => {
+      chatBody = route.request().postDataJSON();
+      await route.fulfill({
+        contentType: 'application/json',
+        json: { chatMessage: { id: 'e2e-chat', role: 'assistant', text: 'ok' } },
+        status: 200,
+      });
+    });
+    await page.getByRole('button', { name: 'AI에게 질문' }).click();
+    await expect(page.locator('.chat-context-chip', { hasText: /선택 \d+단어/ })).toBeVisible();
+    await page.locator('.chat-box textarea').fill('이 선택한 문장 설명해줘');
+    await page.locator('.chat-send').click();
+    await expect.poll(() => chatBody).not.toBeNull();
+    expect(chatBody.message).toBe('이 선택한 문장 설명해줘');
+    expect(chatBody.selection.page).toBe(1);
+    expect(chatBody.selection.quote).toContain('deterministic');
+    expect(chatBody.selection.quote).not.toContain(dragPoints.laterText);
+    expect(chatBody.selection.sourceBounds.unit).toBe('page-ratio');
+    await page.unroute(`**/api/reading-sessions/${encodeURIComponent(sessionId)}/chat`);
 
     await page.getByRole('button', { name: '노트 링크' }).click();
     const linkSheet = page.getByRole('dialog', { name: '노트 링크 선택' });

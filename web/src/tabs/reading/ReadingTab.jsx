@@ -155,7 +155,7 @@ function ReadingPanel({ library, notes, onOpenPaper, outline, outlineProgress, s
               <StatusIcon status={s.status}/><span>{s.label}</span>
             </div>
           ))}
-          {!outline.length && <div className="wempty" style={{ padding:'8px 4px' }}>분석 후 목차가 표시됩니다.</div>}
+          {!outline.length && <div className="wempty" style={{ padding:'8px 4px' }}>텍스트 추출 후 목차가 표시됩니다.</div>}
         </div>
       </>}
 
@@ -270,7 +270,7 @@ function readingSessionHash(projectId, sessionId, docTab = 'pdf') {
   return `${readingProjectHash(projectId)}/sessions/${encodeURIComponent(sessionId)}/${tab}`;
 }
 
-function PdfView({ dockHidden = false, onOpenNotes = null, onRefresh = null, session, sourceHighlight = null, targetPage = 1 }) {
+function PdfView({ dockHidden = false, onAskSelection = null, onOpenNotes = null, onRefresh = null, onSelectionChange = null, session, sourceHighlight = null, targetPage = 1 }) {
   const [zoom, setZoom] = useState(100);
   const [pdfSelection, setPdfSelection] = useState(null);
   const [dockPanel, setDockPanel] = useState('');
@@ -300,10 +300,11 @@ function PdfView({ dockHidden = false, onOpenNotes = null, onRefresh = null, ses
 
   useEffect(() => {
     setPdfSelection(null);
+    onSelectionChange?.(null);
     setDockStatus({ message: '', status: 'idle' });
     setPagePreviews({});
     setRenderedPageCount(0);
-  }, [session?.id]);
+  }, [onSelectionChange, session?.id]);
 
   useEffect(() => {
     if (!dockStatus.message || dockStatus.status === 'running') return undefined;
@@ -362,14 +363,22 @@ function PdfView({ dockHidden = false, onOpenNotes = null, onRefresh = null, ses
       onSelection(selection) {
         if (selection.quote.length > 5) {
           setPdfSelection(selection);
+          onSelectionChange?.(selection);
         }
       },
     });
-  }, [session?.id, session?.pdfUrl]);
+  }, [onSelectionChange, session?.id, session?.pdfUrl]);
 
   const clearPdfSelection = () => {
     window.getSelection?.()?.removeAllRanges();
     setPdfSelection(null);
+    onSelectionChange?.(null);
+  };
+
+  const askPdfSelection = () => {
+    if (!pdfSelection?.quote) return;
+    onSelectionChange?.(pdfSelection);
+    onAskSelection?.(pdfSelection);
   };
 
   const savePdfSelection = async (kind) => {
@@ -584,6 +593,10 @@ function PdfView({ dockHidden = false, onOpenNotes = null, onRefresh = null, ses
               <Icon name="link" size={13}/>
               <span className="lbl-wrap"><span className="lbl">노트 링크</span></span>
             </button>
+            <button className="dock-btn chat" disabled={!pdfSelection || dockStatus.status === 'running'} title="AI에게 질문" aria-label="AI에게 질문" onClick={askPdfSelection} type="button">
+              <Icon name="chat" size={13}/>
+              <span className="lbl-wrap"><span className="lbl">AI 질문</span></span>
+            </button>
           </div>
         </div>
       </div>}
@@ -597,7 +610,7 @@ function SummaryView({ actionStatus = '', onGen, ready, session }) {
     <div className="empty-state">
       <div style={{ width:52, height:52, borderRadius:14, background:'rgba(94,106,210,0.08)', display:'flex', alignItems:'center', justifyContent:'center' }}><Icon name="sparkles" size={24} color={T.read}/></div>
       <div className="title">요약이 아직 생성되지 않았습니다</div>
-      <div className="sub">{session?.parseStatus === 'done' ? '요약을 생성하면 이 논문의 핵심 내용이 여기에 표시됩니다.' : '논문 분석이 끝난 뒤 요약을 생성할 수 있습니다.'}</div>
+      <div className="sub">{session?.parseStatus === 'done' ? '요약을 생성하면 이 논문의 핵심 내용이 여기에 표시됩니다.' : '텍스트 추출 후 요약을 생성할 수 있습니다.'}</div>
       <button className="btn-p" disabled={!session?.id || actionStatus === 'running'} onClick={onGen} style={{ marginTop:8 }}><Icon name="sparkles" size={13}/> Generate summary</button>
     </div>
   );
@@ -680,21 +693,6 @@ function activeReadingSection(session) {
     || null;
 }
 
-function readingSelectionWordCount(session, section) {
-  const sectionWordCount = Number(section?.selectionWordCount ?? section?.wordCount);
-  if (Number.isFinite(sectionWordCount) && sectionWordCount > 0) {
-    return Math.round(sectionWordCount);
-  }
-
-  const highlights = Array.isArray(session?.highlights) ? session.highlights : [];
-  const selected = highlights.find((highlight) => section?.id && highlight?.sectionId === section.id)
-    || highlights.find((highlight) => highlight?.quote || highlight?.text)
-    || null;
-  const text = String(selected?.quote || selected?.text || '').trim();
-  if (!text) return 0;
-  return text.split(/\s+/).filter(Boolean).length;
-}
-
 function readingSectionContextLabel(section) {
   const label = String(section?.label || '').replace(/^\d+\.\s*/, '').trim();
   if (!label) return '';
@@ -702,19 +700,37 @@ function readingSectionContextLabel(section) {
   return Number.isFinite(order) ? `${Math.max(1, Math.round(order) + 1)} ${label}` : label;
 }
 
-function ChatView({ actionStatus = '', onSend, session }) {
+function selectedTextWordCount(selection) {
+  const quote = String(selection?.quote || '').trim();
+  if (!quote) return 0;
+  return quote.split(/\s+/).filter(Boolean).length;
+}
+
+function readingChatSelectionPayload(selection) {
+  const quote = String(selection?.quote || '').trim();
+  if (!quote) return null;
+  return {
+    lineCount: Number(selection?.lineCount) || quote.split(/\n+/).filter(Boolean).length || 1,
+    page: Number(selection?.page) || null,
+    quote,
+    sourceBounds: selection?.sourceBounds || null,
+  };
+}
+
+function ChatView({ actionStatus = '', onClearSelection = null, onSend, selectedTextSelection = null, session }) {
   const [draft, setDraft] = useState('');
   const messages = Array.isArray(session?.chatMessages) ? session.chatMessages : [];
   const canChat = Boolean(session?.id && session.parseStatus === 'done');
   const activeSection = activeReadingSection(session);
   const activeSectionLabel = readingSectionContextLabel(activeSection);
-  const selectionWordCount = readingSelectionWordCount(session, activeSection);
+  const activeTextSelection = selectedTextSelection?.quote ? selectedTextSelection : null;
+  const selectionWordCount = selectedTextWordCount(activeTextSelection);
 
   const submit = (event) => {
     event.preventDefault();
     const message = draft.trim();
     if (!message || !canChat || actionStatus === 'running') return;
-    onSend(message);
+    onSend(message, activeTextSelection);
     setDraft('');
   };
 
@@ -736,7 +752,7 @@ function ChatView({ actionStatus = '', onSend, session }) {
           <div className="empty-state" style={{ minHeight:220 }}>
             <div style={{ width:52, height:52, borderRadius:14, background:'rgba(94,106,210,0.08)', display:'flex', alignItems:'center', justifyContent:'center' }}><Icon name="chat" size={24} color={T.t3}/></div>
             <div className="title">아직 대화가 없습니다</div>
-            <div className="sub">{canChat ? '논문 내용에 대해 질문할 수 있습니다.' : '논문 분석이 끝난 뒤 질문할 수 있습니다.'}</div>
+            <div className="sub">{canChat ? '논문 내용에 대해 질문할 수 있습니다.' : '텍스트 추출 후 질문할 수 있습니다.'}</div>
           </div>
         )}
       </div>
@@ -745,14 +761,14 @@ function ChatView({ actionStatus = '', onSend, session }) {
           {(activeSectionLabel || selectionWordCount > 0) && (
             <div className="chat-attach">
               {activeSectionLabel && (
-                <span className="chat-context-chip"><Icon name="pdf" size={12}/>§{activeSectionLabel}<span className="x">×</span></span>
+                <span className="chat-context-chip"><Icon name="pdf" size={12}/>§{activeSectionLabel}</span>
               )}
               {selectionWordCount > 0 && (
-                <span className="chat-context-chip"><Icon name="quote" size={12}/>선택 {selectionWordCount}단어<span className="x">×</span></span>
+                <span className="chat-context-chip"><Icon name="quote" size={12}/>선택 {selectionWordCount}단어<button className="x" aria-label="선택 텍스트 제거" onClick={onClearSelection} type="button">×</button></span>
               )}
             </div>
           )}
-          <textarea disabled={!canChat || actionStatus === 'running'} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder={canChat ? '이 논문에게 질문하기...' : '분석 후 질문할 수 있습니다'} value={draft}/>
+          <textarea disabled={!canChat || actionStatus === 'running'} onChange={(event) => setDraft(event.target.value)} rows={1} placeholder={canChat ? '이 논문에게 질문하기...' : '텍스트 추출 후 질문할 수 있습니다'} value={draft}/>
           <div className="chat-irow">
             <button className="chat-tool icon" disabled type="button" aria-label="문단 첨부"><Icon name="plus" size={13}/></button>
             <span className="chat-tool" style={{ cursor:'default' }}><Icon name="pdf" size={13}/>현재 섹션</span>
@@ -761,7 +777,7 @@ function ChatView({ actionStatus = '', onSend, session }) {
             <button className="chat-send" disabled={!draft.trim() || !canChat || actionStatus === 'running'}><Icon name="send" size={14} color="#fff"/></button>
           </div>
         </div>
-        <div className="chat-disc">{canChat ? '현재 섹션 + 선택 텍스트가 자동으로 컨텍스트에 포함됩니다' : '분석되지 않은 논문에는 답변을 만들지 않습니다'}</div>
+        <div className="chat-disc">{canChat ? (activeTextSelection ? '선택 텍스트가 질문과 함께 전달됩니다' : '논문 텍스트를 바탕으로 답변합니다') : '텍스트 추출이 끝난 뒤 질문할 수 있습니다'}</div>
       </form>
     </div>
   );
@@ -1598,6 +1614,7 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
   const [readingAction, setReadingAction] = useState({ message: '', status: 'idle' });
   const [uploadState, setUploadState] = useState({ message: '', status: 'idle' });
   const [assetSource, setAssetSource] = useState(null);
+  const [readerSelection, setReaderSelection] = useState(null);
   const [collectionModalOpen, setCollectionModalOpen] = useState(false);
   const [collectionDraft, setCollectionDraft] = useState({ name: '', paperId: '' });
   const [libraryMenuOpen, setLibraryMenuOpen] = useState(false);
@@ -1796,12 +1813,13 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
     }
   };
 
-  const sendReadingChat = async (message) => {
+  const sendReadingChat = async (message, selection = readerSelection) => {
     if (!session?.id || readingAction.status === 'running') return;
+    const chatSelection = readingChatSelectionPayload(selection);
     setReadingAction({ message: '답변 중', status: 'running' });
     try {
       await api(`api/reading-sessions/${encodeURIComponent(session.id)}/chat`, {
-        body: { message },
+        body: chatSelection ? { message, selection: chatSelection } : { message },
         method: 'POST',
       });
       setLibraryRefresh((value) => value + 1);
@@ -1817,6 +1835,22 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
     setReaderDocTab('pdf');
     setMobileWorkbenchOpen(false);
   }, [setReaderDocTab]);
+
+  const askReaderSelection = useCallback((selection) => {
+    if (selection?.quote) {
+      setReaderSelection(selection);
+    }
+    setWbTab('chat');
+    setWbCollapsed(false);
+    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 860px)').matches) {
+      setMobileWorkbenchOpen(true);
+    }
+  }, []);
+
+  const clearReaderSelection = useCallback(() => {
+    setReaderSelection(null);
+    window.getSelection?.()?.removeAllRanges();
+  }, []);
 
   const openMobileWorkbench = (nextTab) => {
     setWbTab(nextTab);
@@ -1844,6 +1878,7 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
 
   useEffect(() => {
     setAssetSource(null);
+    setReaderSelection(null);
     setMobileWorkbenchOpen(false);
   }, [session?.id]);
 
@@ -1883,14 +1918,14 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
   const docPane = (
     <div className="pane reading-pane reading-doc-pane" style={{ flex: wbCollapsed ? 1 : `0 0 calc(${split}% - 2.5px)` }}>
       <DocumentHeader pageCount={session?.pageCount} pdfUrl={sessionPdfUrl} tab={docTab} setTab={setReaderDocTab} summarized={sessionSummaryReady} orient={orient} setOrient={setOrient}/>
-          <div className="pane-body">{docTab==='pdf' ? <PdfView dockHidden={mobileWorkbenchOpen} onOpenNotes={openNotesWorkbench} onRefresh={() => setLibraryRefresh((value) => value + 1)} session={session} sourceHighlight={assetSource} targetPage={assetSource?.page || 1}/> : <SummaryView actionStatus={readingAction.status} ready={sessionSummaryReady} session={session} onGen={summarizeSession}/>}</div>
+          <div className="pane-body">{docTab==='pdf' ? <PdfView dockHidden={mobileWorkbenchOpen} onAskSelection={askReaderSelection} onOpenNotes={openNotesWorkbench} onRefresh={() => setLibraryRefresh((value) => value + 1)} onSelectionChange={setReaderSelection} session={session} sourceHighlight={assetSource} targetPage={assetSource?.page || 1}/> : <SummaryView actionStatus={readingAction.status} ready={sessionSummaryReady} session={session} onGen={summarizeSession}/>}</div>
     </div>
   );
   const wbPane = (
     <div className={`pane reading-pane reading-workbench-pane ${mobileWorkbenchOpen ? 'mobile-open' : ''}`} style={{ flex:`0 0 calc(${100-split}% - 2.5px)` }}>
       <WorkbenchHeader assetsCount={sessionAssetsCount} chatCount={sessionChatCount} notesCount={sessionNotesCount} tab={wbTab} setTab={setWbTab} onCollapse={() => setWbCollapsed(true)} onMobileClose={() => setMobileWorkbenchOpen(false)}/>
       <div className="pane-body">
-        {wbTab==='chat' && <ChatView actionStatus={readingAction.status} onSend={sendReadingChat} session={session}/>}
+        {wbTab==='chat' && <ChatView actionStatus={readingAction.status} onClearSelection={clearReaderSelection} onSend={sendReadingChat} selectedTextSelection={readerSelection} session={session}/>}
         {wbTab==='notes' && <NotesView onRefresh={() => setLibraryRefresh((value) => value + 1)} projectId={projectId} session={session}/>}
         {wbTab==='assets' && <AssetsView onRefresh={() => setLibraryRefresh((value) => value + 1)} onSourceJump={jumpToAssetSource} session={session}/>}
       </div>
