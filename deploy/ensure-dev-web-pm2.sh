@@ -17,10 +17,12 @@ PM2_NAME="${PM2_NAME:-ares-web-dev}"
 PM2_SAVE="${PM2_SAVE:-1}"
 NODE_ENV="${NODE_ENV:-development}"
 ARES_LIVE_RELOAD="${ARES_LIVE_RELOAD:-1}"
+ARES_DATA_ROOT_DIR="${ARES_DATA_ROOT_DIR:-${ROOT_DIR}}"
 PORT_CONFLICT_POLICY="${PORT_CONFLICT_POLICY:-fail}"
 PM2_READY_TIMEOUT_SECONDS="${PM2_READY_TIMEOUT_SECONDS:-15}"
 EXPECTED_CWD="${CURRENT_LINK}"
 EXPECTED_EXEC_PATH="${CURRENT_LINK}/services/backend/index.mjs"
+EXPECTED_DATA_ROOT_DIR="${ARES_DATA_ROOT_DIR}"
 
 if ! command -v pm2 >/dev/null 2>&1; then
   echo "✗ pm2 명령을 찾을 수 없습니다" >&2
@@ -39,6 +41,7 @@ echo "  host: $APP_HOST"
 echo "  port: $WEB_PORT"
 echo "  node env: $NODE_ENV"
 echo "  live reload: $ARES_LIVE_RELOAD"
+echo "  data root: $ARES_DATA_ROOT_DIR"
 echo "  port conflict policy: $PORT_CONFLICT_POLICY"
 
 run_pm2() {
@@ -48,6 +51,7 @@ run_pm2() {
   APP_HOST="$APP_HOST" \
   NODE_ENV="$NODE_ENV" \
   ARES_LIVE_RELOAD="$ARES_LIVE_RELOAD" \
+  ARES_DATA_ROOT_DIR="$ARES_DATA_ROOT_DIR" \
   ARES_DEPLOY_REF="${ARES_DEPLOY_REF:-}" \
   ARES_DEPLOY_COMMIT="${ARES_DEPLOY_COMMIT:-}" \
   OPENALEX_API_KEY="${OPENALEX_API_KEY:-}" \
@@ -128,6 +132,7 @@ const values = [
   env.status || "",
   String(runtimeEnv.PORT ?? env.PORT ?? ""),
   String(runtimeEnv.NODE_ENV ?? env.NODE_ENV ?? ""),
+  String(runtimeEnv.ARES_DATA_ROOT_DIR ?? env.ARES_DATA_ROOT_DIR ?? ""),
 ];
 
 process.stdout.write(values.join("\n"));
@@ -141,6 +146,7 @@ pm2_needs_recreate() {
   local current_status
   local current_port
   local current_node_env
+  local current_data_root_dir
   local reasons=()
 
   if ! snapshot="$(pm2_snapshot 2>/dev/null)"; then
@@ -152,6 +158,7 @@ pm2_needs_recreate() {
     current_status="${snapshot_lines[2]:-}"
     current_port="${snapshot_lines[3]:-}"
     current_node_env="${snapshot_lines[4]:-}"
+    current_data_root_dir="${snapshot_lines[5]:-}"
 
     if [[ "$current_exec_path" != "$EXPECTED_EXEC_PATH" ]]; then
       reasons+=("exec path 드리프트 (${current_exec_path:-unset} != $EXPECTED_EXEC_PATH)")
@@ -171,6 +178,10 @@ pm2_needs_recreate() {
 
     if [[ -n "$current_node_env" && "$current_node_env" != "$NODE_ENV" ]]; then
       reasons+=("NODE_ENV 드리프트 (${current_node_env} != $NODE_ENV)")
+    fi
+
+    if [[ -n "$current_data_root_dir" && "$current_data_root_dir" != "$EXPECTED_DATA_ROOT_DIR" ]]; then
+      reasons+=("data root 드리프트 (${current_data_root_dir} != $EXPECTED_DATA_ROOT_DIR)")
     fi
   fi
 
