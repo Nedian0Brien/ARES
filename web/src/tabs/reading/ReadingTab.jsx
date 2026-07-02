@@ -1449,9 +1449,13 @@ function LibStatus({ p }) {
   );
 }
 
-function LibraryPanel({ collections, filters, library, onCollection, onCreateCollection, onReset, onShelf, onTag, tags }) {
+function LibraryPanel({ collections, filters, library, onClose, onCollection, onCreateCollection, onReset, onShelf, onTag, open, tags }) {
   return (
-    <div className="float-panel">
+    <div className={`float-panel reading-library-nav ${open ? 'open' : ''}`}>
+      <div className="lib-nav-head">
+        <span>서가 · 필터</span>
+        <button className="pane-icon-btn" onClick={onClose} aria-label="서가 닫기" type="button"><Icon name="x" size={14}/></button>
+      </div>
       <div className="fp-body" style={{ paddingTop:12 }}>
         <div className="fp-section">
           <div className="fp-section-h"><Icon name="book" size={11} color={T.read}/>서가</div>
@@ -1491,10 +1495,13 @@ function LibraryPanel({ collections, filters, library, onCollection, onCreateCol
 
 function LibraryView({ allLibrary, filters, library, loading, onCreateCollection, onFilters, onOpen }) {
   const [layout, setLayout] = useState('list');
+  const [navOpen, setNavOpen] = useState(false);
   const collections = useMemo(() => libraryCollections(allLibrary), [allLibrary]);
   const tags = useMemo(() => libraryTags(allLibrary), [allLibrary]);
   const emptyText = libraryFilterActive(filters) ? '조건에 맞는 논문이 없습니다.' : '저장된 논문이 없습니다.';
   const sortLabel = LIBRARY_SORT_OPTIONS.find(([value]) => value === filters.sort)?.[1] || '최근';
+  const filterActive = libraryFilterActive(filters);
+  const closeNav = () => setNavOpen(false);
 
   const updateFilters = (patch) => {
     onFilters((current) => ({ ...current, ...patch }));
@@ -1502,27 +1509,42 @@ function LibraryView({ allLibrary, filters, library, loading, onCreateCollection
 
   const toggleCollection = (id) => {
     updateFilters({ collection: filters.collection === id ? '' : id });
+    closeNav();
   };
 
   const toggleTag = (id) => {
     updateFilters({ tag: filters.tag === id ? '' : id });
+    closeNav();
   };
 
   return (
-    <div className="main">
+    <div className="main reading-library-main">
+      {navOpen && <div className="lib-nav-backdrop" onClick={closeNav} role="presentation" />}
       <LibraryPanel
         collections={collections}
         filters={filters}
         library={allLibrary}
+        onClose={closeNav}
         onCollection={toggleCollection}
         onCreateCollection={onCreateCollection}
-        onReset={() => onFilters(DEFAULT_LIBRARY_FILTERS)}
-        onShelf={(shelf) => updateFilters({ shelf })}
+        onReset={() => { onFilters(DEFAULT_LIBRARY_FILTERS); closeNav(); }}
+        onShelf={(shelf) => { updateFilters({ shelf }); closeNav(); }}
         onTag={toggleTag}
+        open={navOpen}
         tags={tags}
       />
       <div className="lib-wrap">
         <div className="lib-toolbar">
+          <button
+            type="button"
+            className={`lib-nav-trigger ${filterActive ? 'on' : ''}`}
+            onClick={() => setNavOpen(true)}
+            aria-label="서가 · 필터 열기"
+          >
+            <Icon name="list" size={15}/>
+            <span className="lbl">서가</span>
+            {filterActive && <span className="dot" aria-hidden="true"/>}
+          </button>
           <div className="lib-search">
             <Icon name="search" size={13}/>
             <input
@@ -1843,7 +1865,7 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
     }
     setWbTab('chat');
     setWbCollapsed(false);
-    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 860px)').matches) {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1023px)').matches) {
       setMobileWorkbenchOpen(true);
     }
   }, []);
@@ -1862,7 +1884,7 @@ function ReadingTab({ projectId = 'rag-reranker', readSub, route, setReadSub }) 
   const openNotesWorkbench = useCallback(() => {
     setWbTab('notes');
     setWbCollapsed(false);
-    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 860px)').matches) {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1023px)').matches) {
       setMobileWorkbenchOpen(true);
     }
   }, []);

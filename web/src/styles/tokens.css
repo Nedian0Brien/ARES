@@ -7,6 +7,14 @@
   --activity-rail-width:56px;
   --metabar-height:58px;
   --float-panel-width:288px;
+  /* Responsive layout primitives.
+     --rail-offset: left inset that overlays/drawers must clear for the vertical rail.
+       Desktop/tablet keep the 56px rail; phone moves nav to the bottom so this is 0.
+     --bottom-nav-height: reserved space for the phone bottom tab bar (0 elsewhere /
+       in immersive reader). Bottom-anchored UI adds this on top of safe-area occlusion. */
+  --rail-offset:var(--activity-rail-width);
+  --bottom-nav-height:0px;
+  --bottom-nav-bar:60px;
   --viewport-safe-top:env(safe-area-inset-top, 0px);
   --viewport-safe-bottom:env(safe-area-inset-bottom, 0px);
   --viewport-browser-bottom:0px;
@@ -590,6 +598,15 @@ button { font-family:inherit; }
 
 .lib-wrap { flex:1; display:flex; flex-direction:column; min-width:0; background:var(--bg); }
 .lib-toolbar { height:50px; flex-shrink:0; border-bottom:1px solid var(--b1); background:var(--s1); display:flex; align-items:center; gap:10px; padding:0 18px; }
+/* Library drawer trigger + drawer header are mobile/tablet only (≤1023). */
+.lib-nav-trigger { display:none; position:relative; align-items:center; gap:6px; height:38px; padding:0 12px; flex:0 0 auto; background:var(--s2); border:1px solid var(--b1); border-radius:8px; color:var(--t2); font-size:12.5px; font-weight:550; font-family:inherit; cursor:pointer; }
+.lib-nav-trigger:hover { background:var(--s3); color:var(--tx); }
+.lib-nav-trigger.on { color:var(--read); border-color:color-mix(in srgb, var(--read) 36%, var(--b1)); background:color-mix(in srgb, var(--read) 8%, var(--s2)); }
+.lib-nav-trigger .dot { position:absolute; top:6px; right:7px; width:6px; height:6px; border-radius:50%; background:var(--read); }
+.lib-nav-head { display:none; }
+/* Lab drawer affordances are mobile/tablet only (shown via ≤1023 rules). */
+.lab-nav-head { display:none; }
+.lab-panel-trigger { display:none; }
 .lib-search { flex:1; max-width:360px; background:var(--s2); border:1px solid var(--b1); border-radius:8px; padding:6px 11px; display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--t3); }
 .lib-search input { flex:1; border:none; background:transparent; outline:none; font-size:12.5px; color:var(--tx); font-family:inherit; }
 .lib-sort { height:30px; border:1px solid var(--b1); border-radius:8px; background:var(--s2); color:var(--t3); display:inline-flex; align-items:center; gap:7px; padding:0 8px 0 10px; font-size:12px; white-space:nowrap; }
@@ -991,9 +1008,9 @@ button { font-family:inherit; }
 .lab-tpl .tt { font-size:12.5px; color:var(--tx); font-weight:500; }
 .lab-tpl .td { font-size:11px; color:var(--t3); margin-top:1px; }
 
-@media (max-width:860px) {
+@media (max-width:1023px) {
   .ag-evid { display:none !important; }
-  .ag-evid.mobile-open { display:flex !important; position:fixed; left:calc(var(--activity-rail-width) + 10px); right:10px; bottom:calc(var(--viewport-bottom-occlusion) + 10px); z-index:86; flex:none !important; max-height:min(72vh, 620px); min-height:260px; border:1px solid var(--b1); border-radius:14px; background:var(--bg); overflow:hidden; box-shadow:0 18px 42px rgba(15,15,15,0.2), 0 0 0 1px rgba(15,15,15,0.03); }
+  .ag-evid.mobile-open { display:flex !important; position:fixed; left:calc(var(--rail-offset) + 10px); right:10px; bottom:calc(var(--bottom-nav-height) + var(--viewport-bottom-occlusion) + 10px); z-index:86; flex:none !important; max-height:min(72vh, 620px); min-height:260px; border:1px solid var(--b1); border-radius:14px; background:var(--bg); overflow:hidden; box-shadow:0 18px 42px rgba(15,15,15,0.2), 0 0 0 1px rgba(15,15,15,0.03); }
   .ag-evid.mobile-open .evid-top { min-width:0; min-height:52px; height:auto; gap:2px; padding-left:8px; padding-right:8px; }
   .ag-evid.mobile-open .evid-tab { flex:1 1 0; min-width:0; justify-content:center; padding:6px 7px; gap:4px; }
   .ag-evid.mobile-open .evid-list { min-height:0; }
@@ -1001,11 +1018,17 @@ button { font-family:inherit; }
   .agent-panel { display:none !important; }
   .ag-conv + .resize { display:none; }
   .ag-conv { flex:1 1 auto !important; }
-  .ag-verify { min-height:44px; padding:0 10px; }
-  .ag-col { padding-left:18px; padding-right:18px; }
-  .ag-input-col { padding-left:14px; padding-right:14px; }
-  .ag-tools { flex-wrap:wrap; }
-  .ag-tools .ag-tool[style] { order:10; flex:1 1 auto; justify-content:center; }
+  /* Header: keep "근거 모두 보기" on one line; let the model label truncate. */
+  .ag-chdr { gap:6px; padding:0 12px; }
+  .ag-model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ag-verify { min-height:40px; padding:0 10px; flex:0 0 auto; white-space:nowrap; }
+  .ag-col { padding-left:16px; padding-right:16px; }
+  /* Composer: full-width bottom bar instead of a floating island. */
+  .ag-input { padding:4px 0 8px; }
+  .ag-input-col { padding-left:10px; padding-right:10px; }
+  .ag-box { border-radius:20px; }
+  .ag-tools { flex-wrap:nowrap; gap:6px; padding:3px 4px 4px; }
+  .ag-tools .ag-tool { padding:0 11px; white-space:nowrap; }
   .report-pane { display:none !important; }
   .run-pane + .resize { display:none; }
   .run-pane { flex:1 1 auto !important; }
@@ -1014,8 +1037,34 @@ button { font-family:inherit; }
   .stage-step .sd { width:20px; height:20px; font-size:10px; }
   .stage-step .sl { font-size:11px; }
   .stage-conn { flex:0 1 10px; min-width:4px; margin:0 4px; }
-  .lab-project-panel,
-  .lab-side-panel { display:none !important; }
+  /* Lab side panels (project info / experiment list) -> left slide-in drawer */
+  .lab-drawer-host { position:relative; }
+  .lab-nav-drawer {
+    position:fixed;
+    top:var(--metabar-height);
+    bottom:calc(var(--bottom-nav-height) + var(--viewport-bottom-occlusion));
+    left:var(--rail-offset);
+    width:min(300px, 84vw);
+    z-index:90;
+    flex:none !important;
+    border-right:1px solid var(--b1);
+    box-shadow:14px 0 38px rgba(15,15,15,0.16);
+    transform:translateX(-104%);
+    transition:transform 220ms cubic-bezier(0.16,1,0.3,1);
+    will-change:transform;
+  }
+  .lab-panel-open .lab-nav-drawer { transform:translateX(0); }
+  .lab-nav-drawer .lab-nav-head {
+    display:flex; align-items:center; justify-content:space-between;
+    height:48px; flex-shrink:0; padding:0 8px 0 16px;
+    border-bottom:1px solid var(--b1); font-size:13px; font-weight:600; color:var(--tx);
+  }
+  .lab-panel-backdrop {
+    position:fixed; top:var(--metabar-height); left:0; right:0; bottom:0;
+    z-index:89; background:rgba(10,10,11,0.34); animation:fadeUp 150ms ease-out;
+  }
+  .lab-panel-trigger { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; flex:0 0 auto; background:var(--s2); border:1px solid var(--b1); border-radius:8px; color:var(--t2); cursor:pointer; }
+  .lab-panel-trigger:hover { background:var(--s3); color:var(--tx); }
   .lab-back { min-height:44px; }
   .wiki-explorer { flex:1 1 auto !important; }
   .wiki-explorer + .resize { display:none; }
@@ -1033,8 +1082,22 @@ button { font-family:inherit; }
   .lib-search { max-width:none; min-width:210px; }
   .lib-sort { order:3; }
   .lib-count { margin-left:0; }
-  .metabar .byline,
-  .metabar .meta-actions { display:none; }
+  /* Compact metabar: keep primary actions reachable (never blanket-hide them),
+     drop only redundant chrome (breadcrumb, byline, inline view-toggle). */
+  .metabar { padding:0 12px; gap:8px; overflow:hidden; }
+  .metabar .byline { display:none; }
+  .metabar .crumb-group { display:none; }
+  .metabar > div:has(> .title) { flex:1 1 auto; min-width:0; }
+  .metabar .title { max-width:none; }
+  .metabar .meta-actions { gap:4px; flex:0 0 auto; }
+  .metabar .meta-actions .seg { display:none; }
+  .metabar .meta-actions > span[style] { display:none; }
+  .metabar .btn-ghost,
+  .metabar .btn-s,
+  .metabar .btn-p { white-space:nowrap; flex:0 0 auto; }
+  .metabar > .btn-ghost { max-width:42vw; overflow:hidden; }
+  /* Drop disabled secondary actions on phones — they only eat title space. */
+  .metabar .meta-actions .btn-s:disabled { display:none; }
   .reading-reader-metabar {
     gap:8px;
     min-width:0;
@@ -1061,7 +1124,7 @@ button { font-family:inherit; }
   .reading-doc-pane .orient-group { display:none; }
   .pdf-scroll { padding:16px 12px calc(var(--viewport-bottom-occlusion) + 126px); align-items:flex-start; }
   .reading-pdf-canvas-root { padding:0 14px; align-items:flex-start; }
-  .dock-wrap { position:fixed; left:calc(var(--activity-rail-width) + 10px); right:10px; bottom:calc(var(--viewport-bottom-occlusion) + 66px); z-index:70; }
+  .dock-wrap { position:fixed; left:calc(var(--rail-offset) + 10px); right:10px; bottom:calc(var(--bottom-nav-height) + var(--viewport-bottom-occlusion) + 66px); z-index:70; }
   .dock { width:100%; justify-content:center; border-radius:8px; padding:5px; gap:3px; }
   .dock.has-selection { flex-wrap:wrap; }
   .dock-btn { min-width:44px; min-height:44px; height:44px; flex:1 1 0; padding:0; border-radius:6px; }
@@ -1074,9 +1137,9 @@ button { font-family:inherit; }
   .dock-div { margin:0 1px; }
   .pdf-dock-sheet {
     position:fixed;
-    left:calc(var(--activity-rail-width) + 10px);
+    left:calc(var(--rail-offset) + 10px);
     right:10px;
-    bottom:calc(var(--viewport-bottom-occlusion) + 122px);
+    bottom:calc(var(--bottom-nav-height) + var(--viewport-bottom-occlusion) + 122px);
     width:auto;
     max-height:min(58vh, 420px);
     transform:none;
@@ -1095,10 +1158,10 @@ button { font-family:inherit; }
   .reading-workbench-pane { display:none; }
   .reading-workbench-pane.mobile-open {
     background:var(--bg);
-    bottom:var(--viewport-bottom-occlusion);
+    bottom:calc(var(--bottom-nav-height) + var(--viewport-bottom-occlusion));
     box-shadow:-10px 0 30px rgba(15,15,15,0.14);
     display:flex;
-    left:var(--activity-rail-width);
+    left:var(--rail-offset);
     position:fixed;
     right:0;
     top:var(--metabar-height);
@@ -1124,11 +1187,11 @@ button { font-family:inherit; }
     background:var(--s1);
     border:1px solid var(--b1);
     border-radius:8px;
-    bottom:calc(var(--viewport-bottom-occlusion) + 10px);
+    bottom:calc(var(--bottom-nav-height) + var(--viewport-bottom-occlusion) + 10px);
     box-shadow:0 8px 26px rgba(15,15,15,0.14), 0 0 0 1px rgba(15,15,15,0.03);
     display:flex;
     gap:4px;
-    left:calc(var(--activity-rail-width) + 10px);
+    left:calc(var(--rail-offset) + 10px);
     padding:5px;
     position:fixed;
     right:10px;
@@ -1163,3 +1226,130 @@ button { font-family:inherit; }
 }
 
 .variant { position:fixed; top:8px; right:12px; z-index:50; font-size:11px; padding:3px 9px; border-radius:999px; background:rgba(94,106,210,0.12); color:var(--read); border:1px solid rgba(94,106,210,0.3); font-weight:500; }
+
+/* =====================================================================
+   Tablet navigation (768–1023px): keep the 56px vertical rail, but the
+   content surfaces collapse to a single pane via the shared ≤1023 rules
+   above. Drawers/overlays anchor next to the rail (default --rail-offset).
+   Nothing extra is needed here beyond the shared rules — the rail and
+   --rail-offset already hold their desktop values.
+   ===================================================================== */
+
+/* =====================================================================
+   Phone navigation (≤767px): the vertical rail becomes a fixed bottom
+   tab bar; content gets a single full-width pane. Bottom-anchored UI
+   clears the bar via --bottom-nav-height.
+   ===================================================================== */
+@media (max-width:767px) {
+  .app {
+    --rail-offset:0px;
+    --bottom-nav-height:var(--bottom-nav-bar);
+  }
+
+  /* Vertical rail -> bottom tab bar */
+  .icon-rail {
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    top:auto;
+    width:auto;
+    height:calc(var(--bottom-nav-bar) + var(--viewport-bottom-occlusion));
+    flex-direction:row;
+    align-items:stretch;
+    justify-content:space-around;
+    gap:2px;
+    padding:4px 6px var(--viewport-bottom-occlusion);
+    border-right:none;
+    border-top:1px solid var(--b1);
+    background:color-mix(in srgb, var(--s1) 94%, transparent);
+    backdrop-filter:saturate(1.6) blur(14px);
+    -webkit-backdrop-filter:saturate(1.6) blur(14px);
+    box-shadow:0 -1px 0 rgba(15,15,15,0.03), 0 -8px 24px rgba(15,15,15,0.05);
+    z-index:60;
+  }
+  .icon-rail .rail-logo,
+  .icon-rail .rail-divider,
+  .icon-rail .rail-spacer,
+  .icon-rail .rail-avatar { display:none; }
+  .icon-rail .rail-btn {
+    flex:1 1 0;
+    width:auto;
+    height:auto;
+    min-height:48px;
+    border-radius:11px;
+    gap:3px;
+    padding:5px 4px;
+  }
+  .icon-rail .rail-btn .lbl { font-size:10px; font-weight:550; letter-spacing:0; }
+  .icon-rail .rail-btn.active::before { display:none; }
+
+  /* Reserve room so scrollable content never hides behind the bar */
+  #ares-workspace-panel { padding-bottom:calc(var(--bottom-nav-bar) + var(--viewport-bottom-occlusion)); }
+
+  /* Phone composer: drop the (currently non-functional) context tools so the
+     active controls never wrap inside their pills on narrow screens. */
+  .ag-tools .ag-tool:disabled { display:none; }
+  /* Top-align library rows so the status dot sits with the title, not centered
+     against a tall wrapped block. */
+  .lib-row { align-items:flex-start; }
+  .lib-row .lr-side { align-self:center; }
+
+  /* Immersive detail (PDF reader): take over the full screen, hide the
+     global bottom bar — the surface carries its own back button + controls. */
+  .app[data-immersive="true"] { --bottom-nav-height:0px; }
+  .app[data-immersive="true"] .icon-rail { display:none; }
+  .app[data-immersive="true"] #ares-workspace-panel { padding-bottom:0; }
+}
+
+/* =====================================================================
+   Reading library: sidebar -> left slide-in drawer; list takes the full
+   pane. Shared by tablet + phone (drawer clears the rail via --rail-offset).
+   ===================================================================== */
+@media (max-width:1023px) {
+  .reading-library-main { position:relative; }
+  .lib-nav-trigger { display:inline-flex; }
+  .lib-wrap { flex:1 1 auto !important; min-width:0; }
+  .lib-toolbar { padding:9px 12px; }
+
+  .reading-library-nav {
+    position:fixed;
+    top:var(--metabar-height);
+    bottom:calc(var(--bottom-nav-height) + var(--viewport-bottom-occlusion));
+    left:var(--rail-offset);
+    width:min(300px, 84vw);
+    z-index:90;
+    flex:none;
+    border-right:1px solid var(--b1);
+    box-shadow:14px 0 38px rgba(15,15,15,0.16);
+    transform:translateX(-104%);
+    transition:transform 220ms cubic-bezier(0.16,1,0.3,1);
+    will-change:transform;
+  }
+  .reading-library-nav.open { transform:translateX(0); }
+  .reading-library-nav .lib-nav-head {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    height:48px;
+    flex-shrink:0;
+    padding:0 8px 0 16px;
+    border-bottom:1px solid var(--b1);
+    font-size:13px;
+    font-weight:600;
+    color:var(--tx);
+  }
+  .lib-nav-backdrop {
+    position:fixed;
+    top:var(--metabar-height);
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:89;
+    background:rgba(10,10,11,0.34);
+    animation:fadeUp 150ms ease-out;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reading-library-nav { transition:none; }
+}

@@ -887,7 +887,7 @@ function AgentTab({ projectId = 'rag-reranker' }) {
     requestAnimationFrame(() => evidenceTriggerRef.current?.focus({ preventScroll:true }));
   }, []);
   const openEvidenceLedger = useCallback(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 860px)').matches) {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
       setMobileEvidenceOpen(true);
       return;
     }

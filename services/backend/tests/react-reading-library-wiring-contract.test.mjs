@@ -166,7 +166,7 @@ test('React Reading workbench uses a mobile detail panel instead of the desktop 
   const styles = await readProjectFile('web/src/styles/tokens.css');
   const e2e = await readProjectFile('tests/e2e/workspace-smoke.spec.mjs');
 
-  assert.match(styles, /@media \(max-width:860px\)[\s\S]*\.reading-main > \.float-panel \{ display:none; \}/);
+  assert.match(styles, /@media \(max-width:1023px\)[\s\S]*\.reading-main > \.float-panel \{ display:none; \}/);
   assert.match(styles, /\.pane-tab[\s\S]*border:none/);
   assert.match(styles, /\.pane-tab[\s\S]*font-family:inherit/);
   assert.match(styles, /\.reading-workbench-pane \{ display:none; \}/);

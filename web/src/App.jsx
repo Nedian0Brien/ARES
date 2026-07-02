@@ -48,8 +48,10 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [route.projectId]);
 
+  const immersive = tab === 'reading' && route.reading?.view === 'reader';
+
   return (
-    <div className="app" style={{ flexDirection:'row' }}>
+    <div className="app" style={{ flexDirection:'row' }} data-immersive={immersive ? 'true' : undefined}>
       <ProductRail tab={tab} setTab={selectTab}/>
       <div id="ares-workspace-panel" role="main" aria-label={TAB_PANEL_LABELS[tab] || 'ARES 작업 영역'} style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0 }}>
         {tab==='reading' && <ReadingTab projectId={route.projectId} readSub={readSub} route={route} setReadSub={setReadSub}/>}

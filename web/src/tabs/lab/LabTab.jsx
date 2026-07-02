@@ -874,14 +874,15 @@ function ProjectGrid({ experiments, onOpen, projects }) {
   );
 }
 
-function ProjectPanel({ assets, projectById, proj, experiments }) {
+function ProjectPanel({ assets, onClose, projectById, proj, experiments }) {
   const [sub, setSub] = useState('docs');
   const P = projectById[proj];
   const a = assets[proj] || { arts:[], data:[], docs:[] };
   const visibleAssets = sub === 'docs' ? a[sub].slice(0, 4) : a[sub];
   const tabs = [['docs','Docs','book'],['arts','Artifacts','note'],['data','Data','grid']];
   return (
-    <div className="float-panel lab-project-panel">
+    <div className="float-panel lab-project-panel lab-nav-drawer">
+      <div className="lab-nav-head"><span>프로젝트 패널</span><button className="pane-icon-btn" onClick={onClose} aria-label="닫기" type="button"><Icon name="x" size={14}/></button></div>
       <div className="proj-ph">
         <span className="pic" style={{ background:`color-mix(in srgb, ${P.color} 13%, transparent)` }}><Icon name="flask" size={16} color={P.color}/></span>
         <div><div className="pn">{P.name}</div><div className="pm">{experiments.filter((item) => item.proj === proj).length} experiments · {P.docs} docs</div></div>
@@ -927,13 +928,14 @@ function LabBoard({ executingRunId, experiments, onCreateExperiment, onExecute, 
   );
 }
 
-function LabPanel({ experiments, onCreateExperiment, projectById, proj, sel, onOpen }) {
+function LabPanel({ experiments, onClose, onCreateExperiment, projectById, proj, sel, onOpen }) {
   const [sub, setSub] = useState('exp');
   const order = ['running','analyze','design','done'];
   const P = projectById[proj];
   const projectExperiments = experiments.filter((item) => item.proj === proj);
   return (
-    <div className="float-panel lab-side-panel">
+    <div className="float-panel lab-side-panel lab-nav-drawer">
+      <div className="lab-nav-head"><span>실험 목록</span><button className="pane-icon-btn" onClick={onClose} aria-label="닫기" type="button"><Icon name="x" size={14}/></button></div>
       <div className="proj-ph">
         <span className="pic" style={{ background:`color-mix(in srgb, ${P.color} 13%, transparent)` }}><Icon name="flask" size={16} color={P.color}/></span>
         <div><div className="pn">{P.name}</div><div className="pm">{projectExperiments.length} experiments</div></div>
@@ -986,6 +988,9 @@ function LabTab({ projectId = 'rag-reranker' }) {
   const [view, setView] = useState('projects');   // projects | board | workspace
   const [proj, setProj] = useState(projectId);
   const [sel, setSel] = useState('');
+  const [panelOpen, setPanelOpen] = useState(false);   // mobile/tablet side-panel drawer
+  const closePanel = () => setPanelOpen(false);
+  useEffect(() => { setPanelOpen(false); }, [view]);
   const [executeState, setExecuteState] = useState({ message: '', runId: '', status: 'idle' });
   const [graphRefresh, setGraphRefresh] = useState(0);
   const [projectsRefresh, setProjectsRefresh] = useState(0);
@@ -1189,6 +1194,16 @@ function LabTab({ projectId = 'rag-reranker' }) {
         </div>
         <div className="meta-actions">
           {view!=='projects' && (
+            <button
+              type="button"
+              className="lab-panel-trigger"
+              onClick={() => setPanelOpen(true)}
+              aria-label={view==='workspace' ? '실험 목록 열기' : '프로젝트 패널 열기'}
+            >
+              <Icon name="sidebar" size={15}/>
+            </button>
+          )}
+          {view!=='projects' && (
             <div className="seg" role="group" aria-label="Lab 보기">
               <button aria-pressed={view==='board'} className={view==='board'?'on':''} onClick={() => setView('board')} type="button"><Icon name="columns" size={13}/> 보드</button>
               <button aria-pressed={view==='workspace'} className={view==='workspace'?'on':''} onClick={() => setView('workspace')} type="button"><Icon name="flask" size={13}/> 워크스페이스</button>
@@ -1204,10 +1219,11 @@ function LabTab({ projectId = 'rag-reranker' }) {
         </div>
       </div>
           {view==='projects' && <div className="main"><ProjectGrid experiments={labState.experiments} onOpen={openProject} projects={projectCards}/></div>}
-          {view==='board' && <div className="main"><ProjectPanel assets={labState.assets} experiments={labState.experiments} projectById={projectById} proj={activeProjectId}/><LabBoard executingRunId={executeState.status === 'running' ? executeState.runId : ''} experiments={labState.experiments} onCreateExperiment={createDraftExperiment} onExecute={executeExperiment} proj={activeProjectId} sel={sel} onOpen={openExp}/></div>}
+          {view==='board' && <div className={`main lab-drawer-host ${panelOpen?'lab-panel-open':''}`}>{panelOpen && <div className="lab-panel-backdrop" onClick={closePanel} role="presentation"/>}<ProjectPanel assets={labState.assets} experiments={labState.experiments} projectById={projectById} proj={activeProjectId} onClose={closePanel}/><LabBoard executingRunId={executeState.status === 'running' ? executeState.runId : ''} experiments={labState.experiments} onCreateExperiment={createDraftExperiment} onExecute={executeExperiment} proj={activeProjectId} sel={sel} onOpen={openExp}/></div>}
       {view==='workspace' && activeExperiment && (
-        <div className="main">
-              <LabPanel experiments={labState.experiments} onCreateExperiment={createDraftExperiment} projectById={projectById} proj={activeProjectId} sel={sel} onOpen={setSel}/>
+        <div className={`main lab-drawer-host ${panelOpen?'lab-panel-open':''}`}>
+              {panelOpen && <div className="lab-panel-backdrop" onClick={closePanel} role="presentation"/>}
+              <LabPanel experiments={labState.experiments} onCreateExperiment={createDraftExperiment} projectById={projectById} proj={activeProjectId} sel={sel} onClose={closePanel} onOpen={(id) => { setSel(id); closePanel(); }}/>
           <div className="split">
             <RunnerConsolePane basis={`0 0 calc(${splitH}% - 2.5px)`} dossier={activeDossier} experiment={activeRun}/>
             <div className="resize h" onMouseDown={onDown}/>
